@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { X, Upload, FileText, Image, Loader2, Sparkles, Key, AlertCircle, Check } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, Upload, FileText, Image, Loader2, Sparkles, AlertCircle, Check, Settings } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import Link from 'next/link';
 
 interface ImportFileModalProps {
   subjectId: string;
@@ -19,17 +20,18 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   const { addTopics, incrementApiCalls } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [apiKey, setApiKey] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('claude-api-key') || '';
-    }
-    return '';
-  });
+  const [apiKey, setApiKey] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rawResponse, setRawResponse] = useState<string | null>(null);
   const [extractedTopics, setExtractedTopics] = useState<ExtractedTopic[] | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const stored = localStorage.getItem('claude-api-key');
+    setApiKey(stored);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -37,6 +39,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
       setFile(selectedFile);
       setExtractedTopics(null);
       setError(null);
+      setRawResponse(null);
     }
   };
 
@@ -47,17 +50,16 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
       setFile(droppedFile);
       setExtractedTopics(null);
       setError(null);
+      setRawResponse(null);
     }
   };
 
   const handleExtract = async () => {
     if (!file || !apiKey) return;
 
-    // Save API key
-    localStorage.setItem('claude-api-key', apiKey);
-
     setIsProcessing(true);
     setError(null);
+    setRawResponse(null);
 
     try {
       const formData = new FormData();
@@ -73,7 +75,11 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to extract topics');
+        setError(result.error || 'Failed to extract topics');
+        if (result.raw) {
+          setRawResponse(result.raw);
+        }
+        return;
       }
 
       setExtractedTopics(result.topics);
@@ -127,6 +133,51 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     return <Image size={32} />;
   };
 
+  // No API key - show settings prompt
+  if (apiKey === null) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl p-6 w-full max-w-md text-center">
+          <div className="animate-pulse text-slate-500 font-mono">Зареждане...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!apiKey) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl p-6 w-full max-w-md text-center">
+          <AlertCircle size={48} className="mx-auto text-amber-400 mb-4" />
+          <h3 className="text-lg font-semibold text-slate-100 mb-2 font-mono">
+            Нужен е API ключ
+          </h3>
+          <p className="text-sm text-slate-400 mb-4 font-mono">
+            За да използваш AI импорт, първо добави Claude API ключ в настройките.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 font-mono text-sm"
+            >
+              Отказ
+            </button>
+            <Link
+              href="/settings"
+              onClick={onClose}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 font-mono text-sm"
+            >
+              <Settings size={16} />
+              Настройки
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
@@ -144,27 +195,6 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* API Key Input */}
-          <div>
-            <label className="flex items-center gap-2 text-sm text-slate-400 mb-2 font-mono">
-              <Key size={14} />
-              Claude API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-ant-..."
-              className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 font-mono text-sm"
-            />
-            <p className="text-xs text-slate-500 mt-1 font-mono">
-              Вземи ключ от{' '}
-              <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
-                console.anthropic.com
-              </a>
-            </p>
-          </div>
-
           {/* File Upload */}
           <div
             onClick={() => fileInputRef.current?.click()}
@@ -205,9 +235,17 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
 
           {/* Error */}
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
-              <AlertCircle size={18} className="text-red-400 shrink-0" />
-              <p className="text-sm text-red-300 font-mono">{error}</p>
+            <div className="p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle size={18} className="text-red-400 shrink-0" />
+                <p className="text-sm text-red-300 font-mono">{error}</p>
+              </div>
+              {rawResponse && (
+                <details className="mt-2">
+                  <summary className="text-xs text-red-400 cursor-pointer font-mono">Виж отговора на Claude</summary>
+                  <pre className="mt-2 text-xs text-slate-400 bg-slate-900 p-2 rounded overflow-x-auto">{rawResponse}</pre>
+                </details>
+              )}
             </div>
           )}
 
@@ -215,13 +253,13 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
           {!extractedTopics && (
             <button
               onClick={handleExtract}
-              disabled={!file || !apiKey || isProcessing}
+              disabled={!file || isProcessing}
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Claude чете документа...
+                  Claude Haiku чете документа...
                 </>
               ) : (
                 <>
@@ -261,7 +299,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
                     className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
                       selectedTopics.has(i)
                         ? 'bg-purple-500/20 border border-purple-500/30'
-                        : 'hover:bg-slate-700/50'
+                        : 'hover:bg-slate-700/50 border border-transparent'
                     }`}
                   >
                     <div className={`w-5 h-5 rounded border flex items-center justify-center ${

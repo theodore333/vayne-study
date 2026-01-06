@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -15,7 +15,8 @@ const icons = {
   TrendingUp,
   Clock,
   GraduationCap,
-  Brain
+  Brain,
+  Settings
 };
 
 const NAV_ITEMS = [
@@ -26,7 +27,8 @@ const NAV_ITEMS = [
   { href: '/timer', label: 'Таймер', icon: 'Clock' },
   { href: '/quiz', label: 'AI Тест', icon: 'Brain' },
   { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },
-  { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' }
+  { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
+  { href: '/settings', label: 'Настройки', icon: 'Settings' }
 ];
 
 export default function Sidebar() {

@@ -51,25 +51,22 @@ export async function POST(request: Request) {
 
     content.push({
       type: 'text',
-      text: `Това е конспект/учебен материал по "${subjectName}".
+      text: `Analyze this document for "${subjectName}".
 
-Моля, извлечи ВСИЧКИ теми от документа. За всяка тема дай:
-1. Номер на темата (ако има)
-2. Име/заглавие на темата
+Extract ALL topics/chapters from this document. For each topic provide:
+1. Number (if present, or sequential number)
+2. Name/title of the topic
 
-Върни резултата САМО като JSON масив в следния формат (без никакъв друг текст):
-[
-  {"number": 1, "name": "Име на първата тема"},
-  {"number": 2, "name": "Име на втората тема"}
-]
+Return ONLY a valid JSON array in this exact format, no other text:
+[{"number": 1, "name": "Topic name"}, {"number": 2, "name": "Another topic"}]
 
-Ако има подтеми, включи ги като отделни теми с номерация като "1.1", "1.2" и т.н.
-Ако няма ясна номерация, използвай последователни числа.
-ВАЖНО: Върни САМО JSON масива, без markdown форматиране или друг текст.`
+If there are subtopics, use notation like "1.1", "1.2".
+IMPORTANT: Return ONLY the JSON array, no markdown, no code blocks, no explanation.`
     });
 
+    // Use Haiku for simple extraction tasks (cheaper and faster)
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-haiku-20241022',
       max_tokens: 4096,
       messages: [{ role: 'user', content }]
     });
@@ -80,41 +77,70 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
     }
 
+    let responseText = textContent.text.trim();
+
+    // Clean up the response - remove markdown code blocks if present
+    responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+    responseText = responseText.trim();
+
     // Parse the JSON response
     let topics;
     try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const jsonMatch = textContent.text.match(/\[[\s\S]*\]/);
+      // Try to find JSON array in the response
+      const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
       if (jsonMatch) {
         topics = JSON.parse(jsonMatch[0]);
       } else {
-        topics = JSON.parse(textContent.text);
+        topics = JSON.parse(responseText);
       }
-    } catch {
-      console.error('Failed to parse Claude response:', textContent.text);
+
+      // Validate that topics is an array
+      if (!Array.isArray(topics)) {
+        throw new Error('Response is not an array');
+      }
+
+      // Validate and clean topic objects
+      topics = topics.map((t: { number?: number | string; name?: string }, i: number) => ({
+        number: t.number ?? i + 1,
+        name: String(t.name || `Topic ${i + 1}`).trim()
+      }));
+
+    } catch (parseError) {
+      console.error('Failed to parse Claude response:', responseText);
+      console.error('Parse error:', parseError);
       return NextResponse.json({
-        error: 'Failed to parse topics',
-        raw: textContent.text
+        error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
+        raw: responseText.substring(0, 500)
       }, { status: 500 });
     }
 
-    // Calculate approximate cost (Claude Sonnet pricing)
+    // Calculate approximate cost (Claude Haiku pricing)
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+    // Haiku: $0.25/1M input, $1.25/1M output
+    const cost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000;
 
     return NextResponse.json({
       topics,
       usage: {
         inputTokens,
         outputTokens,
-        cost: Math.round(cost * 10000) / 10000
+        cost: Math.round(cost * 1000000) / 1000000
       }
     });
 
   } catch (error: unknown) {
     console.error('Extract error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
+
+    // Better error messages
+    if (message.includes('Could not process image')) {
+      return NextResponse.json({ error: 'Не мога да прочета изображението. Опитай с друг формат или по-ясна снимка.' }, { status: 400 });
+    }
+    if (message.includes('invalid_api_key')) {
+      return NextResponse.json({ error: 'Невалиден API ключ. Провери настройките.' }, { status: 401 });
+    }
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

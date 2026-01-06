@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -52,63 +52,47 @@ function QuizContent() {
       return;
     }
 
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      setQuizState(prev => ({ ...prev, error: 'API_KEY_MISSING' }));
+      return;
+    }
+
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // For demo purposes, generate mock questions
-      // In production, this would call the Claude API
-      const mockQuestions: Question[] = [];
+      const response = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          material: topic.material,
+          topicName: topic.name,
+          subjectName: subject?.name || '',
+          questionCount
+        })
+      });
 
-      // Parse material to create questions
-      const sentences = topic.material.split(/[.!?]+/).filter(s => s.trim().length > 20);
+      const result = await response.json();
 
-      for (let i = 0; i < Math.min(questionCount, sentences.length); i++) {
-        const sentence = sentences[i].trim();
-        const words = sentence.split(' ').filter(w => w.length > 3);
-
-        if (i % 2 === 0 && words.length > 0) {
-          // Multiple choice
-          const hiddenWord = words[Math.floor(words.length / 2)];
-          const questionText = sentence.replace(hiddenWord, '______');
-          mockQuestions.push({
-            type: 'multiple_choice',
-            question: `Попълни липсващата дума: "${questionText}"`,
-            options: [
-              hiddenWord,
-              words[0] || 'вариант А',
-              words[words.length - 1] || 'вариант Б',
-              'Нито едно от изброените'
-            ].sort(() => Math.random() - 0.5),
-            correctAnswer: hiddenWord,
-            explanation: `Правилният отговор е "${hiddenWord}". ${sentence}`
-          });
-        } else {
-          // Open question
-          mockQuestions.push({
-            type: 'open',
-            question: `Обясни следното твърдение от материала: "${sentence.substring(0, 100)}..."`,
-            correctAnswer: sentence,
-            explanation: `Пълният текст от материала е: ${sentence}`
-          });
-        }
-      }
-
-      if (mockQuestions.length === 0) {
+      if (!response.ok) {
         setQuizState(prev => ({
           ...prev,
           isGenerating: false,
-          error: 'Материалът е твърде кратък за генериране на тест.'
+          error: result.error || 'Грешка при генериране на теста.'
         }));
         return;
       }
 
-      // Simulate API cost
-      incrementApiCalls(0.002 * questionCount);
+      // Track API usage
+      if (result.usage) {
+        incrementApiCalls(result.usage.cost);
+      }
 
       setQuizState({
-        questions: mockQuestions,
+        questions: result.questions,
         currentIndex: 0,
-        answers: new Array(mockQuestions.length).fill(null),
+        answers: new Array(result.questions.length).fill(null),
         showResult: false,
         isGenerating: false,
         error: null
@@ -480,8 +464,27 @@ function QuizContent() {
         </div>
 
         {quizState.error && (
-          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 font-mono text-sm">
-            {quizState.error}
+          <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            {quizState.error === 'API_KEY_MISSING' ? (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={18} className="text-amber-400" />
+                  <span className="text-amber-400 font-mono text-sm">Нужен е API ключ</span>
+                </div>
+                <Link
+                  href="/settings"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-500 font-mono text-sm"
+                >
+                  <Settings size={14} />
+                  Настройки
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
+                <AlertCircle size={18} />
+                {quizState.error}
+              </div>
+            )}
           </div>
         )}
 

@@ -456,7 +456,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ...q,
               stats: {
                 attempts: q.stats.attempts + 1,
-                correct: q.stats.correct + (correct ? 1 : 0)
+                correct: q.stats.correct + (correct ? 1 : 0),
+                lastAttempt: new Date().toISOString()
               }
             };
           })

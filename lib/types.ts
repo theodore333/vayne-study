@@ -230,6 +230,7 @@ export interface BankQuestion {
   stats: {
     attempts: number;
     correct: number;
+    lastAttempt?: string;          // ISO date of last attempt
   };
 }
 

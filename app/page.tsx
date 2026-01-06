@@ -85,7 +85,8 @@ function StatusOverview({ statusCounts, totalTopics }: any) {
     <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
       <h2 className="text-lg font-semibold text-slate-100 font-mono mb-4">Разпределение по статус</h2>
       <div className="grid grid-cols-4 gap-4">
-        {Object.entries(statusCounts).map(([status, count]: [string, any]) => {
+        {(['gray', 'orange', 'yellow', 'green'] as const).map((status) => {
+          const count = statusCounts[status];
           const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG];
           const pct = totalTopics > 0 ? Math.round((count / totalTopics) * 100) : 0;
           return (

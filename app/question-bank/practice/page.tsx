@@ -1,11 +1,23 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { BankQuestion, ClinicalCase } from '@/lib/types';
-import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Target, Clock, Timer } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Target, Clock, Timer, Shuffle, AlertTriangle, Calendar, FileText } from 'lucide-react';
 import Link from 'next/link';
+
+// Practice modes
+type PracticeMode = 'all' | 'weak' | 'spaced' | 'custom';
+
+const PRACTICE_MODES: { mode: PracticeMode; icon: React.ReactNode; title: string; description: string }[] = [
+  { mode: 'all', icon: <Shuffle size={24} />, title: 'Всички въпроси', description: 'Случаен ред' },
+  { mode: 'weak', icon: <AlertTriangle size={24} />, title: 'Слаби въпроси', description: 'accuracy < 50%' },
+  { mode: 'spaced', icon: <Calendar size={24} />, title: 'Spaced Review', description: 'Стари първо' },
+  { mode: 'custom', icon: <FileText size={24} />, title: 'Избор на брой', description: 'Колкото искаш' },
+];
+
+const QUESTION_COUNT_PRESETS = [10, 20, 30, 50];
 
 function LoadingFallback() {
   return (
@@ -30,15 +42,77 @@ function PracticeContent() {
   const subjectId = searchParams.get('subject');
   const bankId = searchParams.get('bank');
 
-  // Get questions
+  // Get subject and questions
   const subject = data.subjects.find(s => s.id === subjectId);
   const banks = (data.questionBanks || []).filter(b =>
     bankId ? b.id === bankId : b.subjectId === subjectId
   );
-  const allQuestions = banks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id })));
+  const allQuestions = useMemo(() =>
+    banks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id }))),
+    [banks]
+  );
   const allCases = banks.flatMap(b => b.cases);
 
-  // Shuffle questions on mount
+  // Mode selection state
+  const [mode, setMode] = useState<PracticeMode | null>(null);
+  const [practiceStarted, setPracticeStarted] = useState(false);
+  const [customQuestionCount, setCustomQuestionCount] = useState(20);
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
+
+  // Calculate stats for mode selection
+  const stats = useMemo(() => {
+    const weakQuestions = allQuestions.filter(q =>
+      q.stats.attempts > 0 && (q.stats.correct / q.stats.attempts) < 0.5
+    );
+
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const oldQuestions = allQuestions.filter(q => {
+      if (!q.stats.lastAttempt) return true;
+      return new Date(q.stats.lastAttempt).getTime() < sevenDaysAgo;
+    });
+
+    return {
+      total: allQuestions.length,
+      weak: weakQuestions.length,
+      old: oldQuestions.length
+    };
+  }, [allQuestions]);
+
+  // Shuffle helper
+  const shuffleArray = <T,>(arr: T[]): T[] => {
+    const shuffled = [...arr];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  // Get filtered questions based on mode
+  const getFilteredQuestions = (selectedMode: PracticeMode) => {
+    switch (selectedMode) {
+      case 'weak':
+        const weakQs = allQuestions.filter(q =>
+          q.stats.attempts > 0 && (q.stats.correct / q.stats.attempts) < 0.5
+        );
+        return shuffleArray(weakQs.length > 0 ? weakQs : allQuestions);
+
+      case 'spaced':
+        return [...allQuestions].sort((a, b) => {
+          const aTime = a.stats.lastAttempt ? new Date(a.stats.lastAttempt).getTime() : 0;
+          const bTime = b.stats.lastAttempt ? new Date(b.stats.lastAttempt).getTime() : 0;
+          return aTime - bTime; // Oldest first
+        });
+
+      case 'custom':
+        return shuffleArray(allQuestions).slice(0, Math.min(customQuestionCount, allQuestions.length));
+
+      default: // 'all'
+        return shuffleArray(allQuestions);
+    }
+  };
+
+  // Practice state
   const [shuffledQuestions, setShuffledQuestions] = useState<(BankQuestion & { bankId: string })[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<Set<string>>(new Set());
@@ -72,18 +146,21 @@ function PracticeContent() {
       .filter(a => a.length > 0);
   };
 
-  useEffect(() => {
-    // Shuffle questions
-    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-    setShuffledQuestions(shuffled);
-  }, [subjectId, bankId]);
-
-  // Start timer when questions are ready
-  useEffect(() => {
-    if (shuffledQuestions.length > 0 && !sessionComplete && !startTime) {
-      setStartTime(Date.now());
-    }
-  }, [shuffledQuestions.length, sessionComplete, startTime]);
+  // Start practice with selected mode
+  const startPractice = (selectedMode: PracticeMode) => {
+    setMode(selectedMode);
+    const filtered = getFilteredQuestions(selectedMode);
+    setShuffledQuestions(filtered);
+    setCurrentIndex(0);
+    setSelectedAnswers(new Set());
+    setShowResult(false);
+    setAnswers([]);
+    setSessionComplete(false);
+    setOpenAnswer('');
+    setStartTime(Date.now());
+    setElapsedTime(0);
+    setPracticeStarted(true);
+  };
 
   // Timer tick
   useEffect(() => {
@@ -96,37 +173,34 @@ function PracticeContent() {
     return () => clearInterval(interval);
   }, [startTime, sessionComplete]);
 
+  const currentQuestion = shuffledQuestions[currentIndex];
+
   // Keyboard shortcuts
   useEffect(() => {
-    if (shuffledQuestions.length === 0 || sessionComplete) return;
+    if (!practiceStarted || shuffledQuestions.length === 0 || sessionComplete) return;
 
     const question = currentQuestion;
     if (!question || question.type === 'open') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't handle if typing in textarea
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
 
       const options = question.options || [];
-      const isMultiple = hasMultipleCorrect(question.correctAnswer);
 
-      // A-E keys to select
       if (!showResult) {
         if (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'E') {
           const letter = e.key.toUpperCase();
-          const index = letter.charCodeAt(0) - 65; // A=0, B=1, etc.
+          const index = letter.charCodeAt(0) - 65;
           if (index < options.length) {
             handleAnswer(letter);
           }
         }
 
-        // Enter to submit
         if (e.key === 'Enter' && selectedAnswers.size > 0) {
           e.preventDefault();
           handleSubmit();
         }
       } else {
-        // After result, Enter to go next
         if (e.key === 'Enter') {
           e.preventDefault();
           handleNext();
@@ -136,9 +210,8 @@ function PracticeContent() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers]);
+  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers]);
 
-  const currentQuestion = shuffledQuestions[currentIndex];
   const currentCase = currentQuestion?.caseId
     ? allCases.find(c => c.id === currentQuestion.caseId)
     : null;
@@ -149,7 +222,6 @@ function PracticeContent() {
     const isMultiple = hasMultipleCorrect(currentQuestion.correctAnswer);
 
     if (isMultiple) {
-      // Toggle selection for multiple-answer questions
       setSelectedAnswers(prev => {
         const newSet = new Set(prev);
         if (newSet.has(answer)) {
@@ -160,7 +232,6 @@ function PracticeContent() {
         return newSet;
       });
     } else {
-      // Single selection
       setSelectedAnswers(new Set([answer]));
     }
   };
@@ -171,19 +242,17 @@ function PracticeContent() {
     let isCorrect: boolean;
 
     if (currentQuestion.type === 'open') {
-      isCorrect = true; // Open questions are always "correct" for now
+      isCorrect = true;
     } else {
       const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
       const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
 
-      // Check if selected answers match correct answers exactly
       isCorrect =
         selectedList.length === correctAnswersList.length &&
         selectedList.every(a => correctAnswersList.includes(a)) &&
         correctAnswersList.every(a => selectedList.includes(a));
     }
 
-    // Update stats
     updateQuestionStats(currentQuestion.bankId, currentQuestion.id, isCorrect);
 
     setAnswers(prev => [...prev, { correct: isCorrect, questionId: currentQuestion.id }]);
@@ -202,19 +271,23 @@ function PracticeContent() {
   };
 
   const handleRestart = () => {
-    const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
-    setShuffledQuestions(shuffled);
-    setCurrentIndex(0);
-    setSelectedAnswers(new Set());
-    setShowResult(false);
-    setAnswers([]);
-    setSessionComplete(false);
-    setOpenAnswer('');
-    setStartTime(Date.now());
-    setElapsedTime(0);
+    setPracticeStarted(false);
+    setMode(null);
+    setShowCustomPicker(false);
   };
 
-  if (!subject || shuffledQuestions.length === 0) {
+  const handleBackToModes = () => {
+    setPracticeStarted(false);
+    setMode(null);
+    setShuffledQuestions([]);
+    setCurrentIndex(0);
+    setAnswers([]);
+    setSessionComplete(false);
+    setShowCustomPicker(false);
+  };
+
+  // No subject or questions
+  if (!subject || allQuestions.length === 0) {
     return (
       <div className="max-w-4xl mx-auto">
         <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-12 text-center">
@@ -226,6 +299,164 @@ function PracticeContent() {
             <ArrowLeft size={16} />
             Обратно към Question Bank
           </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Mode Selection Screen
+  if (!practiceStarted) {
+    return (
+      <div className="max-w-2xl mx-auto">
+        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-8">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-6">
+            <Link
+              href="/question-bank"
+              className="flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm"
+            >
+              <ArrowLeft size={16} />
+              Question Bank
+            </Link>
+          </div>
+
+          <div className="text-center mb-8">
+            <h2 className="text-xl font-bold text-slate-100 font-mono mb-2">
+              📚 {subject.name}
+            </h2>
+            <p className="text-slate-400 font-mono text-sm">
+              Избери режим на практика
+            </p>
+          </div>
+
+          {/* Mode Selection Grid */}
+          {!showCustomPicker ? (
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              {PRACTICE_MODES.map(({ mode: m, icon, title, description }) => {
+                const isDisabled = m === 'weak' && stats.weak === 0;
+                const count = m === 'weak' ? stats.weak
+                  : m === 'spaced' ? stats.old
+                  : m === 'custom' ? customQuestionCount
+                  : stats.total;
+
+                return (
+                  <button
+                    key={m}
+                    onClick={() => {
+                      if (isDisabled) return;
+                      if (m === 'custom') {
+                        setShowCustomPicker(true);
+                      } else {
+                        startPractice(m);
+                      }
+                    }}
+                    disabled={isDisabled}
+                    className={`p-6 rounded-xl border text-left transition-all ${
+                      isDisabled
+                        ? 'bg-slate-800/30 border-slate-700/50 cursor-not-allowed opacity-50'
+                        : 'bg-slate-800/50 border-slate-700 hover:border-purple-500/50 hover:bg-slate-700/50 cursor-pointer'
+                    }`}
+                  >
+                    <div className={`mb-3 ${isDisabled ? 'text-slate-600' : 'text-purple-400'}`}>
+                      {icon}
+                    </div>
+                    <h3 className={`font-mono font-semibold mb-1 ${isDisabled ? 'text-slate-500' : 'text-slate-100'}`}>
+                      {title}
+                    </h3>
+                    <p className="text-xs text-slate-500 font-mono mb-2">
+                      {description}
+                    </p>
+                    <div className={`text-sm font-mono ${isDisabled ? 'text-slate-600' : 'text-cyan-400'}`}>
+                      {count} въпроса
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* Custom Question Count Picker */
+            <div className="mb-8">
+              <button
+                onClick={() => setShowCustomPicker(false)}
+                className="flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm mb-6"
+              >
+                <ArrowLeft size={16} />
+                Обратно
+              </button>
+
+              <h3 className="text-lg font-mono font-semibold text-slate-100 mb-4">
+                Колко въпроса искаш?
+              </h3>
+
+              {/* Preset buttons */}
+              <div className="grid grid-cols-4 gap-3 mb-4">
+                {QUESTION_COUNT_PRESETS.filter(n => n <= stats.total).map(count => (
+                  <button
+                    key={count}
+                    onClick={() => setCustomQuestionCount(count)}
+                    className={`py-3 rounded-lg font-mono font-semibold transition-all ${
+                      customQuestionCount === count
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
+                    }`}
+                  >
+                    {count}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom slider */}
+              <div className="bg-slate-800/30 rounded-lg p-4 mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-400 font-mono">Или избери:</span>
+                  <span className="text-lg font-bold text-cyan-400 font-mono">{customQuestionCount}</span>
+                </div>
+                <input
+                  type="range"
+                  min={5}
+                  max={stats.total}
+                  value={customQuestionCount}
+                  onChange={(e) => setCustomQuestionCount(parseInt(e.target.value))}
+                  className="w-full accent-purple-500"
+                />
+                <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
+                  <span>5</span>
+                  <span>{stats.total}</span>
+                </div>
+              </div>
+
+              {/* Start button */}
+              <button
+                onClick={() => startPractice('custom')}
+                className="w-full py-4 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-mono font-semibold text-lg transition-all"
+              >
+                Започни с {customQuestionCount} въпроса
+              </button>
+            </div>
+          )}
+
+          {/* Stats Preview - hide when custom picker is open */}
+          {!showCustomPicker && (
+            <div className="bg-slate-800/30 rounded-lg p-4">
+              <h4 className="text-xs text-slate-500 font-mono mb-3 uppercase tracking-wide">
+                Статистика
+              </h4>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-lg font-bold text-blue-400 font-mono">{stats.total}</div>
+                  <div className="text-xs text-slate-500 font-mono">Общо</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-orange-400 font-mono">{stats.weak}</div>
+                  <div className="text-xs text-slate-500 font-mono">Слаби (&lt;50%)</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-purple-400 font-mono">{stats.old}</div>
+                  <div className="text-xs text-slate-500 font-mono">&gt;7 дни</div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -245,7 +476,7 @@ function PracticeContent() {
               Сесия завършена!
             </h2>
             <p className="text-slate-400 font-mono">
-              {subject.name}
+              {subject.name} • {PRACTICE_MODES.find(m => m.mode === mode)?.title}
             </p>
           </div>
 
@@ -285,7 +516,7 @@ function PracticeContent() {
               className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono"
             >
               <RotateCcw size={18} />
-              Нова сесия
+              Нов режим
             </button>
             <Link
               href="/question-bank"
@@ -304,14 +535,19 @@ function PracticeContent() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <Link
-          href="/question-bank"
+        <button
+          onClick={handleBackToModes}
           className="flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm"
         >
           <ArrowLeft size={16} />
-          Question Bank
-        </Link>
+          Режими
+        </button>
         <div className="flex items-center gap-6 font-mono">
+          {/* Mode indicator */}
+          <span className="text-xs px-2 py-1 rounded bg-purple-500/20 text-purple-300">
+            {PRACTICE_MODES.find(m => m.mode === mode)?.title}
+          </span>
+
           {/* Timer */}
           <div className="flex items-center gap-2 text-cyan-400">
             <Timer size={18} />
@@ -373,6 +609,16 @@ function PracticeContent() {
               {currentQuestion.type === 'mcq' ? 'MCQ' :
                currentQuestion.type === 'case_study' ? 'Казус' : 'Отворен'}
             </span>
+            {/* Question stats */}
+            {currentQuestion.stats.attempts > 0 && (
+              <span className={`text-xs px-2 py-1 rounded font-mono ${
+                (currentQuestion.stats.correct / currentQuestion.stats.attempts) >= 0.5
+                  ? 'bg-green-500/10 text-green-400'
+                  : 'bg-red-500/10 text-red-400'
+              }`}>
+                {Math.round((currentQuestion.stats.correct / currentQuestion.stats.attempts) * 100)}% ({currentQuestion.stats.attempts})
+              </span>
+            )}
           </div>
 
           <h2 className="text-lg text-slate-100 mb-6 leading-relaxed">

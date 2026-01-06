@@ -27,7 +27,6 @@ const NAV_ITEMS = [
   { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
   { href: '/today', label: 'Днешен план', icon: 'Target' },
   { href: '/timer', label: 'Таймер', icon: 'Clock' },
-  { href: '/quiz', label: 'AI Тест', icon: 'Brain' },
   { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },
   { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
   { href: '/settings', label: 'Настройки', icon: 'Settings' }

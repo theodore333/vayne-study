@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles } from 'lucide-react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS } from '@/lib/constants';
@@ -29,6 +29,7 @@ export default function SubjectsPage() {
 
 function SubjectsContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { data, isLoading, deleteSubject, updateSubject } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
@@ -280,17 +281,20 @@ function SubjectsContent() {
                   <div className="grid gap-2">
                     {filteredTopics.map(topic => {
                       const config = STATUS_CONFIG[topic.status];
+                      const hasMaterial = topic.material && topic.material.trim().length > 0;
                       return (
-                        <button
+                        <div
                           key={topic.id}
-                          onClick={() => setSelectedTopic(topic)}
-                          className="w-full p-4 rounded-lg border text-left transition-all hover:scale-[1.01]"
+                          className="flex items-center gap-2 p-4 rounded-lg border transition-all hover:scale-[1.005]"
                           style={{
                             backgroundColor: config.bg,
                             borderColor: config.border
                           }}
                         >
-                          <div className="flex items-center gap-4">
+                          <button
+                            onClick={() => setSelectedTopic(topic)}
+                            className="flex-1 flex items-center gap-4 text-left"
+                          >
                             <span className="text-2xl">{config.emoji}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
@@ -305,8 +309,25 @@ function SubjectsContent() {
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
                               </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                          {/* Quiz Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/quiz?subject=${selectedSubjectId}&topic=${topic.id}`);
+                            }}
+                            disabled={!hasMaterial}
+                            title={hasMaterial ? "Започни Quiz" : "Добави материал първо"}
+                            className={`p-2.5 rounded-lg transition-all flex items-center gap-1.5 font-mono text-xs ${
+                              hasMaterial
+                                ? 'bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30'
+                                : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'
+                            }`}
+                          >
+                            <Brain size={16} />
+                            Quiz
+                          </button>
+                        </div>
                       );
                     })}
                   </div>

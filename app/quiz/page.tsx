@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap } from 'lucide-react';
+import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -73,6 +73,10 @@ function QuizContent() {
   const [hintLoading, setHintLoading] = useState(false);
   const [freeRecallEvaluation, setFreeRecallEvaluation] = useState<FreeRecallEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+
+  // Timer state
+  const [quizStartTime, setQuizStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   const MAX_HINTS = 3;
 
@@ -147,6 +151,76 @@ function QuizContent() {
       setMode(aiRecommendation.suggestedMode);
     }
   }, [aiRecommendation, mode]);
+
+  // Timer effect - runs when quiz starts
+  useEffect(() => {
+    if (quizState.questions.length > 0 && !quizState.showResult && !quizStartTime) {
+      setQuizStartTime(Date.now());
+    }
+  }, [quizState.questions.length, quizState.showResult, quizStartTime]);
+
+  // Timer tick
+  useEffect(() => {
+    if (!quizStartTime || quizState.showResult) return;
+
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - quizStartTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [quizStartTime, quizState.showResult]);
+
+  // Keyboard shortcuts for MCQ (1-4 or A-D to select, Enter to submit)
+  useEffect(() => {
+    if (quizState.questions.length === 0 || quizState.showResult) return;
+
+    const currentQuestion = quizState.questions[quizState.currentIndex];
+    if (currentQuestion.type !== 'multiple_choice' && currentQuestion.type !== 'case_study') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if typing in textarea
+      if (e.target instanceof HTMLTextAreaElement) return;
+
+      const options = currentQuestion.options || [];
+
+      // Number keys 1-4 or letter keys A-D to select
+      if (!showExplanation) {
+        if ((e.key >= '1' && e.key <= '4') || (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'D')) {
+          let index: number;
+          if (e.key >= '1' && e.key <= '4') {
+            index = parseInt(e.key) - 1;
+          } else {
+            index = e.key.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
+          }
+          if (index < options.length) {
+            setSelectedAnswer(options[index]);
+          }
+        }
+
+        // Enter to submit
+        if (e.key === 'Enter' && selectedAnswer) {
+          e.preventDefault();
+          handleAnswer();
+        }
+      } else {
+        // After showing explanation, Enter to go next
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleNext();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quizState.questions, quizState.currentIndex, quizState.showResult, showExplanation, selectedAnswer]);
+
+  // Format time helper
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const generateQuiz = async () => {
     if (!topic?.material && mode !== 'free_recall') {
@@ -424,6 +498,8 @@ function QuizContent() {
     setFreeRecallEvaluation(null);
     setCurrentHint(null);
     setHintsUsed(0);
+    setQuizStartTime(null);
+    setElapsedTime(0);
   };
 
   // No topic selected
@@ -581,7 +657,13 @@ function QuizContent() {
           <h2 className="text-2xl font-bold text-slate-100 mb-2 font-mono">
             {score.toFixed(1)} / {quizState.questions.length}
           </h2>
-          <p className="text-slate-400 font-mono mb-6">{percentage}% правилни</p>
+          <p className="text-slate-400 font-mono mb-2">{percentage}% правилни</p>
+          {elapsedTime > 0 && (
+            <p className="text-blue-400 font-mono text-sm mb-6 flex items-center justify-center gap-2">
+              <Clock size={14} />
+              Време: {formatTime(elapsedTime)}
+            </p>
+          )}
 
           <div className={`inline-block px-8 py-4 rounded-xl border-2 font-mono text-4xl font-bold mb-6 ${
             grade >= 5 ? 'bg-green-500/10 border-green-500/30 text-green-400' :
@@ -626,13 +708,22 @@ function QuizContent() {
           <div className="flex-1">
             <div className="flex justify-between text-sm text-slate-400 font-mono mb-1">
               <span>Въпрос {quizState.currentIndex + 1} / {quizState.questions.length}</span>
-              {currentQuestion.bloomLevel && (
-                <span className="text-purple-400">Bloom {currentQuestion.bloomLevel}</span>
-              )}
+              <div className="flex items-center gap-4">
+                {currentQuestion.bloomLevel && (
+                  <span className="text-purple-400 flex items-center gap-1">
+                    Ниво: {BLOOM_LEVELS.find(b => b.level === currentQuestion.bloomLevel)?.name || 'Запомняне'}
+                    <span className="text-lg">{currentQuestion.bloomLevel >= 5 ? '🧠' : currentQuestion.bloomLevel >= 3 ? '💡' : '📖'}</span>
+                  </span>
+                )}
+                <span className="flex items-center gap-1.5 text-blue-400">
+                  <Clock size={14} />
+                  {formatTime(elapsedTime)}
+                </span>
+              </div>
             </div>
             <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all"
+                className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
                 style={{ width: `${((quizState.currentIndex + 1) / quizState.questions.length) * 100}%` }}
               />
             </div>
@@ -651,7 +742,7 @@ function QuizContent() {
             </span>
           </div>
 
-          <h2 className="text-xl text-slate-100 mb-6 font-mono leading-relaxed">
+          <h2 className="text-xl md:text-2xl text-slate-100 mb-6 font-mono leading-relaxed tracking-wide">
             {currentQuestion.question}
           </h2>
 
@@ -665,28 +756,55 @@ function QuizContent() {
                   className={`w-full p-4 rounded-lg border text-left font-mono transition-all ${
                     showExplanation
                       ? option === currentQuestion.correctAnswer
-                        ? 'bg-green-500/20 border-green-500 text-green-400'
+                        ? 'bg-green-500/20 border-green-500 text-green-300'
                         : option === selectedAnswer
-                          ? 'bg-red-500/20 border-red-500 text-red-400'
-                          : 'bg-slate-800/30 border-slate-700 text-slate-400'
+                          ? 'bg-red-500/20 border-red-500 text-red-300'
+                          : 'bg-slate-800/30 border-slate-700 text-slate-500'
                       : selectedAnswer === option
-                        ? 'bg-pink-500/20 border-pink-500 text-pink-400'
-                        : 'bg-slate-800/30 border-slate-700 text-slate-200 hover:border-slate-600'
+                        ? 'bg-purple-500/20 border-purple-500 text-purple-200'
+                        : 'bg-slate-800/50 border-slate-600 text-slate-100 hover:border-slate-500 hover:bg-slate-700/50'
                   }`}
                 >
-                  <span className="mr-3 opacity-50">{String.fromCharCode(65 + i)}.</span>
+                  <span className={`mr-3 inline-flex items-center justify-center w-6 h-6 rounded text-xs ${
+                    showExplanation
+                      ? option === currentQuestion.correctAnswer
+                        ? 'bg-green-500/30 text-green-300'
+                        : option === selectedAnswer
+                          ? 'bg-red-500/30 text-red-300'
+                          : 'bg-slate-700 text-slate-500'
+                      : selectedAnswer === option
+                        ? 'bg-purple-500/30 text-purple-200'
+                        : 'bg-slate-700 text-slate-400'
+                  }`}>
+                    {String.fromCharCode(65 + i)}
+                  </span>
                   {option}
                 </button>
               ))}
+              {!showExplanation && (
+                <p className="text-xs text-slate-500 font-mono mt-2">
+                  ⌨️ Натисни A-D или 1-4 за избор, Enter за проверка
+                </p>
+              )}
             </div>
           ) : (
-            <textarea
-              value={openAnswer}
-              onChange={(e) => setOpenAnswer(e.target.value)}
-              disabled={showExplanation}
-              placeholder="Отговор..."
-              className="w-full h-32 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono resize-none"
-            />
+            <div>
+              <textarea
+                value={openAnswer}
+                onChange={(e) => setOpenAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.ctrlKey && e.key === 'Enter' && !showExplanation && openAnswer.trim()) {
+                    handleAnswer();
+                  }
+                }}
+                disabled={showExplanation}
+                placeholder="Напиши отговора тук... (Ctrl+Enter за проверка)"
+                className="w-full min-h-[160px] px-4 py-4 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-base font-mono resize-y focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-slate-500"
+              />
+              <p className="text-xs text-slate-500 font-mono mt-2">
+                💡 Препоръчително: 3-5 изречения за пълен отговор
+              </p>
+            </div>
           )}
 
           {showExplanation && (

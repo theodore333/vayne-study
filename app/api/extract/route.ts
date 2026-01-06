@@ -170,15 +170,33 @@ RULES:
         });
       }
 
-      // Try to salvage partial JSON
-      const partialMatch = responseText.match(/\[\s*\{[\s\S]*\}/);
-      if (partialMatch) {
+      // Try to salvage partial JSON - find all complete objects
+      console.log('[EXTRACT] Attempting to salvage partial JSON...');
+
+      // Find the opening bracket
+      const startIdx = responseText.indexOf('[');
+      if (startIdx === -1) {
+        return new Response(JSON.stringify({
+          error: 'No JSON array found',
+          raw: responseText.substring(0, 1000)
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Extract all complete {"number": X, "name": "Y"} objects
+      const objectRegex = /\{\s*"number"\s*:\s*(?:"[^"]*"|\d+(?:\.\d+)?)\s*,\s*"name"\s*:\s*"[^"]*"\s*\}/g;
+      const matches = responseText.match(objectRegex);
+
+      if (matches && matches.length > 0) {
         try {
-          let fixedJson = partialMatch[0].replace(/,\s*$/, '') + ']';
+          const fixedJson = '[' + matches.join(',') + ']';
           topics = JSON.parse(fixedJson);
+          console.log('[EXTRACT] Salvaged', topics.length, 'complete topics from partial response');
         } catch {
           return new Response(JSON.stringify({
-            error: 'JSON parsing failed',
+            error: 'JSON parsing failed after salvage attempt',
             raw: responseText.substring(0, 1000)
           }), {
             status: 500,
@@ -187,7 +205,7 @@ RULES:
         }
       } else {
         return new Response(JSON.stringify({
-          error: 'No JSON found in response',
+          error: 'No complete JSON objects found',
           raw: responseText.substring(0, 1000)
         }), {
           status: 500,

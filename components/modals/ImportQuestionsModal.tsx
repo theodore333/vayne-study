@@ -4,12 +4,12 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle, ScanLine, FileType, Files, Trash2, Plus } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
-import { BankQuestion, ClinicalCase } from '@/lib/types';
+import { BankQuestion, ClinicalCase, Topic } from '@/lib/types';
 
 interface ImportQuestionsModalProps {
   subjectId: string;
   subjectName: string;
-  topics: string[];
+  topics: Topic[];  // Full topic objects for ID + name
   onClose: () => void;
 }
 
@@ -115,10 +115,19 @@ export default function ImportQuestionsModal({
     }
   };
 
-  // Multi-part handlers
+  // Multi-part handlers - with natural number sorting
+  const naturalSort = (a: File, b: File) => {
+    // Extract numbers from filenames for natural sorting
+    const getNumber = (name: string) => {
+      const match = name.match(/(\d+)\.[^.]+$/);
+      return match ? parseInt(match[1], 10) : 0;
+    };
+    return getNumber(a.name) - getNumber(b.name);
+  };
+
   const addFilePart = (newFile: File) => {
     setFileParts(prev => {
-      const updated = [...prev, newFile].sort((a, b) => a.name.localeCompare(b.name));
+      const updated = [...prev, newFile].sort(naturalSort);
       // Auto-set bank name from first file
       if (updated.length === 1 && !bankName) {
         setBankName(newFile.name.replace(/(_Part\d+|_part\d+|\.\d+)?\.[^/.]+$/, ''));
@@ -165,7 +174,8 @@ export default function ImportQuestionsModal({
           formData.append('file', part);
           formData.append('apiKey', apiKey);
           formData.append('subjectName', subjectName);
-          formData.append('topicNames', JSON.stringify(topics));
+          formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
+          formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
 
           const response = await fetch('/api/extract-questions', {
             method: 'POST',
@@ -216,7 +226,8 @@ export default function ImportQuestionsModal({
       formData.append('file', file!);
       formData.append('apiKey', apiKey);
       formData.append('subjectName', subjectName);
-      formData.append('topicNames', JSON.stringify(topics));
+      formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
+      formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
 
       const response = await fetch('/api/extract-questions', {
         method: 'POST',

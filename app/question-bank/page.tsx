@@ -258,7 +258,7 @@ export default function QuestionBankPage() {
         <ImportQuestionsModal
           subjectId={selectedSubjectId}
           subjectName={selectedSubject.name}
-          topics={selectedSubject.topics.map(t => t.name)}
+          topics={selectedSubject.topics}
           onClose={() => setShowImportModal(false)}
         />
       )}

@@ -219,6 +219,7 @@ export async function POST(request: Request) {
     const apiKey = formData.get('apiKey') as string;
     const subjectName = formData.get('subjectName') as string;
     const topicNames = formData.get('topicNames') as string;
+    const topicIdsRaw = formData.get('topicIds') as string;
 
     console.log('[EXTRACT-Q] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
 
@@ -240,12 +241,15 @@ export async function POST(request: Request) {
 
     const isPDF = file.type === 'application/pdf';
 
-    // Parse topic names
+    // Parse topic names and IDs
     let topics: string[] = [];
+    let topicIds: string[] = [];
     try {
       topics = JSON.parse(topicNames || '[]');
+      topicIds = JSON.parse(topicIdsRaw || '[]');
     } catch {
       topics = [];
+      topicIds = [];
     }
 
     // Analyze PDF - check if we should use chunking
@@ -302,15 +306,15 @@ export async function POST(request: Request) {
           console.log(`[EXTRACT-Q] Chunk ${chunkIdx + 1} extracted ${chunkResult.questions?.length || 0} questions`);
         }
 
-        // Transform and return chunked results
+        // Transform and return chunked results - use topic IDs instead of names
         const questions = allQuestions.map((q: any) => ({
           type: q.type || 'mcq',
           text: q.text || '',
           options: q.options || null,
           correctAnswer: q.correctAnswer || '',
           explanation: q.explanation || '',
-          linkedTopicIds: q.linkedTopicIndex && topics[q.linkedTopicIndex - 1]
-            ? [topics[q.linkedTopicIndex - 1]]
+          linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
+            ? [topicIds[q.linkedTopicIndex - 1]]
             : [],
           caseId: q.caseId || null,
           stats: { attempts: 0, correct: 0 }
@@ -552,15 +556,15 @@ ${topicListForPrompt}
       }
     }
 
-    // Transform questions to match our BankQuestion type
+    // Transform questions to match our BankQuestion type - use topic IDs
     const questions = (result.questions || []).map((q: any) => ({
       type: q.type || 'mcq',
       text: q.text || '',
       options: q.options || null,
       correctAnswer: q.correctAnswer || '',
       explanation: q.explanation || '',
-      linkedTopicIds: q.linkedTopicIndex && topics[q.linkedTopicIndex - 1]
-        ? [topics[q.linkedTopicIndex - 1]]
+      linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
+        ? [topicIds[q.linkedTopicIndex - 1]]
         : [],
       caseId: q.caseId || null,
       stats: { attempts: 0, correct: 0 }

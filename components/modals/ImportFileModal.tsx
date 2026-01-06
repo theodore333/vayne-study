@@ -442,7 +442,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
               {isProcessing ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Claude Haiku чете документа...
+                  Claude Sonnet чете документа...
                 </>
               ) : (
                 <>

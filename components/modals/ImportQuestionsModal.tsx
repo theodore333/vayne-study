@@ -548,29 +548,53 @@ export default function ImportQuestionsModal({
             </div>
           )}
 
+          {/* Processing Status */}
+          {isProcessing && (
+            <div className="p-4 bg-purple-900/30 border border-purple-700/50 rounded-xl space-y-3">
+              <div className="flex items-center gap-3">
+                <Loader2 size={24} className="animate-spin text-purple-400" />
+                <div>
+                  <p className="text-purple-200 font-mono font-medium">
+                    {processingStatus || 'Claude обработва файла...'}
+                  </p>
+                  <p className="text-xs text-purple-400 font-mono">
+                    Не затваряй прозореца
+                  </p>
+                </div>
+              </div>
+
+              {/* Progress bar for multi-part */}
+              {isMultiPart && processingStatus && (
+                <div className="space-y-1">
+                  <div className="h-2 bg-purple-900/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+                      style={{
+                        width: `${(parseInt(processingStatus.match(/(\d+)\//)?.[1] || '0') / fileParts.length) * 100}%`
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500 font-mono text-center">
+                    Част {processingStatus.match(/(\d+)\//)?.[1] || '?'} от {fileParts.length}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Extract Button */}
-          {!extractedQuestions && (
+          {!extractedQuestions && !isProcessing && (
             <button
               onClick={handleExtract}
               disabled={
                 (!isMultiPart && !file) ||
                 (isMultiPart && fileParts.length === 0) ||
-                !bankName.trim() ||
-                isProcessing
+                !bankName.trim()
               }
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
-              {isProcessing ? (
-                <>
-                  <Loader2 size={18} className="animate-spin" />
-                  {processingStatus || (isMultiPart ? `Claude обработва ${fileParts.length} файла...` : 'Claude извлича въпроси...')}
-                </>
-              ) : (
-                <>
-                  <Sparkles size={18} />
-                  {isMultiPart ? `Обработи ${fileParts.length} части заедно` : 'Извлечи въпроси'}
-                </>
-              )}
+              <Sparkles size={18} />
+              {isMultiPart ? `Обработи ${fileParts.length} части последователно` : 'Извлечи въпроси'}
             </button>
           )}
 

@@ -41,11 +41,25 @@ function PracticeContent() {
   // Shuffle questions on mount
   const [shuffledQuestions, setShuffledQuestions] = useState<(BankQuestion & { bankId: string })[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [selectedAnswers, setSelectedAnswers] = useState<Set<string>>(new Set());
   const [showResult, setShowResult] = useState(false);
   const [answers, setAnswers] = useState<{ correct: boolean; questionId: string }[]>([]);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
+
+  // Helper: Check if question has multiple correct answers
+  const hasMultipleCorrect = (correctAnswer: string) => {
+    return correctAnswer.includes(',') || correctAnswer.includes(' ');
+  };
+
+  // Helper: Parse correct answers into array of letters
+  const parseCorrectAnswers = (correctAnswer: string): string[] => {
+    return correctAnswer
+      .toUpperCase()
+      .split(/[,\s]+/)
+      .map(a => a.trim().charAt(0))
+      .filter(a => a.length > 0);
+  };
 
   useEffect(() => {
     // Shuffle questions
@@ -60,15 +74,43 @@ function PracticeContent() {
 
   const handleAnswer = (answer: string) => {
     if (showResult) return;
-    setSelectedAnswer(answer);
+
+    const isMultiple = hasMultipleCorrect(currentQuestion.correctAnswer);
+
+    if (isMultiple) {
+      // Toggle selection for multiple-answer questions
+      setSelectedAnswers(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(answer)) {
+          newSet.delete(answer);
+        } else {
+          newSet.add(answer);
+        }
+        return newSet;
+      });
+    } else {
+      // Single selection
+      setSelectedAnswers(new Set([answer]));
+    }
   };
 
   const handleSubmit = () => {
     if (!currentQuestion || showResult) return;
 
-    const isCorrect = currentQuestion.type === 'open'
-      ? true // Open questions are always "correct" for now
-      : selectedAnswer?.toUpperCase().charAt(0) === currentQuestion.correctAnswer.toUpperCase().charAt(0);
+    let isCorrect: boolean;
+
+    if (currentQuestion.type === 'open') {
+      isCorrect = true; // Open questions are always "correct" for now
+    } else {
+      const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
+      const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
+
+      // Check if selected answers match correct answers exactly
+      isCorrect =
+        selectedList.length === correctAnswersList.length &&
+        selectedList.every(a => correctAnswersList.includes(a)) &&
+        correctAnswersList.every(a => selectedList.includes(a));
+    }
 
     // Update stats
     updateQuestionStats(currentQuestion.bankId, currentQuestion.id, isCorrect);
@@ -82,7 +124,7 @@ function PracticeContent() {
       setSessionComplete(true);
     } else {
       setCurrentIndex(prev => prev + 1);
-      setSelectedAnswer(null);
+      setSelectedAnswers(new Set());
       setShowResult(false);
       setOpenAnswer('');
     }
@@ -92,7 +134,7 @@ function PracticeContent() {
     const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
     setShuffledQuestions(shuffled);
     setCurrentIndex(0);
-    setSelectedAnswer(null);
+    setSelectedAnswers(new Set());
     setShowResult(false);
     setAnswers([]);
     setSessionComplete(false);
@@ -248,19 +290,28 @@ function PracticeContent() {
           {/* MCQ Options */}
           {currentQuestion.options && (
             <div className="space-y-2">
+              {/* Multiple answer hint */}
+              {hasMultipleCorrect(currentQuestion.correctAnswer) && !showResult && (
+                <p className="text-xs text-purple-400 font-mono mb-2 flex items-center gap-1">
+                  <Check size={12} />
+                  Избери ВСИЧКИ верни отговори
+                </p>
+              )}
+
               {currentQuestion.options.map((option, i) => {
-                const letter = option.charAt(0);
-                const isSelected = selectedAnswer === letter;
-                const isCorrect = letter === currentQuestion.correctAnswer.charAt(0);
+                const letter = option.charAt(0).toUpperCase();
+                const isSelected = selectedAnswers.has(letter);
+                const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
+                const isCorrectOption = correctAnswersList.includes(letter);
 
                 let bgColor = 'bg-slate-800/50 hover:bg-slate-700/50';
                 let borderColor = 'border-slate-700';
 
                 if (showResult) {
-                  if (isCorrect) {
+                  if (isCorrectOption) {
                     bgColor = 'bg-green-500/20';
                     borderColor = 'border-green-500';
-                  } else if (isSelected && !isCorrect) {
+                  } else if (isSelected && !isCorrectOption) {
                     bgColor = 'bg-red-500/20';
                     borderColor = 'border-red-500';
                   }
@@ -278,7 +329,20 @@ function PracticeContent() {
                       showResult ? 'cursor-default' : 'cursor-pointer'
                     }`}
                   >
-                    <span className="text-slate-200">{option}</span>
+                    <div className="flex items-center gap-3">
+                      {/* Checkbox for multiple / Radio for single */}
+                      {hasMultipleCorrect(currentQuestion.correctAnswer) && !showResult && (
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                          isSelected ? 'bg-purple-500 border-purple-500' : 'border-slate-500'
+                        }`}>
+                          {isSelected && <Check size={14} className="text-white" />}
+                        </div>
+                      )}
+                      <span className="text-slate-200">{option}</span>
+                      {showResult && isCorrectOption && (
+                        <Check size={16} className="text-green-400 ml-auto shrink-0" />
+                      )}
+                    </div>
                   </button>
                 );
               })}
@@ -339,7 +403,7 @@ function PracticeContent() {
           {!showResult ? (
             <button
               onClick={handleSubmit}
-              disabled={!selectedAnswer && currentQuestion.type !== 'open'}
+              disabled={selectedAnswers.size === 0 && currentQuestion.type !== 'open'}
               className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Check size={18} />

@@ -6,69 +6,130 @@ import { PDFParse } from 'pdf-parse';
 // Repair truncated JSON by extracting complete question objects
 function repairTruncatedJSON(text: string): { questions: any[]; cases: any[] } | null {
   try {
-    // Find all complete question objects using regex
-    const questionRegex = /\{\s*"type"\s*:\s*"(mcq|open|case_study)"\s*,\s*"text"\s*:\s*"([^"\\]|\\.)*"\s*,\s*"options"\s*:\s*(?:\[(?:[^\[\]]*|\[(?:[^\[\]]*|\[[^\[\]]*\])*\])*\]|null)\s*,\s*"correctAnswer"\s*:\s*"([^"\\]|\\.)*"\s*,\s*"explanation"\s*:\s*(?:"([^"\\]|\\.)*"|null)\s*,\s*"linkedTopicIndex"\s*:\s*(?:\d+|null)\s*,\s*"caseId"\s*:\s*(?:"[^"]*"|null)\s*\}/g;
-
     const questions: any[] = [];
-    let match;
+    const cases: any[] = [];
 
-    while ((match = questionRegex.exec(text)) !== null) {
-      try {
-        const parsed = JSON.parse(match[0]);
-        questions.push(parsed);
-      } catch {
-        // Skip malformed questions
-      }
-    }
+    // Method 1: Extract individual question objects by balanced braces
+    const questionsStart = text.indexOf('"questions"');
+    if (questionsStart !== -1) {
+      const arrayStart = text.indexOf('[', questionsStart);
+      if (arrayStart !== -1) {
+        let depth = 0;
+        let objStart = -1;
+        let inString = false;
+        let escapeNext = false;
 
-    // Also try simpler extraction if regex fails
-    if (questions.length === 0) {
-      // Find the questions array start
-      const questionsStart = text.indexOf('"questions"');
-      if (questionsStart !== -1) {
-        const arrayStart = text.indexOf('[', questionsStart);
-        if (arrayStart !== -1) {
-          // Extract individual objects by finding balanced braces
-          let depth = 0;
-          let objStart = -1;
+        for (let i = arrayStart; i < text.length; i++) {
+          const char = text[i];
 
-          for (let i = arrayStart; i < text.length; i++) {
-            if (text[i] === '{') {
-              if (depth === 0) objStart = i;
-              depth++;
-            } else if (text[i] === '}') {
-              depth--;
-              if (depth === 0 && objStart !== -1) {
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+
+          if (char === '\\' && inString) {
+            escapeNext = true;
+            continue;
+          }
+
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+
+          if (inString) continue;
+
+          if (char === '{') {
+            if (depth === 0) objStart = i;
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0 && objStart !== -1) {
+              const objStr = text.substring(objStart, i + 1);
+              try {
+                const obj = JSON.parse(objStr);
+                if (obj.type && obj.text) {
+                  questions.push(obj);
+                }
+              } catch {
+                // Try to fix common issues
                 try {
-                  const obj = JSON.parse(text.substring(objStart, i + 1));
+                  // Replace newlines in strings
+                  const fixed = objStr
+                    .replace(/\n/g, '\\n')
+                    .replace(/\r/g, '\\r')
+                    .replace(/\t/g, '\\t');
+                  const obj = JSON.parse(fixed);
                   if (obj.type && obj.text) {
                     questions.push(obj);
                   }
                 } catch {
                   // Skip malformed
+                  console.log(`[EXTRACT-Q] Skipped malformed object at position ${objStart}`);
                 }
-                objStart = -1;
               }
+              objStart = -1;
             }
           }
         }
       }
     }
 
-    // Extract cases if present
-    const cases: any[] = [];
-    const casesMatch = text.match(/"cases"\s*:\s*\[([\s\S]*?)\]/);
-    if (casesMatch) {
-      try {
-        const casesArray = JSON.parse('[' + casesMatch[1] + ']');
-        cases.push(...casesArray);
-      } catch {
-        // Cases parsing failed, continue without
+    // Method 2: Extract cases if present
+    const casesStart = text.indexOf('"cases"');
+    if (casesStart !== -1) {
+      const casesArrayStart = text.indexOf('[', casesStart);
+      if (casesArrayStart !== -1) {
+        let depth = 0;
+        let objStart = -1;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = casesArrayStart; i < text.length; i++) {
+          const char = text[i];
+
+          if (escapeNext) {
+            escapeNext = false;
+            continue;
+          }
+
+          if (char === '\\' && inString) {
+            escapeNext = true;
+            continue;
+          }
+
+          if (char === '"' && !escapeNext) {
+            inString = !inString;
+            continue;
+          }
+
+          if (inString) continue;
+
+          if (char === '{') {
+            if (depth === 0) objStart = i;
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0 && objStart !== -1) {
+              try {
+                const obj = JSON.parse(text.substring(objStart, i + 1));
+                if (obj.id && obj.description) {
+                  cases.push(obj);
+                }
+              } catch {
+                // Skip malformed cases
+              }
+              objStart = -1;
+            }
+          } else if (char === ']' && depth === 0) {
+            break; // End of cases array
+          }
+        }
       }
     }
 
     if (questions.length > 0) {
-      console.log(`[EXTRACT-Q] Repaired truncated JSON: extracted ${questions.length} complete questions`);
+      console.log(`[EXTRACT-Q] Repaired truncated JSON: extracted ${questions.length} questions, ${cases.length} cases`);
       return { questions, cases };
     }
 
@@ -176,7 +237,7 @@ ${topicListForPrompt}
 
   const stream = await anthropic.messages.create({
     model: 'claude-sonnet-4-5-20250929',
-    max_tokens: 16000,
+    max_tokens: 32000,
     messages: [{ role: 'user', content: prompt }],
     stream: true
   });
@@ -484,7 +545,7 @@ ${topicListForPrompt}
 
     const stream = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 - good for extraction
-      max_tokens: 32000, // More tokens for large question banks
+      max_tokens: 64000, // More tokens for large question banks
       messages: [{ role: 'user', content }],
       stream: true
     });

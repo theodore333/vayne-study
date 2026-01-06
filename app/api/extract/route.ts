@@ -71,10 +71,10 @@ IMPORTANT RULES:
 - If the document has 50+ topics, include ALL of them`
     });
 
-    // Use Sonnet for extraction - more capable with large documents
+    // Use Sonnet 3.5 for extraction - proven reliable for large documents
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 16384, // Sonnet supports more output
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 8192,
       messages: [{ role: 'user', content }],
       stream: true // Enable streaming for long requests
     });
@@ -141,8 +141,8 @@ IMPORTANT RULES:
       }, { status: 500 });
     }
 
-    // Calculate approximate cost (Claude Sonnet pricing)
-    // Sonnet: $3/1M input, $15/1M output
+    // Calculate approximate cost (Claude Sonnet 3.5 pricing)
+    // Sonnet 3.5: $3/1M input, $15/1M output
     const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
 
     return NextResponse.json({

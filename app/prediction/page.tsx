@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { TrendingUp, Zap, Calendar, Target, Star, ArrowUp } from 'lucide-react';
+import { TrendingUp, Zap, Calendar, Target, Star, ArrowUp, AlertTriangle, TrendingDown, Shuffle } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { calculatePredictedGrade, getDaysUntil, getSubjectProgress } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -159,6 +159,124 @@ export default function PredictionPage() {
                     <p className="text-purple-300 font-mono text-sm">{prediction.message}</p>
                   </div>
                 </div>
+
+                {/* Monte Carlo Simulation Results */}
+                {prediction.simulation && (
+                  <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
+                    <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4 flex items-center gap-2">
+                      <Shuffle size={20} />
+                      Симулация (Random Topics)
+                    </h3>
+
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                      {/* Best Case */}
+                      <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30 text-center">
+                        <div className="flex items-center justify-center gap-1 text-green-400 text-xs font-mono mb-1">
+                          <ArrowUp size={12} />
+                          Best Case
+                        </div>
+                        <div className="text-2xl font-bold font-mono text-green-400">
+                          {prediction.simulation.bestCase.toFixed(2)}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">падат силни теми</div>
+                      </div>
+
+                      {/* Expected */}
+                      <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 text-center">
+                        <div className="text-blue-400 text-xs font-mono mb-1">Очаквано</div>
+                        <div className="text-2xl font-bold font-mono text-blue-400">
+                          {prediction.current.toFixed(2)}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">±{prediction.simulation.variance.toFixed(2)}</div>
+                      </div>
+
+                      {/* Worst Case */}
+                      <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-center">
+                        <div className="flex items-center justify-center gap-1 text-red-400 text-xs font-mono mb-1">
+                          <TrendingDown size={12} />
+                          Worst Case
+                        </div>
+                        <div className="text-2xl font-bold font-mono text-red-400">
+                          {prediction.simulation.worstCase.toFixed(2)}
+                        </div>
+                        <div className="text-xs text-slate-500 font-mono">падат слаби теми</div>
+                      </div>
+                    </div>
+
+                    {/* Critical Topics Warning */}
+                    {prediction.simulation.criticalTopics.length > 0 && (
+                      <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-4">
+                        <div className="flex items-center gap-2 text-amber-400 font-mono text-sm mb-2">
+                          <AlertTriangle size={16} />
+                          <span className="font-semibold">{prediction.simulation.criticalTopics.length} критични теми</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {prediction.simulation.criticalTopics.slice(0, 5).map((topic, i) => (
+                            <span key={i} className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-300 font-mono">
+                              {topic.length > 30 ? topic.slice(0, 30) + '...' : topic}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Impact Recommendation */}
+                    {prediction.simulation.impactTopics.length > 0 && (
+                      <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
+                        <div className="text-emerald-400 font-mono text-sm mb-2 font-semibold">
+                          📈 Приоритизирай тези теми:
+                        </div>
+                        <div className="space-y-2">
+                          {prediction.simulation.impactTopics.slice(0, 3).map((topic, i) => (
+                            <div key={i} className="flex items-center justify-between text-sm">
+                              <span className="text-slate-300 font-mono truncate flex-1 mr-2">
+                                {topic.topicName.length > 40 ? topic.topicName.slice(0, 40) + '...' : topic.topicName}
+                              </span>
+                              <span className="text-emerald-400 font-mono shrink-0">
+                                +{topic.impact.toFixed(2)} към worst
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Exam Format Analysis */}
+                {prediction.formatAnalysis && (prediction.formatAnalysis.hasCases || prediction.formatAnalysis.hasOpenQuestions) && (
+                  <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
+                    <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4 flex items-center gap-2">
+                      <Target size={20} />
+                      Exam Format Analysis
+                    </h3>
+
+                    <div className="flex gap-3 mb-4">
+                      {prediction.formatAnalysis.hasCases && (
+                        <span className={`px-3 py-1.5 rounded-lg font-mono text-sm ${
+                          prediction.formatAnalysis.caseWeakness
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            : 'bg-slate-700 text-slate-300'
+                        }`}>
+                          Казуси {prediction.formatAnalysis.caseWeakness && '⚠️'}
+                        </span>
+                      )}
+                      {prediction.formatAnalysis.hasOpenQuestions && (
+                        <span className={`px-3 py-1.5 rounded-lg font-mono text-sm ${
+                          prediction.formatAnalysis.openWeakness
+                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            : 'bg-slate-700 text-slate-300'
+                        }`}>
+                          Отворени {prediction.formatAnalysis.openWeakness && '⚠️'}
+                        </span>
+                      )}
+                    </div>
+
+                    {prediction.formatAnalysis.formatTip && (
+                      <p className="text-slate-400 font-mono text-sm">{prediction.formatAnalysis.formatTip}</p>
+                    )}
+                  </div>
+                )}
 
                 {/* Factors */}
                 <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">

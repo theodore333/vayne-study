@@ -1,5 +1,146 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES } from './constants';
+
+/**
+ * Monte Carlo simulation for exam outcome
+ * Simulates random topic selection to estimate grade distribution
+ */
+export function simulateExamOutcome(
+  topics: Topic[],
+  topicsOnExam: number,
+  iterations: number = 1000
+): {
+  bestCase: number;
+  worstCase: number;
+  expected: number;
+  variance: number;
+  criticalTopics: string[];
+  impactTopics: { topicId: string; topicName: string; impact: number }[];
+} {
+  if (topics.length === 0 || topicsOnExam <= 0) {
+    return { bestCase: 2, worstCase: 2, expected: 2, variance: 0, criticalTopics: [], impactTopics: [] };
+  }
+
+  // Calculate topic scores (0-6 scale)
+  const topicScores = topics.map(t => {
+    let score = 3; // Base score
+    if (t.status === 'green') score = 5.5;
+    else if (t.status === 'yellow') score = 4.5;
+    else if (t.status === 'orange') score = 3.5;
+    else score = 2.5; // gray
+
+    // Adjust by quiz performance
+    if (t.avgGrade) score = (score + t.avgGrade) / 2;
+
+    return { id: t.id, name: t.name, score, status: t.status };
+  });
+
+  const results: number[] = [];
+  const actualTopicsOnExam = Math.min(topicsOnExam, topics.length);
+
+  // Run simulations
+  for (let i = 0; i < iterations; i++) {
+    // Random selection of topics
+    const shuffled = [...topicScores].sort(() => Math.random() - 0.5);
+    const selected = shuffled.slice(0, actualTopicsOnExam);
+    const avgScore = selected.reduce((sum, t) => sum + t.score, 0) / actualTopicsOnExam;
+    results.push(avgScore);
+  }
+
+  // Calculate statistics
+  const sorted = [...results].sort((a, b) => a - b);
+  const expected = results.reduce((a, b) => a + b, 0) / results.length;
+  const variance = Math.sqrt(
+    results.reduce((sum, r) => sum + Math.pow(r - expected, 2), 0) / results.length
+  );
+
+  // Best/worst from percentiles
+  const bestCase = sorted[Math.floor(iterations * 0.95)]; // 95th percentile
+  const worstCase = sorted[Math.floor(iterations * 0.05)]; // 5th percentile
+
+  // Find critical topics (weakest)
+  const weakTopics = topicScores
+    .filter(t => t.status === 'gray' || t.status === 'orange')
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 5);
+
+  // Calculate impact of improving each weak topic
+  const impactTopics = weakTopics.map(t => {
+    // If this topic was improved, how much would worst case improve?
+    const improvedScore = 5.0; // Assume topic becomes "yellow-green"
+    const currentContribution = t.score / actualTopicsOnExam;
+    const improvedContribution = improvedScore / actualTopicsOnExam;
+    const impact = (improvedContribution - currentContribution) * (1 / topics.length * actualTopicsOnExam);
+
+    return {
+      topicId: t.id,
+      topicName: t.name,
+      impact: Math.round(impact * 100) / 100
+    };
+  }).sort((a, b) => b.impact - a.impact);
+
+  return {
+    bestCase: Math.round(bestCase * 100) / 100,
+    worstCase: Math.round(worstCase * 100) / 100,
+    expected: Math.round(expected * 100) / 100,
+    variance: Math.round(variance * 100) / 100,
+    criticalTopics: weakTopics.map(t => t.name),
+    impactTopics
+  };
+}
+
+/**
+ * Analyze gap based on exam format
+ * Returns weakness analysis for different question types
+ */
+export function analyzeFormatGaps(
+  subject: Subject
+): {
+  hasCases: boolean;
+  hasOpenQuestions: boolean;
+  caseWeakness: boolean;
+  openWeakness: boolean;
+  formatTip: string;
+} {
+  const format = parseExamFormat(subject.examFormat);
+  const result = {
+    hasCases: false,
+    hasOpenQuestions: false,
+    caseWeakness: false,
+    openWeakness: false,
+    formatTip: ''
+  };
+
+  if (!format) return result;
+
+  result.hasCases = format.cases > 0;
+  result.hasOpenQuestions = format.openQuestions > 0;
+
+  // Analyze quiz history for weakness patterns
+  const allQuizResults = subject.topics.flatMap(t => t.quizHistory || []);
+
+  // Check if topics with cases have lower scores
+  // (simplified - in reality would need quiz type tracking)
+  const lowScoreQuizzes = allQuizResults.filter(q => q.score < 60);
+  const highBloomLowScore = lowScoreQuizzes.filter(q => q.bloomLevel >= 4);
+
+  // If many high-bloom quizzes have low scores, likely weak at complex questions
+  if (highBloomLowScore.length > lowScoreQuizzes.length * 0.5) {
+    if (result.hasCases) result.caseWeakness = true;
+    if (result.hasOpenQuestions) result.openWeakness = true;
+  }
+
+  // Generate tip
+  if (result.caseWeakness && result.hasCases) {
+    result.formatTip = `Изпитът включва ${format.cases} казуса. Фокусирай се върху практически случаи и клинични сценарии.`;
+  } else if (result.hasOpenQuestions && result.openWeakness) {
+    result.formatTip = `Изпитът има ${format.openQuestions} отворени въпроса. Упражнявай писмено формулиране на отговори.`;
+  } else if (format.mcq > 0) {
+    result.formatTip = `${format.mcq} тестови въпроса. MCQ са по-лесни за точки - фокусирай се на покритие.`;
+  }
+
+  return result;
+}
 
 export function generateId(): string {
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -238,6 +379,27 @@ export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = f
   if (consistencyScore < 0.3) tips.push('Преговаряй редовно - поне 3-4 теми на седмица.');
   if (decayRisk > 0.3) tips.push('Внимание! Много теми са в риск от забравяне.');
   if (daysUntilExam <= 7) tips.push('Изпитът наближава! Максимизирай учебните часове.');
+
+  // Monte Carlo simulation for exam outcomes
+  const examFormat = parseExamFormat(subject.examFormat);
+  const topicsOnExam = examFormat?.totalTopics || Math.min(5, Math.ceil(totalTopics * 0.1));
+  const simulation = simulateExamOutcome(topics, topicsOnExam);
+
+  // Add simulation-based tips
+  if (simulation.criticalTopics.length > 0) {
+    tips.push(`⚠️ ${simulation.criticalTopics.length} критични теми могат да свалят оценката.`);
+  }
+  if (simulation.impactTopics.length > 0) {
+    const topImpact = simulation.impactTopics[0];
+    tips.push(`📈 Научи "${topImpact.topicName}" за +${topImpact.impact.toFixed(2)} към worst case.`);
+  }
+
+  // Format gap analysis
+  const formatAnalysis = analyzeFormatGaps(subject);
+  if (formatAnalysis.formatTip) {
+    tips.push(formatAnalysis.formatTip);
+  }
+
   if (tips.length === 0) tips.push('Продължавай в същия дух!');
 
   // Select motivational message
@@ -253,7 +415,15 @@ export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = f
     improvement: vaynePrediction - currentPrediction,
     factors,
     tips,
-    message
+    message,
+    simulation: {
+      bestCase: simulation.bestCase,
+      worstCase: simulation.worstCase,
+      variance: simulation.variance,
+      criticalTopics: simulation.criticalTopics,
+      impactTopics: simulation.impactTopics
+    },
+    formatAnalysis
   };
 }
 
@@ -317,6 +487,10 @@ export function generateDailyPlan(
   for (const subject of examSubjects) {
     if (remainingMinutes <= 0) break;
 
+    // Check exam format for special recommendations
+    const examFormat = parseExamFormat(subject.examFormat);
+    const formatGaps = analyzeFormatGaps(subject);
+
     // Sort by weighted priority (lower = needs more attention)
     const weakTopics = subject.topics
       .filter(t => t.status !== 'green')
@@ -326,6 +500,17 @@ export function generateDailyPlan(
     if (weakTopics.length > 0) {
       const taskMinutes = Math.min(highMinutes / examSubjects.length, remainingMinutes);
       const daysLeft = getDaysUntil(subject.examDate);
+
+      // Format-aware description
+      let description = 'Интензивна подготовка за изпит';
+      if (formatGaps.caseWeakness && examFormat?.cases) {
+        description = `Фокус върху казуси (${examFormat.cases} на изпита) + слаби теми`;
+      } else if (formatGaps.hasOpenQuestions && examFormat?.openQuestions) {
+        description = `Упражнявай писмени отговори (${examFormat.openQuestions} на изпита)`;
+      } else if (examFormat?.mcq) {
+        description = `MCQ практика (${examFormat.mcq} на изпита) - покрий повече теми`;
+      }
+
       tasks.push({
         id: generateId(),
         subjectId: subject.id,
@@ -333,7 +518,7 @@ export function generateDailyPlan(
         subjectColor: subject.color,
         type: 'high',
         typeLabel: `📝 Изпит след ${daysLeft} ${daysLeft === 1 ? 'ден' : 'дни'}`,
-        description: 'Интензивна подготовка за изпит',
+        description,
         topics: weakTopics,
         estimatedMinutes: Math.round(taskMinutes),
         completed: false

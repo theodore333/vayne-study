@@ -33,6 +33,85 @@ export interface Subject {
   createdAt: string;
 }
 
+// Parsed exam format structure
+export interface ParsedExamFormat {
+  mcq: number;           // Брой MCQ тестове
+  openQuestions: number; // Брой отворени въпроси
+  cases: number;         // Брой казуси
+  essays: number;        // Брой есета
+  totalTopics: number;   // Колко теми се падат на изпит (ако е посочено)
+  raw: string;           // Original string
+}
+
+// Parse exam format string into structured data
+export function parseExamFormat(format: string | null): ParsedExamFormat | null {
+  if (!format) return null;
+
+  const result: ParsedExamFormat = {
+    mcq: 0,
+    openQuestions: 0,
+    cases: 0,
+    essays: 0,
+    totalTopics: 0,
+    raw: format
+  };
+
+  const lower = format.toLowerCase();
+
+  // Parse MCQ/тестове
+  const mcqMatch = lower.match(/(\d+)\s*(mcq|тест|теста|тестове|въпрос|въпроса)/);
+  if (mcqMatch) result.mcq = parseInt(mcqMatch[1]);
+
+  // Parse open questions
+  const openMatch = lower.match(/(\d+)\s*(отворен|отворени|open)/);
+  if (openMatch) result.openQuestions = parseInt(openMatch[1]);
+
+  // Parse cases/казуси
+  const caseMatch = lower.match(/(\d+)\s*(казус|казуса|казуси|case|cases)/);
+  if (caseMatch) result.cases = parseInt(caseMatch[1]);
+
+  // Parse essays/есета
+  const essayMatch = lower.match(/(\d+)\s*(есе|есета|essay|essays)/);
+  if (essayMatch) result.essays = parseInt(essayMatch[1]);
+
+  // Parse total topics (e.g., "5 теми от 65")
+  const topicsMatch = lower.match(/(\d+)\s*(теми|тема|topics?)\s*(от|from)/);
+  if (topicsMatch) result.totalTopics = parseInt(topicsMatch[1]);
+
+  return result;
+}
+
+// Get question type weights for scoring
+export function getQuestionTypeWeights(format: ParsedExamFormat | null): {
+  mcqWeight: number;
+  openWeight: number;
+  caseWeight: number;
+  essayWeight: number;
+} {
+  if (!format) {
+    return { mcqWeight: 0.6, openWeight: 0.2, caseWeight: 0.15, essayWeight: 0.05 };
+  }
+
+  const total = format.mcq + format.openQuestions + format.cases + format.essays;
+  if (total === 0) {
+    return { mcqWeight: 0.6, openWeight: 0.2, caseWeight: 0.15, essayWeight: 0.05 };
+  }
+
+  // Weight by difficulty: MCQ easiest (1x), Open (1.5x), Cases (2x), Essays (2x)
+  const mcqPoints = format.mcq * 1;
+  const openPoints = format.openQuestions * 1.5;
+  const casePoints = format.cases * 2;
+  const essayPoints = format.essays * 2;
+  const totalPoints = mcqPoints + openPoints + casePoints + essayPoints || 1;
+
+  return {
+    mcqWeight: mcqPoints / totalPoints,
+    openWeight: openPoints / totalPoints,
+    caseWeight: casePoints / totalPoints,
+    essayWeight: essayPoints / totalPoints
+  };
+}
+
 // Bloom's Taxonomy levels (1-6)
 export type BloomLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -186,6 +265,22 @@ export interface PredictedGrade {
   factors: GradeFactor[];
   tips: string[];
   message: string;
+  // Monte Carlo simulation results
+  simulation?: {
+    bestCase: number;      // Best possible outcome
+    worstCase: number;     // Worst possible outcome
+    variance: number;      // Standard deviation
+    criticalTopics: string[]; // Topics that drag down worst case
+    impactTopics: { topicId: string; topicName: string; impact: number }[]; // Topics to prioritize
+  };
+  // Exam format analysis
+  formatAnalysis?: {
+    hasCases: boolean;
+    hasOpenQuestions: boolean;
+    caseWeakness: boolean;   // True if weak at cases
+    openWeakness: boolean;   // True if weak at open questions
+    formatTip: string;       // Tip based on format
+  };
 }
 
 export interface GradeFactor {

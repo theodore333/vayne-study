@@ -46,6 +46,7 @@ interface AppContextType {
 
   // Usage tracking
   incrementApiCalls: (cost: number) => void;
+  updateUsageBudget: (budget: number) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -378,7 +379,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       usageData: {
         ...prev.usageData,
         dailyCalls: prev.usageData.dailyCalls + 1,
-        monthlyCost: Math.round((prev.usageData.monthlyCost + cost) * 1000) / 1000
+        monthlyCost: Math.round((prev.usageData.monthlyCost + cost) * 1000000) / 1000000
+      }
+    }));
+  }, [updateData]);
+
+  const updateUsageBudget = useCallback((budget: number) => {
+    updateData(prev => ({
+      ...prev,
+      usageData: {
+        ...prev.usageData,
+        monthlyBudget: budget
       }
     }));
   }, [updateData]);
@@ -409,7 +420,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSemesterGrade,
       deleteSemesterGrade,
       setTargetGPA,
-      incrementApiCalls
+      incrementApiCalls,
+      updateUsageBudget
     }}>
       {children}
     </AppContext.Provider>

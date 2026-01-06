@@ -36,6 +36,10 @@ interface PDFAnalysisResult {
   confidence: 'high' | 'medium' | 'low';
 }
 
+interface ExtractionWarning {
+  wasRepaired: boolean;
+}
+
 export default function ImportQuestionsModal({
   subjectId,
   subjectName,
@@ -55,6 +59,7 @@ export default function ImportQuestionsModal({
   const [extractedCases, setExtractedCases] = useState<ExtractedCase[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<Set<number>>(new Set());
   const [pdfAnalysis, setPdfAnalysis] = useState<PDFAnalysisResult | null>(null);
+  const [wasRepaired, setWasRepaired] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -69,6 +74,7 @@ export default function ImportQuestionsModal({
       setError(null);
       setRawResponse(null);
       setPdfAnalysis(null);
+      setWasRepaired(false);
       // Auto-generate bank name from file name
       if (!bankName) {
         setBankName(selectedFile.name.replace(/\.[^/.]+$/, ''));
@@ -85,6 +91,7 @@ export default function ImportQuestionsModal({
       setError(null);
       setRawResponse(null);
       setPdfAnalysis(null);
+      setWasRepaired(false);
       if (!bankName) {
         setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
       }
@@ -136,6 +143,11 @@ export default function ImportQuestionsModal({
       // Set PDF analysis if available
       if (result.pdfAnalysis) {
         setPdfAnalysis(result.pdfAnalysis);
+      }
+
+      // Check if JSON was repaired (truncated response)
+      if (result.wasRepaired) {
+        setWasRepaired(true);
       }
 
       if (result.usage) {
@@ -394,6 +406,17 @@ export default function ImportQuestionsModal({
                   </span>
                 )}
               </div>
+
+              {/* Warning if response was truncated and repaired */}
+              {wasRepaired && (
+                <div className="p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
+                  <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-300 font-mono">
+                    <strong>Внимание:</strong> Response-ът беше отрязан. Показани са {extractedQuestions.length} пълни въпроса.
+                    Може да има още въпроси в PDF-а.
+                  </div>
+                </div>
+              )}
 
               <div className="max-h-64 overflow-y-auto space-y-1 bg-slate-800/30 rounded-lg p-2">
                 {extractedQuestions.map((question, i) => (

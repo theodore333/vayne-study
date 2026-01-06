@@ -3,6 +3,82 @@ import { PDFParse } from 'pdf-parse';
 
 // See CLAUDE_MODELS.md for correct model IDs
 
+// Repair truncated JSON by extracting complete question objects
+function repairTruncatedJSON(text: string): { questions: any[]; cases: any[] } | null {
+  try {
+    // Find all complete question objects using regex
+    const questionRegex = /\{\s*"type"\s*:\s*"(mcq|open|case_study)"\s*,\s*"text"\s*:\s*"([^"\\]|\\.)*"\s*,\s*"options"\s*:\s*(?:\[(?:[^\[\]]*|\[(?:[^\[\]]*|\[[^\[\]]*\])*\])*\]|null)\s*,\s*"correctAnswer"\s*:\s*"([^"\\]|\\.)*"\s*,\s*"explanation"\s*:\s*(?:"([^"\\]|\\.)*"|null)\s*,\s*"linkedTopicIndex"\s*:\s*(?:\d+|null)\s*,\s*"caseId"\s*:\s*(?:"[^"]*"|null)\s*\}/g;
+
+    const questions: any[] = [];
+    let match;
+
+    while ((match = questionRegex.exec(text)) !== null) {
+      try {
+        const parsed = JSON.parse(match[0]);
+        questions.push(parsed);
+      } catch {
+        // Skip malformed questions
+      }
+    }
+
+    // Also try simpler extraction if regex fails
+    if (questions.length === 0) {
+      // Find the questions array start
+      const questionsStart = text.indexOf('"questions"');
+      if (questionsStart !== -1) {
+        const arrayStart = text.indexOf('[', questionsStart);
+        if (arrayStart !== -1) {
+          // Extract individual objects by finding balanced braces
+          let depth = 0;
+          let objStart = -1;
+
+          for (let i = arrayStart; i < text.length; i++) {
+            if (text[i] === '{') {
+              if (depth === 0) objStart = i;
+              depth++;
+            } else if (text[i] === '}') {
+              depth--;
+              if (depth === 0 && objStart !== -1) {
+                try {
+                  const obj = JSON.parse(text.substring(objStart, i + 1));
+                  if (obj.type && obj.text) {
+                    questions.push(obj);
+                  }
+                } catch {
+                  // Skip malformed
+                }
+                objStart = -1;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Extract cases if present
+    const cases: any[] = [];
+    const casesMatch = text.match(/"cases"\s*:\s*\[([\s\S]*?)\]/);
+    if (casesMatch) {
+      try {
+        const casesArray = JSON.parse('[' + casesMatch[1] + ']');
+        cases.push(...casesArray);
+      } catch {
+        // Cases parsing failed, continue without
+      }
+    }
+
+    if (questions.length > 0) {
+      console.log(`[EXTRACT-Q] Repaired truncated JSON: extracted ${questions.length} complete questions`);
+      return { questions, cases };
+    }
+
+    return null;
+  } catch (e) {
+    console.error('[EXTRACT-Q] JSON repair failed:', e);
+    return null;
+  }
+}
+
 interface PDFAnalysis {
   isScanned: boolean;
   textLength: number;
@@ -227,6 +303,7 @@ ${topicListForPrompt}
 
     // Parse the JSON response
     let result;
+    let wasRepaired = false;
     try {
       // Try to find JSON object
       const startIdx = responseText.indexOf('{');
@@ -238,40 +315,21 @@ ${topicListForPrompt}
         result = JSON.parse(responseText);
       }
     } catch (parseError) {
-      console.error('[EXTRACT-Q] JSON parse error:', parseError);
+      console.error('[EXTRACT-Q] JSON parse error, attempting repair:', parseError);
 
-      // Try to salvage partial response
-      const questionsMatch = responseText.match(/"questions"\s*:\s*\[([\s\S]*?)\]/);
-      const casesMatch = responseText.match(/"cases"\s*:\s*\[([\s\S]*?)\]/);
+      // Try to repair truncated JSON
+      const repaired = repairTruncatedJSON(responseText);
 
-      if (questionsMatch) {
-        try {
-          // Extract individual question objects
-          const questionRegex = /\{\s*"type"\s*:\s*"[^"]+"\s*,\s*"text"\s*:\s*"[^"]*"[\s\S]*?"linkedTopicIndex"\s*:\s*(?:\d+|null)\s*,\s*"caseId"\s*:\s*(?:"[^"]*"|null)\s*\}/g;
-          const questionMatches = responseText.match(questionRegex);
-
-          if (questionMatches && questionMatches.length > 0) {
-            result = {
-              questions: JSON.parse('[' + questionMatches.join(',') + ']'),
-              cases: casesMatch ? JSON.parse('[' + casesMatch[1] + ']') : []
-            };
-            console.log('[EXTRACT-Q] Salvaged', result.questions.length, 'questions from partial response');
-          } else {
-            throw new Error('Could not extract questions');
-          }
-        } catch {
-          return new Response(JSON.stringify({
-            error: 'JSON parsing failed',
-            raw: responseText.substring(0, 2000)
-          }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
+      if (repaired && repaired.questions.length > 0) {
+        result = repaired;
+        wasRepaired = true;
+        console.log(`[EXTRACT-Q] Successfully repaired: ${result.questions.length} questions recovered`);
       } else {
+        // Return partial result with warning
         return new Response(JSON.stringify({
-          error: 'No valid JSON found in response',
-          raw: responseText.substring(0, 2000)
+          error: 'JSON отрязан - извлечени са частични данни',
+          raw: responseText.substring(0, 2000),
+          hint: 'PDF-ът може да съдържа твърде много въпроси. Опитай с по-малък файл.'
         }), {
           status: 500,
           headers: { 'Content-Type': 'application/json' }
@@ -310,6 +368,7 @@ ${topicListForPrompt}
         pageCount: pdfAnalysis.pageCount,
         confidence: pdfAnalysis.confidence
       } : null,
+      wasRepaired, // True if JSON was truncated and repaired
       usage: {
         inputTokens,
         outputTokens,

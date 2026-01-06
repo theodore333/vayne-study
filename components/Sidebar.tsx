@@ -22,13 +22,13 @@ const icons = {
 
 const NAV_ITEMS = [
   { href: '/', label: 'Табло', icon: 'LayoutDashboard' },
+  { href: '/today', label: 'Днешен план', icon: 'Target' },
+  { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
   { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
   { href: '/question-bank', label: 'Question Bank', icon: 'FileQuestion' },
-  { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
-  { href: '/today', label: 'Днешен план', icon: 'Target' },
   { href: '/timer', label: 'Таймер', icon: 'Clock' },
-  { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },
   { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
+  { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },
   { href: '/settings', label: 'Настройки', icon: 'Settings' }
 ];
 

@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
+export const maxDuration = 60; // Allow up to 60 seconds for large PDFs
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -51,40 +53,40 @@ export async function POST(request: Request) {
 
     content.push({
       type: 'text',
-      text: `Analyze this ENTIRE document for "${subjectName}".
+      text: `Extract ALL topics from this "${subjectName}" document.
 
-CRITICAL: You MUST process ALL pages of this document from start to finish. Do not stop early.
+TASK: Create a numbered list of EVERY topic/chapter/section in this document.
 
-Extract EVERY topic/chapter/section from the ENTIRE document. For each topic provide:
-1. Number (if present, or sequential number)
-2. Name/title of the topic
+CRITICAL INSTRUCTIONS:
+1. Read the ENTIRE document from first page to last page
+2. Extract EVERY single topic - do NOT skip any
+3. If there are 65 topics, list all 65. If there are 100, list all 100.
+4. Continue until you reach the very last topic
 
-Return ONLY a valid JSON array in this exact format, no other text:
-[{"number": 1, "name": "Topic name"}, {"number": 2, "name": "Another topic"}]
+OUTPUT FORMAT - Return ONLY this JSON array, nothing else:
+[{"number": 1, "name": "First topic name"}, {"number": 2, "name": "Second topic name"}, ...]
 
-If there are subtopics, use notation like "1.1", "1.2".
-
-IMPORTANT RULES:
-- Process ALL pages, not just the first few
-- Include EVERY topic/section you find
-- Return ONLY the JSON array, no markdown, no code blocks, no explanation
-- If the document has 50+ topics, include ALL of them`
+RULES:
+- NO markdown code blocks
+- NO explanatory text before or after
+- JUST the raw JSON array
+- Include subtopics as "1.1", "1.2" etc if present
+- Do NOT truncate - list EVERY topic to the end`
     });
 
-    // Use Sonnet 4.5 for extraction - latest and most capable
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250514',
-      max_tokens: 16384,
-      messages: [{ role: 'user', content }],
-      stream: true // Enable streaming for long requests
-    });
-
-    // Collect streamed response
+    // Use streaming to capture full response
     let fullText = '';
     let inputTokens = 0;
     let outputTokens = 0;
 
-    for await (const event of response) {
+    const stream = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 16384,
+      messages: [{ role: 'user', content }],
+      stream: true
+    });
+
+    for await (const event of stream) {
       if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         fullText += event.delta.text;
       }
@@ -96,7 +98,6 @@ IMPORTANT RULES:
       }
     }
 
-    // Check if we got a response
     if (!fullText) {
       return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
     }
@@ -110,8 +111,7 @@ IMPORTANT RULES:
     // Parse the JSON response
     let topics;
     try {
-      // Try to find the complete JSON array in the response (greedy match)
-      // Find the first [ and the last ] to get the full array
+      // Find the JSON array in the response
       const startIdx = responseText.indexOf('[');
       const endIdx = responseText.lastIndexOf(']');
 
@@ -133,16 +133,38 @@ IMPORTANT RULES:
       }));
 
     } catch (parseError) {
-      console.error('Failed to parse Claude response:', responseText);
+      console.error('Failed to parse Claude response:', responseText.substring(0, 1000));
       console.error('Parse error:', parseError);
-      return NextResponse.json({
-        error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
-        raw: responseText.substring(0, 500)
-      }, { status: 500 });
+
+      // Try to salvage partial response
+      const partialMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*,?/);
+      if (partialMatch) {
+        try {
+          // Try to fix truncated JSON by closing the array
+          let fixedJson = partialMatch[0];
+          // Remove trailing comma if present
+          fixedJson = fixedJson.replace(/,\s*$/, '');
+          // Close the array
+          if (!fixedJson.endsWith(']')) {
+            fixedJson += ']';
+          }
+          topics = JSON.parse(fixedJson);
+          console.log('Salvaged', topics.length, 'topics from partial response');
+        } catch {
+          return NextResponse.json({
+            error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
+            raw: responseText.substring(0, 500)
+          }, { status: 500 });
+        }
+      } else {
+        return NextResponse.json({
+          error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
+          raw: responseText.substring(0, 500)
+        }, { status: 500 });
+      }
     }
 
-    // Calculate approximate cost (Claude Sonnet 3.5 pricing)
-    // Sonnet 3.5: $3/1M input, $15/1M output
+    // Calculate approximate cost (Sonnet 4.5 pricing: $3/1M input, $15/1M output)
     const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
 
     return NextResponse.json({

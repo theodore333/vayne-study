@@ -1,0 +1,189 @@
+import Anthropic from '@anthropic-ai/sdk';
+
+// See CLAUDE_MODELS.md for correct model IDs
+
+export async function POST(request: Request) {
+  console.log('[EXTRACT-MATERIAL] === REQUEST STARTED ===');
+
+  try {
+    const formData = await request.formData();
+    const file = formData.get('file') as File;
+    const apiKey = formData.get('apiKey') as string;
+    const topicName = formData.get('topicName') as string;
+    const subjectName = formData.get('subjectName') as string;
+    const existingMaterial = formData.get('existingMaterial') as string || '';
+
+    console.log('[EXTRACT-MATERIAL] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+
+    if (!file || !apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const anthropic = new Anthropic({ apiKey });
+
+    const fileBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(fileBuffer);
+    const base64 = buffer.toString('base64');
+
+    console.log('[EXTRACT-MATERIAL] Base64 size:', Math.round(base64.length / 1024), 'KB');
+
+    const isPDF = file.type === 'application/pdf';
+    const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
+
+    if (isPDF) {
+      content.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: base64
+        }
+      });
+    } else {
+      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+      if (file.type === 'image/png') mediaType = 'image/png';
+      else if (file.type === 'image/gif') mediaType = 'image/gif';
+      else if (file.type === 'image/webp') mediaType = 'image/webp';
+
+      content.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: base64
+        }
+      });
+    }
+
+    const appendMode = existingMaterial.trim().length > 0;
+
+    content.push({
+      type: 'text',
+      text: `Извлечи ЦЕЛИЯ учебен материал от този документ за темата "${topicName}" по предмет "${subjectName}".
+
+${appendMode ? `ВАЖНО: Вече има съществуващ материал. Извлечи САМО НОВАТА информация от документа, която НЕ се повтаря.` : ''}
+
+ЗАДАЧА:
+1. Извлечи ЦЕЛИЯ текст от документа - лекции, учебници, слайдове
+2. За ДИАГРАМИ и СХЕМИ - опиши подробно какво показват:
+   - Какви елементи има
+   - Как са свързани
+   - Какво илюстрират
+3. За ТАБЛИЦИ - преобразувай в четим текстов формат
+4. За ФОРМУЛИ - напиши ги разбираемо
+5. Запази логическата структура (заглавия, подточки)
+
+ФОРМАТ НА ОТГОВОРА:
+- Чист текст, добре форматиран
+- Използвай заглавия с === или ---
+- Използвай точки (•) за списъци
+- НЕ добавяй коментари от себе си
+- НЕ добавяй "Ето извлечения материал:" или подобни фрази
+- Започни директно с материала
+
+ПРИМЕР за диаграма:
+"=== Схема на сърцето ===
+Сърцето има 4 кухини:
+• Дясно предсърдие - приема венозна кръв от v. cava superior и inferior
+• Дясно камера - изпомпва кръв към белите дробове през a. pulmonalis
+• Ляво предсърдие - приема оксигенирана кръв от vv. pulmonales
+• Ляво камера - изпомпва кръв към тялото през aorta
+
+Клапи: трикуспидална (дясно), митрална (ляво), аортна, пулмонална"
+
+Извлечи материала:`
+    });
+
+    console.log('[EXTRACT-MATERIAL] Starting Claude API call...');
+
+    let fullText = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    const stream = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5-20250929',
+      max_tokens: 16000,
+      messages: [{ role: 'user', content }],
+      stream: true
+    });
+
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        fullText += event.delta.text;
+      }
+      if (event.type === 'message_delta' && event.usage) {
+        outputTokens = event.usage.output_tokens;
+      }
+      if (event.type === 'message_start' && event.message.usage) {
+        inputTokens = event.message.usage.input_tokens;
+      }
+    }
+
+    console.log('[EXTRACT-MATERIAL] Tokens - Input:', inputTokens, 'Output:', outputTokens);
+    console.log('[EXTRACT-MATERIAL] Extracted text length:', fullText.length);
+
+    if (!fullText.trim()) {
+      return new Response(JSON.stringify({
+        error: 'Не успях да извлека текст от документа'
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Clean up the response
+    let extractedText = fullText.trim();
+
+    // Remove common prefixes Claude might add
+    const prefixesToRemove = [
+      /^Ето извлечения материал:?\s*/i,
+      /^Извлечен материал:?\s*/i,
+      /^Материал:?\s*/i,
+      /^Here is the extracted material:?\s*/i,
+    ];
+
+    for (const prefix of prefixesToRemove) {
+      extractedText = extractedText.replace(prefix, '');
+    }
+
+    // Sonnet pricing: $3/1M input, $15/1M output
+    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+
+    return new Response(JSON.stringify({
+      text: extractedText,
+      usage: {
+        inputTokens,
+        outputTokens,
+        cost: Math.round(cost * 1000000) / 1000000
+      }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error: unknown) {
+    console.error('[EXTRACT-MATERIAL] Error:', error);
+    const message = error instanceof Error ? error.message : 'Unknown error';
+
+    if (message.includes('Could not process image')) {
+      return new Response(JSON.stringify({ error: 'Не мога да прочета файла. Опитай с друг формат.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    if (message.includes('invalid_api_key')) {
+      return new Response(JSON.stringify({ error: 'Невалиден API ключ.' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}

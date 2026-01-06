@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -47,6 +47,13 @@ interface AppContextType {
   // Usage tracking
   incrementApiCalls: (cost: number) => void;
   updateUsageBudget: (budget: number) => void;
+
+  // Question Bank operations
+  addQuestionBank: (subjectId: string, name: string) => string;
+  addQuestionsToBank: (bankId: string, questions: Omit<BankQuestion, 'id'>[], cases: Omit<ClinicalCase, 'id'>[]) => void;
+  updateQuestionStats: (bankId: string, questionId: string, correct: boolean) => void;
+  deleteQuestionBank: (bankId: string) => void;
+  deleteQuestion: (bankId: string, questionId: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -76,7 +83,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     timerSessions: [],
     gpaData: defaultGPAData,
-    usageData: defaultUsageData
+    usageData: defaultUsageData,
+    questionBanks: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -396,6 +404,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // Question Bank operations
+  const addQuestionBank = useCallback((subjectId: string, name: string): string => {
+    const bankId = generateId();
+    updateData(prev => ({
+      ...prev,
+      questionBanks: [...(prev.questionBanks || []), {
+        id: bankId,
+        subjectId,
+        name,
+        questions: [],
+        cases: [],
+        uploadedAt: new Date().toISOString()
+      }]
+    }));
+    return bankId;
+  }, [updateData]);
+
+  const addQuestionsToBank = useCallback((bankId: string, questions: Omit<BankQuestion, 'id'>[], cases: Omit<ClinicalCase, 'id'>[]) => {
+    updateData(prev => ({
+      ...prev,
+      questionBanks: (prev.questionBanks || []).map(bank => {
+        if (bank.id !== bankId) return bank;
+        const newQuestions = questions.map(q => ({
+          ...q,
+          id: generateId()
+        }));
+        const newCases = cases.map(c => ({
+          ...c,
+          id: generateId()
+        }));
+        return {
+          ...bank,
+          questions: [...bank.questions, ...newQuestions],
+          cases: [...bank.cases, ...newCases]
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const updateQuestionStats = useCallback((bankId: string, questionId: string, correct: boolean) => {
+    updateData(prev => ({
+      ...prev,
+      questionBanks: (prev.questionBanks || []).map(bank => {
+        if (bank.id !== bankId) return bank;
+        return {
+          ...bank,
+          questions: bank.questions.map(q => {
+            if (q.id !== questionId) return q;
+            return {
+              ...q,
+              stats: {
+                attempts: q.stats.attempts + 1,
+                correct: q.stats.correct + (correct ? 1 : 0)
+              }
+            };
+          })
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const deleteQuestionBank = useCallback((bankId: string) => {
+    updateData(prev => ({
+      ...prev,
+      questionBanks: (prev.questionBanks || []).filter(bank => bank.id !== bankId)
+    }));
+  }, [updateData]);
+
+  const deleteQuestion = useCallback((bankId: string, questionId: string) => {
+    updateData(prev => ({
+      ...prev,
+      questionBanks: (prev.questionBanks || []).map(bank => {
+        if (bank.id !== bankId) return bank;
+        return {
+          ...bank,
+          questions: bank.questions.filter(q => q.id !== questionId),
+          cases: bank.cases.map(c => ({
+            ...c,
+            questionIds: c.questionIds.filter(id => id !== questionId)
+          }))
+        };
+      })
+    }));
+  }, [updateData]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -423,7 +516,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteSemesterGrade,
       setTargetGPA,
       incrementApiCalls,
-      updateUsageBudget
+      updateUsageBudget,
+      addQuestionBank,
+      addQuestionsToBank,
+      updateQuestionStats,
+      deleteQuestionBank,
+      deleteQuestion
     }}>
       {children}
     </AppContext.Provider>

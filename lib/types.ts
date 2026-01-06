@@ -121,6 +121,39 @@ export interface UsageData {
   lastReset: string;
 }
 
+// Question Bank Types
+export type BankQuestionType = 'mcq' | 'open' | 'case_study';
+
+export interface BankQuestion {
+  id: string;
+  type: BankQuestionType;
+  text: string;                    // Въпросът
+  options?: string[];              // За MCQ: A, B, C, D
+  correctAnswer: string;           // Верен отговор
+  explanation?: string;            // Обяснение (ако има)
+  linkedTopicIds: string[];        // Свързани теми (AI auto-link)
+  caseId?: string;                 // Ако е част от казус
+  stats: {
+    attempts: number;
+    correct: number;
+  };
+}
+
+export interface ClinicalCase {
+  id: string;
+  description: string;             // Описание на пациента/случая
+  questionIds: string[];           // Въпроси към казуса
+}
+
+export interface QuestionBank {
+  id: string;
+  subjectId: string;
+  name: string;                    // "Сборник 2024" и т.н.
+  questions: BankQuestion[];
+  cases: ClinicalCase[];
+  uploadedAt: string;
+}
+
 export interface AppData {
   subjects: Subject[];
   schedule: ScheduleClass[];
@@ -128,6 +161,7 @@ export interface AppData {
   timerSessions: TimerSession[];
   gpaData: GPAData;
   usageData: UsageData;
+  questionBanks: QuestionBank[];
 }
 
 export interface PredictedGrade {

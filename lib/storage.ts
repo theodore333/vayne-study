@@ -30,7 +30,8 @@ const defaultData: AppData = {
   dailyStatus: defaultDailyStatus,
   timerSessions: [],
   gpaData: defaultGPAData,
-  usageData: defaultUsageData
+  usageData: defaultUsageData,
+  questionBanks: []
 };
 
 export function loadData(): AppData {
@@ -46,6 +47,7 @@ export function loadData(): AppData {
     if (!data.timerSessions) data.timerSessions = [];
     if (!data.gpaData) data.gpaData = defaultGPAData;
     if (!data.usageData) data.usageData = defaultUsageData;
+    if (!data.questionBanks) data.questionBanks = [];
     // Remove deprecated focusSession
     delete data.focusSession;
 

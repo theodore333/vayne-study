@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -16,12 +16,14 @@ const icons = {
   Clock,
   GraduationCap,
   Brain,
-  Settings
+  Settings,
+  FileQuestion
 };
 
 const NAV_ITEMS = [
   { href: '/', label: 'Табло', icon: 'LayoutDashboard' },
   { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
+  { href: '/question-bank', label: 'Question Bank', icon: 'FileQuestion' },
   { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
   { href: '/today', label: 'Днешен план', icon: 'Target' },
   { href: '/timer', label: 'Таймер', icon: 'Clock' },

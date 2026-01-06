@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle } from 'lucide-react';
+import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle, ScanLine, FileType } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
 import { BankQuestion, ClinicalCase } from '@/lib/types';
@@ -30,6 +30,12 @@ interface ExtractedCase {
   questionIds: string[];
 }
 
+interface PDFAnalysisResult {
+  isScanned: boolean;
+  pageCount: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
 export default function ImportQuestionsModal({
   subjectId,
   subjectName,
@@ -48,6 +54,7 @@ export default function ImportQuestionsModal({
   const [extractedQuestions, setExtractedQuestions] = useState<ExtractedQuestion[] | null>(null);
   const [extractedCases, setExtractedCases] = useState<ExtractedCase[]>([]);
   const [selectedQuestions, setSelectedQuestions] = useState<Set<number>>(new Set());
+  const [pdfAnalysis, setPdfAnalysis] = useState<PDFAnalysisResult | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -61,6 +68,7 @@ export default function ImportQuestionsModal({
       setExtractedQuestions(null);
       setError(null);
       setRawResponse(null);
+      setPdfAnalysis(null);
       // Auto-generate bank name from file name
       if (!bankName) {
         setBankName(selectedFile.name.replace(/\.[^/.]+$/, ''));
@@ -76,6 +84,7 @@ export default function ImportQuestionsModal({
       setExtractedQuestions(null);
       setError(null);
       setRawResponse(null);
+      setPdfAnalysis(null);
       if (!bankName) {
         setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
       }
@@ -123,6 +132,11 @@ export default function ImportQuestionsModal({
       setExtractedQuestions(result.questions);
       setExtractedCases(result.cases || []);
       setSelectedQuestions(new Set(result.questions.map((_: any, i: number) => i)));
+
+      // Set PDF analysis if available
+      if (result.pdfAnalysis) {
+        setPdfAnalysis(result.pdfAnalysis);
+      }
 
       if (result.usage) {
         incrementApiCalls(result.usage.cost);
@@ -347,7 +361,7 @@ export default function ImportQuestionsModal({
               </div>
 
               {/* Summary by type */}
-              <div className="flex gap-2 text-xs font-mono">
+              <div className="flex flex-wrap gap-2 text-xs font-mono">
                 <span className="px-2 py-1 bg-blue-500/20 text-blue-300 rounded">
                   {extractedQuestions.filter(q => q.type === 'mcq').length} MCQ
                 </span>
@@ -357,6 +371,28 @@ export default function ImportQuestionsModal({
                 <span className="px-2 py-1 bg-green-500/20 text-green-300 rounded">
                   {extractedQuestions.filter(q => q.type === 'open').length} Отворени
                 </span>
+
+                {/* PDF Analysis indicator */}
+                {pdfAnalysis && (
+                  <span className={`px-2 py-1 rounded flex items-center gap-1 ${
+                    pdfAnalysis.isScanned
+                      ? 'bg-amber-500/20 text-amber-300'
+                      : 'bg-cyan-500/20 text-cyan-300'
+                  }`}>
+                    {pdfAnalysis.isScanned ? (
+                      <>
+                        <ScanLine size={12} />
+                        Сканиран PDF
+                      </>
+                    ) : (
+                      <>
+                        <FileType size={12} />
+                        Текстов PDF
+                      </>
+                    )}
+                    <span className="text-slate-500">({pdfAnalysis.pageCount} стр.)</span>
+                  </span>
+                )}
               </div>
 
               <div className="max-h-64 overflow-y-auto space-y-1 bg-slate-800/30 rounded-lg p-2">

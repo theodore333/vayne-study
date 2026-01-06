@@ -1,6 +1,30 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { PDFParse } from 'pdf-parse';
 
 // Railway: No edge runtime needed, Node.js supports longer timeouts
+
+interface PDFAnalysis {
+  isScanned: boolean;
+  textLength: number;
+  pageCount: number;
+}
+
+async function analyzePDF(buffer: Buffer): Promise<PDFAnalysis> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parser = new PDFParse({ data: buffer, verbosity: 0 }) as any;
+    const doc = await parser.load();
+    const textResult = await parser.getText();
+    const textLength = (textResult.text as string).replace(/\s+/g, ' ').trim().length;
+    const pageCount = doc.numPages as number;
+    await parser.destroy();
+    const charsPerPage = textLength / Math.max(pageCount, 1);
+    const isScanned = charsPerPage < 100;
+    return { isScanned, textLength, pageCount };
+  } catch {
+    return { isScanned: true, textLength: 0, pageCount: 1 };
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -19,9 +43,17 @@ export async function POST(request: Request) {
     const anthropic = new Anthropic({ apiKey });
 
     const fileBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(fileBuffer).toString('base64');
+    const buffer = Buffer.from(fileBuffer);
+    const base64 = buffer.toString('base64');
 
     const isPDF = file.type === 'application/pdf';
+
+    // Analyze PDF type
+    let pdfAnalysis: PDFAnalysis | null = null;
+    if (isPDF) {
+      pdfAnalysis = await analyzePDF(buffer);
+      console.log('[EXTRACT] PDF Analysis:', pdfAnalysis);
+    }
 
     // Build the message content
     const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
@@ -51,9 +83,14 @@ export async function POST(request: Request) {
       });
     }
 
+    // Add extra instructions for scanned PDFs
+    const scannedNote = pdfAnalysis?.isScanned
+      ? `\n\nNOTE: This is a SCANNED document (image-based). Read each page carefully as an image. If some text is unclear, use context to determine the correct words.`
+      : '';
+
     content.push({
       type: 'text',
-      text: `Extract ALL topics from this "${subjectName}" document.
+      text: `Extract ALL topics from this "${subjectName}" document.${scannedNote}
 
 TASK: Create a numbered list of EVERY topic/chapter/section in this document.
 

@@ -1,6 +1,46 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { PDFParse } from 'pdf-parse';
 
 // See CLAUDE_MODELS.md for correct model IDs
+
+interface PDFAnalysis {
+  isScanned: boolean;
+  textLength: number;
+  pageCount: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+async function analyzePDF(buffer: Buffer): Promise<PDFAnalysis> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parser = new PDFParse({ data: buffer, verbosity: 0 }) as any;
+    const doc = await parser.load();
+    const textResult = await parser.getText();
+    const textLength = (textResult.text as string).replace(/\s+/g, ' ').trim().length;
+    const pageCount = doc.numPages as number;
+    await parser.destroy();
+
+    // Heuristic: scanned PDFs have very little extractable text
+    // ~500 chars per page is a reasonable threshold for text-based PDFs
+    const charsPerPage = textLength / Math.max(pageCount, 1);
+    const isScanned = charsPerPage < 100; // Less than 100 chars/page = likely scanned
+
+    // Confidence based on how clear the determination is
+    let confidence: 'high' | 'medium' | 'low' = 'high';
+    if (charsPerPage >= 50 && charsPerPage < 200) {
+      confidence = 'medium'; // Borderline case
+    } else if (charsPerPage < 50) {
+      confidence = 'high'; // Clearly scanned
+    } else if (charsPerPage > 500) {
+      confidence = 'high'; // Clearly text-based
+    }
+
+    return { isScanned, textLength, pageCount, confidence };
+  } catch {
+    // If pdf-parse fails, assume scanned
+    return { isScanned: true, textLength: 0, pageCount: 1, confidence: 'low' };
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,9 +60,17 @@ export async function POST(request: Request) {
     const anthropic = new Anthropic({ apiKey });
 
     const fileBuffer = await file.arrayBuffer();
-    const base64 = Buffer.from(fileBuffer).toString('base64');
+    const buffer = Buffer.from(fileBuffer);
+    const base64 = buffer.toString('base64');
 
     const isPDF = file.type === 'application/pdf';
+
+    // Analyze PDF type (text vs scanned)
+    let pdfAnalysis: PDFAnalysis | null = null;
+    if (isPDF) {
+      pdfAnalysis = await analyzePDF(buffer);
+      console.log('[EXTRACT-Q] PDF Analysis:', pdfAnalysis);
+    }
 
     // Build the message content
     const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
@@ -64,9 +112,14 @@ export async function POST(request: Request) {
       ? `\n\nТЕМИ ЗА СВЪРЗВАНЕ (избери най-подходящата за всеки въпрос):\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
       : '';
 
+    // Add extra instructions for scanned PDFs
+    const scannedPdfNote = pdfAnalysis?.isScanned
+      ? `\n\nВАЖНО: Този документ е СКАНИРАН (изображение). Прочети внимателно всеки текст от изображението. Ако някои букви са неясни, използвай контекста за да определиш думата.`
+      : '';
+
     content.push({
       type: 'text',
-      text: `Извлечи ВСИЧКИ въпроси от този сборник по "${subjectName}".
+      text: `Извлечи ВСИЧКИ въпроси от този сборник по "${subjectName}".${scannedPdfNote}
 
 ТИПОВЕ ВЪПРОСИ:
 1. "mcq" - Multiple choice (A/B/C/D/E)
@@ -252,6 +305,11 @@ ${topicListForPrompt}
     return new Response(JSON.stringify({
       questions,
       cases,
+      pdfAnalysis: pdfAnalysis ? {
+        isScanned: pdfAnalysis.isScanned,
+        pageCount: pdfAnalysis.pageCount,
+        confidence: pdfAnalysis.confidence
+      } : null,
       usage: {
         inputTokens,
         outputTokens,

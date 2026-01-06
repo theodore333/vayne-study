@@ -166,7 +166,19 @@ export default function ImportQuestionsModal({
         incrementApiCalls(result.usage.cost);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
+      // Provide more helpful error messages
+      if (errorMessage === 'Failed to fetch' || errorMessage.includes('fetch')) {
+        setError('Timeout или мрежова грешка. Възможни причини:\n' +
+          '• PDF файлът е твърде голям (опитай с по-малък)\n' +
+          '• Vercel Free tier има 10 сек. timeout\n' +
+          '• Опитай да пуснеш локално: npm run dev');
+      } else if (errorMessage.includes('timeout') || errorMessage.includes('504')) {
+        setError('Timeout - Claude API отговаря твърде бавно. Опитай с по-малък PDF.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsProcessing(false);
     }

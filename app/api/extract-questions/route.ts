@@ -205,12 +205,16 @@ ${topicListForPrompt}
 }
 
 export async function POST(request: Request) {
+  console.log('[EXTRACT-Q] === REQUEST STARTED ===');
+
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const apiKey = formData.get('apiKey') as string;
     const subjectName = formData.get('subjectName') as string;
     const topicNames = formData.get('topicNames') as string;
+
+    console.log('[EXTRACT-Q] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
 
     if (!file || !apiKey) {
       return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
@@ -219,11 +223,14 @@ export async function POST(request: Request) {
       });
     }
 
+    console.log('[EXTRACT-Q] Creating Anthropic client...');
     const anthropic = new Anthropic({ apiKey });
 
+    console.log('[EXTRACT-Q] Reading file buffer...');
     const fileBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(fileBuffer);
     const base64 = buffer.toString('base64');
+    console.log('[EXTRACT-Q] Base64 size:', Math.round(base64.length / 1024), 'KB');
 
     const isPDF = file.type === 'application/pdf';
 
@@ -240,8 +247,15 @@ export async function POST(request: Request) {
     const shouldChunk = isPDF;
 
     if (isPDF) {
-      // For large text-based PDFs, extract page text for chunking
-      pdfAnalysis = await analyzePDF(buffer, shouldChunk);
+      console.log('[EXTRACT-Q] Analyzing PDF...');
+      try {
+        // For large text-based PDFs, extract page text for chunking
+        pdfAnalysis = await analyzePDF(buffer, shouldChunk);
+      } catch (pdfError) {
+        console.error('[EXTRACT-Q] PDF Analysis FAILED:', pdfError);
+        // Continue without analysis - will use standard extraction
+        pdfAnalysis = { isScanned: true, textLength: 0, pageCount: 1, confidence: 'low' };
+      }
       console.log('[EXTRACT-Q] PDF Analysis:', {
         isScanned: pdfAnalysis.isScanned,
         pageCount: pdfAnalysis.pageCount,

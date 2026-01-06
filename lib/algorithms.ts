@@ -68,9 +68,10 @@ export function simulateExamOutcome(
   const impactTopics = weakTopics.map(t => {
     // If this topic was improved, how much would worst case improve?
     const improvedScore = 5.0; // Assume topic becomes "yellow-green"
-    const currentContribution = t.score / actualTopicsOnExam;
-    const improvedContribution = improvedScore / actualTopicsOnExam;
-    const impact = (improvedContribution - currentContribution) * (1 / topics.length * actualTopicsOnExam);
+    // Impact = score improvement * probability of topic being selected
+    const scoreDiff = improvedScore - t.score;
+    const selectionProbability = actualTopicsOnExam / topics.length;
+    const impact = scoreDiff * selectionProbability;
 
     return {
       topicId: t.id,
@@ -354,9 +355,22 @@ export function calculatePredictedGrade(
   predicted = Math.min(6, Math.max(2, predicted));
   predicted = Math.round(predicted * 4) / 4;
 
-  // Calculate both modes
-  const currentPrediction = vayneMode ? predicted : predicted;
-  const vaynePrediction = vayneMode ? predicted : calculatePredictedGrade(subject, true, questionBanks).current;
+  // Calculate both modes without recursion
+  // For vayne prediction, we pre-calculate the boost
+  let vaynePrediction = predicted;
+  if (!vayneMode) {
+    // Calculate vayne mode boost directly
+    const vayneBoost =
+      Math.min(1, coverageScore * 1.3) * 3 +
+      (avgQuizGrade / 6) * 3;
+    const vayneConsistency = Math.min(1, consistencyScore + 0.5);
+    const vayneDecay = decayRisk * 0.5;
+    const vayneQBBonus = hasQuestionBankData ? Math.min(1, questionBankScore + 0.2) * 0.5 : 0;
+    vaynePrediction = (vayneBoost * timeFactor) + (vayneConsistency * 0.5) - vayneDecay + vayneQBBonus + 2;
+    vaynePrediction = Math.min(6, Math.max(2, vaynePrediction));
+    vaynePrediction = Math.round(vaynePrediction * 4) / 4;
+  }
+  const currentPrediction = predicted;
 
   // Generate factors
   const factors: GradeFactor[] = [

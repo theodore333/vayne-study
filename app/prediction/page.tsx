@@ -335,7 +335,7 @@ export default function PredictionPage() {
           <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4">Общ преглед</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {data.subjects.map(subject => {
-              const pred = calculatePredictedGrade(subject);
+              const pred = calculatePredictedGrade(subject, false, data.questionBanks || []);
               return (
                 <div key={subject.id} className="p-4 rounded-lg bg-slate-800/50 text-center">
                   <div className="w-3 h-3 rounded-full mx-auto mb-2" style={{ backgroundColor: subject.color }} />

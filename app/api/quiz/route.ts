@@ -79,8 +79,11 @@ export async function POST(request: Request) {
       return handleFreeRecallHint(anthropic, material, topicName, userRecall, hintContext);
     }
 
-    if (mode === 'free_recall' && userRecall) {
-      // Free Recall Evaluation
+    if (mode === 'free_recall' && userRecall !== undefined && !requestHint) {
+      // Free Recall Evaluation - check for userRecall being defined (can be empty string for empty submission)
+      if (!userRecall.trim()) {
+        return NextResponse.json({ error: 'Напиши нещо преди да оцениш' }, { status: 400 });
+      }
       return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall);
     }
 

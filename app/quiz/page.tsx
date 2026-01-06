@@ -198,16 +198,25 @@ function QuizContent() {
           }
         }
 
-        // Enter to submit
+        // Enter to submit - handled inline to avoid stale closure
         if (e.key === 'Enter' && selectedAnswer) {
           e.preventDefault();
-          handleAnswer();
+          setShowExplanation(true);
         }
       } else {
-        // After showing explanation, Enter to go next
+        // After showing explanation, Enter to go next - handled inline
         if (e.key === 'Enter') {
           e.preventDefault();
-          handleNext();
+          // Trigger next question logic
+          const nextIndex = quizState.currentIndex + 1;
+          if (nextIndex < quizState.questions.length) {
+            setQuizState(prev => ({ ...prev, currentIndex: nextIndex }));
+            setSelectedAnswer(null);
+            setOpenAnswer('');
+            setShowExplanation(false);
+          } else {
+            setQuizState(prev => ({ ...prev, showResult: true }));
+          }
         }
       }
     };

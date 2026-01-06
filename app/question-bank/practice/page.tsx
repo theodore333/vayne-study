@@ -179,38 +179,69 @@ function PracticeContent() {
   useEffect(() => {
     if (!practiceStarted || shuffledQuestions.length === 0 || sessionComplete) return;
 
-    const question = currentQuestion;
+    const question = shuffledQuestions[currentIndex];
     if (!question || question.type === 'open') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
 
       const options = question.options || [];
+      const isMultiple = hasMultipleCorrect(question.correctAnswer);
 
       if (!showResult) {
         if (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'E') {
           const letter = e.key.toUpperCase();
           const index = letter.charCodeAt(0) - 65;
           if (index < options.length) {
-            handleAnswer(letter);
+            // Handle answer inline to avoid stale closure
+            if (isMultiple) {
+              setSelectedAnswers(prev => {
+                const newSet = new Set(prev);
+                if (newSet.has(letter)) {
+                  newSet.delete(letter);
+                } else {
+                  newSet.add(letter);
+                }
+                return newSet;
+              });
+            } else {
+              setSelectedAnswers(new Set([letter]));
+            }
           }
         }
 
         if (e.key === 'Enter' && selectedAnswers.size > 0) {
           e.preventDefault();
-          handleSubmit();
+          // Handle submit inline
+          const correctAnswersList = parseCorrectAnswers(question.correctAnswer);
+          const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
+          const isCorrect =
+            selectedList.length === correctAnswersList.length &&
+            selectedList.every(a => correctAnswersList.includes(a)) &&
+            correctAnswersList.every(a => selectedList.includes(a));
+          updateQuestionStats(question.bankId, question.id, isCorrect);
+          setAnswers(prev => [...prev, { correct: isCorrect, questionId: question.id }]);
+          setShowResult(true);
         }
       } else {
         if (e.key === 'Enter') {
           e.preventDefault();
-          handleNext();
+          // Handle next inline
+          if (currentIndex >= shuffledQuestions.length - 1) {
+            setSessionComplete(true);
+          } else {
+            setCurrentIndex(prev => prev + 1);
+            setSelectedAnswers(new Set());
+            setShowResult(false);
+            setOpenAnswer('');
+          }
         }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers]);
+  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers, updateQuestionStats]);
 
   const currentCase = currentQuestion?.caseId
     ? allCases.find(c => c.id === currentQuestion.caseId)

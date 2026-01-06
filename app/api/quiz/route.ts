@@ -127,7 +127,7 @@ async function handleFreeRecallHint(
   hintContext: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-3-5-haiku-20241022', // Use Haiku for hints (cheaper)
+    model: 'claude-haiku-4-5-20251001', // Use Haiku for hints (cheaper)
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -180,7 +180,7 @@ async function handleFreeRecallEvaluation(
   userRecall: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-20250514',
+    model: 'claude-opus-4-5-20251101',
     max_tokens: 4096,
     messages: [{
       role: 'user',
@@ -263,7 +263,7 @@ async function handleGapAnalysis(
     : 'No previous quiz history.';
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-20250514',
+    model: 'claude-opus-4-5-20251101',
     max_tokens: 6144,
     messages: [{
       role: 'user',
@@ -409,7 +409,7 @@ Mark each question with its bloomLevel (5 or 6).`;
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-20250514',
+    model: 'claude-opus-4-5-20251101',
     max_tokens: 8192,
     messages: [{
       role: 'user',

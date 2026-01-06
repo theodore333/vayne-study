@@ -74,7 +74,7 @@ IMPORTANT RULES:
     // Use Haiku for extraction tasks with streaming for large documents
     const response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
-      max_tokens: 65536,
+      max_tokens: 8192, // Haiku max is 8192
       messages: [{ role: 'user', content }],
       stream: true // Enable streaming for long requests
     });

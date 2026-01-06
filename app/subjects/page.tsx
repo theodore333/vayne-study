@@ -5,11 +5,11 @@ import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain } from '
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS } from '@/lib/constants';
-import { Topic, TopicStatus, Subject } from '@/lib/types';
+import { TopicStatus, Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
 import ImportFileModal from '@/components/modals/ImportFileModal';
-import TopicDetailSidebar from '@/components/TopicDetailSidebar';
+import Link from 'next/link';
 
 function LoadingFallback() {
   return (
@@ -32,7 +32,6 @@ function SubjectsContent() {
   const router = useRouter();
   const { data, isLoading, deleteSubject, updateSubject } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
-  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
   const [showAIImport, setShowAIImport] = useState(false);
@@ -291,8 +290,8 @@ function SubjectsContent() {
                             borderColor: config.border
                           }}
                         >
-                          <button
-                            onClick={() => setSelectedTopic(topic)}
+                          <Link
+                            href={`/subjects/${selectedSubjectId}/topics/${topic.id}`}
                             className="flex-1 flex items-center gap-4 text-left"
                           >
                             <span className="text-2xl">{config.emoji}</span>
@@ -314,7 +313,7 @@ function SubjectsContent() {
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
                               </div>
                             </div>
-                          </button>
+                          </Link>
                           {/* Quiz Button */}
                           <button
                             onClick={(e) => {
@@ -354,14 +353,6 @@ function SubjectsContent() {
           subjectId={selectedSubjectId}
           subjectName={selectedSubject.name}
           onClose={() => setShowAIImport(false)}
-        />
-      )}
-      {selectedTopic && selectedSubject && (
-        <TopicDetailSidebar
-          topic={selectedTopic}
-          subjectId={selectedSubject.id}
-          subjectColor={selectedSubject.color}
-          onClose={() => setSelectedTopic(null)}
         />
       )}
     </div>

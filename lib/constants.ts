@@ -8,7 +8,7 @@ export const STATUS_CONFIG: Record<TopicStatus, {
   emoji: string;
   weight: number;
 }> = {
-  gray: { bg: '#1f2937', border: '#374151', text: '#6b7280', label: 'Незапочната', emoji: '⬜', weight: 0 },
+  gray: { bg: '#1f2937', border: '#374151', text: '#6b7280', label: 'Незапочната', emoji: '⚪', weight: 0 },
   orange: { bg: '#431407', border: '#9a3412', text: '#fb923c', label: 'В процес', emoji: '🟠', weight: 0.3 },
   yellow: { bg: '#422006', border: '#a16207', text: '#fbbf24', label: 'Научена', emoji: '🟡', weight: 0.7 },
   green: { bg: '#052e16', border: '#166534', text: '#4ade80', label: 'Солидна', emoji: '🟢', weight: 1.0 }

@@ -79,7 +79,7 @@ export default function ImportTopicsModal({ subjectId, onClose }: Props) {
                       #{topic.number}
                     </span>
                     <span className="text-sm text-slate-300">{topic.name}</span>
-                    <span className="ml-auto text-xs">⬜</span>
+                    <span className="ml-auto text-xs">⚪</span>
                   </div>
                 ))}
                 {parsedTopics.length > 20 && (

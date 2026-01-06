@@ -272,11 +272,11 @@ export default function SettingsPage() {
           <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-lg border border-slate-700/50">
             <Sparkles size={20} className="text-purple-400 mt-0.5" />
             <div>
-              <h4 className="text-sm font-semibold text-slate-200 font-mono">Claude Sonnet</h4>
+              <h4 className="text-sm font-semibold text-slate-200 font-mono">Claude Opus</h4>
               <p className="text-xs text-slate-500 font-mono mt-1">
-                Балансиран. Използва се за: AI Quiz, генериране на въпроси.
+                Най-мощен. Използва се за: AI Quiz, генериране на въпроси, дълбок анализ.
               </p>
-              <p className="text-xs text-purple-400 font-mono mt-1">~$3 / 1M input, $15 / 1M output</p>
+              <p className="text-xs text-purple-400 font-mono mt-1">~$15 / 1M input, $75 / 1M output</p>
             </div>
           </div>
         </div>

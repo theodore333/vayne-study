@@ -13,7 +13,7 @@ export async function POST(request: Request) {
 
     // Use Opus for high-quality educational quiz generation
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-20250514',
       max_tokens: 4096,
       messages: [{
         role: 'user',
@@ -89,7 +89,7 @@ IMPORTANT:
     // Calculate cost (Opus pricing: $15/1M input, $75/1M output)
     const inputTokens = response.usage.input_tokens;
     const outputTokens = response.usage.output_tokens;
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+    const cost = (inputTokens * 0.015 + outputTokens * 0.075) / 1000;
 
     return NextResponse.json({
       questions,

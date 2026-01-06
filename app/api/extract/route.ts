@@ -71,10 +71,10 @@ IMPORTANT RULES:
 - If the document has 50+ topics, include ALL of them`
     });
 
-    // Use Sonnet 3.5 for extraction - proven reliable for large documents
+    // Use Sonnet 4.5 for extraction - latest and most capable
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 8192,
+      model: 'claude-sonnet-4-5-20250514',
+      max_tokens: 16384,
       messages: [{ role: 'user', content }],
       stream: true // Enable streaming for long requests
     });

@@ -51,7 +51,22 @@ export interface QuizResult {
   score: number; // 0-100
   questionsCount: number;
   correctAnswers: number;
+  weight: number; // Quiz length weight: 0.5 (quick), 1.0 (standard), 1.5 (deep), 2.0 (marathon)
 }
+
+export type QuizLengthPreset = 'quick' | 'standard' | 'deep' | 'marathon';
+
+export const QUIZ_LENGTH_PRESETS: Record<QuizLengthPreset, {
+  label: string;
+  questions: number;
+  weight: number;
+  description: string;
+}> = {
+  quick: { label: 'Бърз преговор', questions: 5, weight: 0.5, description: '5 въпроса' },
+  standard: { label: 'Стандартен', questions: 12, weight: 1.0, description: '10-15 въпроса' },
+  deep: { label: 'Задълбочен', questions: 22, weight: 1.5, description: '20-25 въпроса' },
+  marathon: { label: 'Маратон', questions: 35, weight: 2.0, description: '30+ въпроса' }
+};
 
 export interface Topic {
   id: string;

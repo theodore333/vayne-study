@@ -6,7 +6,7 @@ import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, 
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
-import { BLOOM_LEVELS, BloomLevel } from '@/lib/types';
+import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS } from '@/lib/types';
 
 type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom';
 
@@ -48,6 +48,7 @@ function QuizContent() {
 
   // Quiz settings
   const [mode, setMode] = useState<QuizMode | null>(null); // null = no selection yet
+  const [quizLength, setQuizLength] = useState<QuizLengthPreset>('standard');
   const [matchExamFormat, setMatchExamFormat] = useState(false);
   const [showCustomOptions, setShowCustomOptions] = useState(false);
   const [customQuestionCount, setCustomQuestionCount] = useState(5);
@@ -237,6 +238,11 @@ function QuizContent() {
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
+      // Get question count from preset or custom
+      const questionCount = mode === 'custom'
+        ? customQuestionCount
+        : QUIZ_LENGTH_PRESETS[quizLength].questions;
+
       const response = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -249,7 +255,7 @@ function QuizContent() {
           examFormat: subject?.examFormat,
           matchExamFormat,
           mode,
-          questionCount: mode === 'custom' ? customQuestionCount : null,
+          questionCount,
           bloomLevel: mode === 'custom' ? customBloomLevel : null,
           currentBloomLevel: topic?.currentBloomLevel || 1,
           quizHistory: topic?.quizHistory
@@ -449,12 +455,16 @@ function QuizContent() {
       newBloomLevel = Math.min(6, newBloomLevel + 1) as BloomLevel;
     }
 
+    // Get weight from preset (custom mode uses standard weight)
+    const weight = mode === 'custom' ? 1.0 : QUIZ_LENGTH_PRESETS[quizLength].weight;
+
     const quizResult = {
       date: new Date().toISOString(),
       bloomLevel: newBloomLevel,
       score: Math.round(percentage),
       questionsCount: quizState.questions.length,
-      correctAnswers: Math.round(score)
+      correctAnswers: Math.round(score),
+      weight
     };
 
     updateTopic(subjectId, topicId, {
@@ -468,12 +478,14 @@ function QuizContent() {
 
     addGrade(subjectId, topicId, freeRecallEvaluation.grade);
 
+    // Free recall gets standard weight
     const quizResult = {
       date: new Date().toISOString(),
       bloomLevel: freeRecallEvaluation.bloomLevel as BloomLevel,
       score: freeRecallEvaluation.score,
       questionsCount: 1,
-      correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0
+      correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0,
+      weight: 1.0
     };
 
     updateTopic(subjectId, topicId, {
@@ -1029,6 +1041,47 @@ function QuizContent() {
               <span className="text-xs text-slate-500 font-mono">Открий слаби места на базата на quiz history</span>
             </button>
           </div>
+
+          {/* Quiz Length Dropdown - only show for non-free-recall modes */}
+          {mode && mode !== 'free_recall' && mode !== 'custom' && (
+            <div className="mt-4">
+              <label className="block text-xs text-slate-500 mb-2 font-mono uppercase tracking-wider">
+                Дължина на теста
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(Object.keys(QUIZ_LENGTH_PRESETS) as QuizLengthPreset[]).map(preset => {
+                  const config = QUIZ_LENGTH_PRESETS[preset];
+                  const isSelected = quizLength === preset;
+                  return (
+                    <button
+                      key={preset}
+                      onClick={() => setQuizLength(preset)}
+                      className={`p-3 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? 'bg-purple-500/20 border-purple-500 ring-1 ring-purple-500/30'
+                          : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className={`block font-mono text-sm font-medium ${
+                        isSelected ? 'text-purple-300' : 'text-slate-300'
+                      }`}>
+                        {config.label}
+                      </span>
+                      <span className="text-xs text-slate-500 font-mono">
+                        {config.description}
+                      </span>
+                      <span className={`block text-xs mt-1 font-mono ${
+                        config.weight >= 1.5 ? 'text-green-400' :
+                        config.weight <= 0.5 ? 'text-amber-400' : 'text-slate-500'
+                      }`}>
+                        {config.weight}x тежест
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Match Exam Format Checkbox */}
           {subject.examFormat && (

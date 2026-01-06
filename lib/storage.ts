@@ -62,7 +62,11 @@ export function loadData(): AppData {
         materialImages: topic.materialImages || [],
         // Bloom's Taxonomy tracking
         currentBloomLevel: topic.currentBloomLevel || 1,
-        quizHistory: topic.quizHistory || []
+        // Migrate quiz history to include weight
+        quizHistory: (topic.quizHistory || []).map((qr: any) => ({
+          ...qr,
+          weight: qr.weight ?? 1.0 // Default to standard weight for existing results
+        }))
       }))
     }));
 

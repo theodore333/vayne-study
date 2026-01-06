@@ -55,6 +55,59 @@ export function gradeToStatus(avgGrade: number): TopicStatus {
   return 'orange';
 }
 
+/**
+ * Calculate weighted mastery score for a topic based on quiz history
+ * Higher weight quizzes have more influence on the final score
+ * Returns a score from 0-100 (higher = better mastery)
+ */
+export function getWeightedMasteryScore(topic: Topic): number {
+  const history = topic.quizHistory || [];
+  if (history.length === 0) return 0;
+
+  // Calculate weighted average with recency bias
+  // More recent quizzes count more
+  let totalWeight = 0;
+  let weightedScore = 0;
+
+  history.forEach((quiz, index) => {
+    // Recency factor: more recent = higher weight (last quiz = 1.5x, older = decreasing)
+    const recencyFactor = 1 + (0.5 * (index / history.length));
+    const quizWeight = (quiz.weight || 1.0) * recencyFactor;
+
+    totalWeight += quizWeight;
+    weightedScore += quiz.score * quizWeight;
+  });
+
+  return totalWeight > 0 ? Math.round(weightedScore / totalWeight) : 0;
+}
+
+/**
+ * Get topic priority score (lower = needs more attention)
+ * Combines: mastery score, bloom level, time since last review, quiz weight
+ */
+export function getTopicPriority(topic: Topic): number {
+  const masteryScore = getWeightedMasteryScore(topic);
+  const bloomLevel = topic.currentBloomLevel || 1;
+  const daysSinceReview = getDaysSince(topic.lastReview);
+
+  // Base priority from mastery (0-100)
+  let priority = masteryScore;
+
+  // Bloom level bonus (higher bloom = better understanding)
+  priority += bloomLevel * 5; // +5 to +30
+
+  // Decay penalty for old reviews
+  if (daysSinceReview !== Infinity) {
+    priority -= Math.min(20, daysSinceReview * 2); // -2 per day, max -20
+  }
+
+  // Status penalty
+  const statusPenalty = { gray: 30, orange: 20, yellow: 10, green: 0 };
+  priority -= statusPenalty[topic.status];
+
+  return Math.max(0, priority);
+}
+
 export function calculateEffectiveHours(status: DailyStatus): number {
   let hours = status.availableHours;
   if (status.sick) hours *= 0.5;
@@ -228,9 +281,10 @@ export function generateDailyPlan(
     const subject = subjects.find(s => s.id === exercise.subjectId);
     if (!subject || subject.topics.length === 0) continue;
 
+    // Sort by weighted priority (lower = needs more attention)
     const weakTopics = subject.topics
       .filter(t => t.status !== 'green')
-      .sort((a, b) => (a.avgGrade || 0) - (b.avgGrade || 0))
+      .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
       .slice(0, 5);
 
     if (weakTopics.length > 0) {
@@ -263,12 +317,10 @@ export function generateDailyPlan(
   for (const subject of examSubjects) {
     if (remainingMinutes <= 0) break;
 
+    // Sort by weighted priority (lower = needs more attention)
     const weakTopics = subject.topics
       .filter(t => t.status !== 'green')
-      .sort((a, b) => {
-        const statusOrder = { gray: 0, orange: 1, yellow: 2, green: 3 };
-        return statusOrder[a.status] - statusOrder[b.status];
-      })
+      .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
       .slice(0, 8);
 
     if (weakTopics.length > 0) {

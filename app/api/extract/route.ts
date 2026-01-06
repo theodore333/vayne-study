@@ -71,21 +71,37 @@ IMPORTANT RULES:
 - If the document has 50+ topics, include ALL of them`
     });
 
-    // Use Haiku for simple extraction tasks (cheaper and faster)
-    // No max_tokens limit - let it handle documents of any size
+    // Use Haiku for extraction tasks with streaming for large documents
     const response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
-      max_tokens: 65536, // Maximum allowed for Haiku
-      messages: [{ role: 'user', content }]
+      max_tokens: 65536,
+      messages: [{ role: 'user', content }],
+      stream: true // Enable streaming for long requests
     });
 
-    // Extract text from response
-    const textContent = response.content.find(c => c.type === 'text');
-    if (!textContent || textContent.type !== 'text') {
+    // Collect streamed response
+    let fullText = '';
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    for await (const event of response) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        fullText += event.delta.text;
+      }
+      if (event.type === 'message_delta' && event.usage) {
+        outputTokens = event.usage.output_tokens;
+      }
+      if (event.type === 'message_start' && event.message.usage) {
+        inputTokens = event.message.usage.input_tokens;
+      }
+    }
+
+    // Check if we got a response
+    if (!fullText) {
       return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
     }
 
-    let responseText = textContent.text.trim();
+    let responseText = fullText.trim();
 
     // Clean up the response - remove markdown code blocks if present
     responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
@@ -126,8 +142,6 @@ IMPORTANT RULES:
     }
 
     // Calculate approximate cost (Claude Haiku pricing)
-    const inputTokens = response.usage.input_tokens;
-    const outputTokens = response.usage.output_tokens;
     // Haiku: $0.25/1M input, $1.25/1M output
     const cost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000;
 

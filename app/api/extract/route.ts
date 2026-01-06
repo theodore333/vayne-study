@@ -71,10 +71,10 @@ IMPORTANT RULES:
 - If the document has 50+ topics, include ALL of them`
     });
 
-    // Use Haiku for extraction tasks with streaming for large documents
+    // Use Sonnet for extraction - more capable with large documents
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-haiku-20241022',
-      max_tokens: 8192, // Haiku max is 8192
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 16384, // Sonnet supports more output
       messages: [{ role: 'user', content }],
       stream: true // Enable streaming for long requests
     });
@@ -141,9 +141,9 @@ IMPORTANT RULES:
       }, { status: 500 });
     }
 
-    // Calculate approximate cost (Claude Haiku pricing)
-    // Haiku: $0.25/1M input, $1.25/1M output
-    const cost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000;
+    // Calculate approximate cost (Claude Sonnet pricing)
+    // Sonnet: $3/1M input, $15/1M output
+    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
 
     return NextResponse.json({
       topics,

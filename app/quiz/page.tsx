@@ -171,6 +171,7 @@ function QuizContent() {
           material: topic?.material,
           topicName: topic?.name,
           subjectName: subject?.name || '',
+          subjectType: subject?.subjectType || 'preclinical',
           examFormat: subject?.examFormat,
           matchExamFormat,
           mode,

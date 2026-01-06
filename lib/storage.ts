@@ -52,6 +52,7 @@ export function loadData(): AppData {
     // Migrate subjects and topics - add missing fields
     data.subjects = data.subjects.map((subject: any) => ({
       ...subject,
+      subjectType: subject.subjectType ?? 'preclinical', // Default to preclinical
       examFormat: subject.examFormat ?? null, // Add exam format field
       topics: subject.topics.map((topic: any) => ({
         ...topic,

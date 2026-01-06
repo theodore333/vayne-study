@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { X, BookOpen, Calendar, FileText } from 'lucide-react';
+import { X, BookOpen, Calendar, FileText, Beaker, Stethoscope, FlaskConical } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { PRESET_COLORS } from '@/lib/constants';
+import { SubjectType, SUBJECT_TYPES } from '@/lib/types';
 
 interface Props {
   onClose: () => void;
@@ -13,6 +14,7 @@ export default function AddSubjectModal({ onClose }: Props) {
   const { addSubject } = useApp();
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
+  const [subjectType, setSubjectType] = useState<SubjectType>('preclinical');
   const [examDate, setExamDate] = useState('');
   const [examFormat, setExamFormat] = useState('');
 
@@ -20,8 +22,14 @@ export default function AddSubjectModal({ onClose }: Props) {
     e.preventDefault();
     if (!name.trim()) return;
 
-    addSubject(name.trim(), color, examDate || null, examFormat.trim() || null);
+    addSubject(name.trim(), color, subjectType, examDate || null, examFormat.trim() || null);
     onClose();
+  };
+
+  const typeIcons = {
+    preclinical: Beaker,
+    clinical: Stethoscope,
+    hybrid: FlaskConical
   };
 
   return (
@@ -82,6 +90,36 @@ export default function AddSubjectModal({ onClose }: Props) {
                 />
               ))}
             </div>
+          </div>
+
+          {/* Subject Type */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              Тип предмет
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {SUBJECT_TYPES.map(st => {
+                const Icon = typeIcons[st.type];
+                return (
+                  <button
+                    key={st.type}
+                    type="button"
+                    onClick={() => setSubjectType(st.type)}
+                    className={`p-3 rounded-lg border text-center transition-all ${
+                      subjectType === st.type
+                        ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                        : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                    }`}
+                  >
+                    <Icon size={20} className="mx-auto mb-1" />
+                    <span className="text-xs font-mono block">{st.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-2 font-mono">
+              {SUBJECT_TYPES.find(st => st.type === subjectType)?.examples}
+            </p>
           </div>
 
           {/* Exam Date */}

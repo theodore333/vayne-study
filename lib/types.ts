@@ -1,7 +1,32 @@
+// Subject types for adapting quiz generation
+export type SubjectType = 'preclinical' | 'clinical' | 'hybrid';
+
+export const SUBJECT_TYPES: { type: SubjectType; name: string; description: string; examples: string }[] = [
+  {
+    type: 'preclinical',
+    name: 'Предклиничен',
+    description: 'Фокус върху структури, механизми, теория',
+    examples: 'Анатомия, Биохимия, Физиология, Хистология'
+  },
+  {
+    type: 'clinical',
+    name: 'Клиничен',
+    description: 'Фокус върху диагностика, лечение, пациенти',
+    examples: 'Вътрешни, Хирургия, Педиатрия, Акушерство'
+  },
+  {
+    type: 'hybrid',
+    name: 'Хибриден',
+    description: 'Микс от теория и клинично приложение',
+    examples: 'Патология, Фармакология, Патофизиология'
+  }
+];
+
 export interface Subject {
   id: string;
   name: string;
   color: string;
+  subjectType: SubjectType; // NEW: preclinical, clinical, or hybrid
   examDate: string | null;
   examFormat: string | null; // Description of exam format (e.g., "20 теста, 2 казуса, 1 есе")
   topics: Topic[];

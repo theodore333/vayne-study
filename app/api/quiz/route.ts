@@ -17,6 +17,33 @@ const BLOOM_PROMPTS: Record<number, string> = {
      Use question types: design treatment plans, propose solutions, develop protocols.`
 };
 
+// Subject type specific instructions
+const SUBJECT_TYPE_PROMPTS: Record<string, string> = {
+  preclinical: `PRECLINICAL SUBJECT - Focus on:
+- Anatomical structures, locations, relationships
+- Biochemical pathways, enzymes, reactions
+- Physiological mechanisms and processes
+- Histological features and cell types
+- Theoretical foundations and scientific basis
+Question style: Precise, factual, mechanism-based. Include diagrams/structure questions.`,
+
+  clinical: `CLINICAL SUBJECT - Focus on:
+- Patient presentation and symptoms
+- Differential diagnosis
+- Diagnostic workup and interpretation
+- Treatment protocols and management
+- Prognosis and complications
+Question style: Case-based scenarios, clinical decision-making, patient management.`,
+
+  hybrid: `HYBRID SUBJECT (Theory + Clinical Application) - Focus on:
+- Pathophysiological mechanisms behind diseases
+- Drug mechanisms of action and pharmacokinetics
+- How basic science translates to clinical findings
+- Laboratory values and their significance
+- Both mechanism AND clinical application
+Question style: Mix of mechanistic questions and clinical scenarios showing application.`
+};
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -25,6 +52,7 @@ export async function POST(request: Request) {
       material,
       topicName,
       subjectName,
+      subjectType, // 'preclinical' | 'clinical' | 'hybrid'
       examFormat,
       bloomLevel,
       mode, // 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom'
@@ -70,6 +98,7 @@ export async function POST(request: Request) {
       material,
       topicName,
       subjectName,
+      subjectType,
       examFormat,
       bloomLevel,
       mode,
@@ -319,6 +348,7 @@ async function handleStandardQuiz(
     material: string;
     topicName: string;
     subjectName: string;
+    subjectType?: string;
     examFormat: string | null;
     bloomLevel: number | null;
     mode: string;
@@ -327,7 +357,12 @@ async function handleStandardQuiz(
     matchExamFormat?: boolean;
   }
 ) {
-  const { material, topicName, subjectName, examFormat, bloomLevel, mode, questionCount, matchExamFormat } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat } = params;
+
+  // Get subject type specific instructions
+  const subjectTypeInstructions = subjectType && SUBJECT_TYPE_PROMPTS[subjectType]
+    ? `\n${SUBJECT_TYPE_PROMPTS[subjectType]}`
+    : '';
 
   // AI ALWAYS determines question count based on material complexity
   // Only custom mode with explicit count overrides this
@@ -382,6 +417,7 @@ Mark each question with its bloomLevel (5 or 6).`;
 
 Subject: ${subjectName}
 Topic: ${topicName}
+${subjectTypeInstructions}
 ${examFormatInstructions}
 ${bloomInstructions}
 

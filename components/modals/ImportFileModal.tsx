@@ -46,11 +46,11 @@ function estimateTokens(file: File): CostEstimate {
   // Add prompt tokens (~200)
   inputTokens += 200;
 
-  // Estimate output tokens (depends on topics found, estimate ~50 per topic, ~20 topics avg)
-  const outputTokens = 1000;
+  // Estimate output tokens (depends on topics found, estimate ~50 per topic, ~50 topics avg)
+  const outputTokens = 2500;
 
-  // Haiku pricing: $0.25/1M input, $1.25/1M output
-  const totalCost = (inputTokens * 0.00025 + outputTokens * 0.00125) / 1000;
+  // Sonnet pricing: $3/1M input, $15/1M output
+  const totalCost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
 
   // Consider "large" if > 5MB or > 10000 estimated tokens
   const isLarge = fileSizeMB > 5 || inputTokens > 10000;

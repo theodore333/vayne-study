@@ -209,15 +209,34 @@ export async function POST(request: Request) {
 
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
     const apiKey = formData.get('apiKey') as string;
     const subjectName = formData.get('subjectName') as string;
     const topicNames = formData.get('topicNames') as string;
+    const isMultiPart = formData.get('multiPart') === 'true';
+    const fileCount = parseInt(formData.get('fileCount') as string || '0');
 
-    console.log('[EXTRACT-Q] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+    // Collect files (single or multi-part)
+    let files: File[] = [];
 
-    if (!file || !apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
+    if (isMultiPart && fileCount > 0) {
+      console.log(`[EXTRACT-Q] Multi-part mode: ${fileCount} files`);
+      for (let i = 0; i < fileCount; i++) {
+        const part = formData.get(`file_${i}`) as File;
+        if (part) {
+          files.push(part);
+          console.log(`[EXTRACT-Q] Part ${i + 1}: ${part.name} (${Math.round(part.size / 1024)} KB)`);
+        }
+      }
+    } else {
+      const singleFile = formData.get('file') as File;
+      if (singleFile) {
+        files = [singleFile];
+        console.log('[EXTRACT-Q] Single file:', singleFile.name, 'Size:', singleFile.size, 'Type:', singleFile.type);
+      }
+    }
+
+    if (files.length === 0 || !apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing file(s) or API key' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -226,13 +245,23 @@ export async function POST(request: Request) {
     console.log('[EXTRACT-Q] Creating Anthropic client...');
     const anthropic = new Anthropic({ apiKey });
 
-    console.log('[EXTRACT-Q] Reading file buffer...');
-    const fileBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(fileBuffer);
-    const base64 = buffer.toString('base64');
-    console.log('[EXTRACT-Q] Base64 size:', Math.round(base64.length / 1024), 'KB');
+    // Process all files - convert to base64 arrays
+    console.log('[EXTRACT-Q] Reading file buffers...');
+    const fileDataArray: { name: string; base64: string; mediaType: string }[] = [];
 
-    const isPDF = file.type === 'application/pdf';
+    for (const file of files) {
+      const fileBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(fileBuffer);
+      const base64 = buffer.toString('base64');
+      const mediaType = file.type === 'application/pdf' ? 'application/pdf' : file.type.startsWith('image/') ? file.type as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' : 'application/pdf';
+      fileDataArray.push({ name: file.name, base64, mediaType });
+    }
+
+    const totalSize = fileDataArray.reduce((sum, f) => sum + f.base64.length, 0);
+    console.log('[EXTRACT-Q] Total base64 size:', Math.round(totalSize / 1024), 'KB');
+
+    // For simplicity, use the first file to determine PDF type
+    const isPDF = files[0].type === 'application/pdf';
 
     // Parse topic names
     let topics: string[] = [];
@@ -243,14 +272,20 @@ export async function POST(request: Request) {
     }
 
     // Analyze PDF - check if we should use chunking
+    // Skip chunking for multi-part files - send them all together
     let pdfAnalysis: PDFAnalysis | null = null;
-    const shouldChunk = isPDF;
+    const shouldChunk = isPDF && !isMultiPart;
 
-    if (isPDF) {
+    // For single file mode, get buffer for analysis
+    const firstFileBuffer = Buffer.from(
+      Uint8Array.from(atob(fileDataArray[0].base64), c => c.charCodeAt(0))
+    );
+
+    if (isPDF && !isMultiPart) {
       console.log('[EXTRACT-Q] Analyzing PDF...');
       try {
         // For large text-based PDFs, extract page text for chunking
-        pdfAnalysis = await analyzePDF(buffer, shouldChunk);
+        pdfAnalysis = await analyzePDF(firstFileBuffer, shouldChunk);
       } catch (pdfError) {
         console.error('[EXTRACT-Q] PDF Analysis FAILED:', pdfError);
         // Continue without analysis - will use standard extraction
@@ -336,34 +371,40 @@ export async function POST(request: Request) {
       }
     }
 
-    // Standard extraction (for scanned PDFs, images, or small text PDFs)
-    console.log('[EXTRACT-Q] Using STANDARD extraction');
+    // Standard extraction (for scanned PDFs, images, small text PDFs, or multi-part)
+    console.log('[EXTRACT-Q] Using STANDARD extraction', isMultiPart ? `(multi-part: ${fileDataArray.length} files)` : '');
 
     const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
 
-    if (isPDF) {
-      content.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: base64
-        }
-      });
-    } else {
-      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
-      if (file.type === 'image/png') mediaType = 'image/png';
-      else if (file.type === 'image/gif') mediaType = 'image/gif';
-      else if (file.type === 'image/webp') mediaType = 'image/webp';
+    // Add all files as content blocks
+    for (const fileData of fileDataArray) {
+      if (fileData.mediaType === 'application/pdf') {
+        content.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: fileData.base64
+          }
+        });
+      } else {
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: fileData.mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+            data: fileData.base64
+          }
+        });
+      }
 
-      content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: base64
-        }
-      });
+      // For multi-part, add separator text between files
+      if (isMultiPart && fileDataArray.indexOf(fileData) < fileDataArray.length - 1) {
+        content.push({
+          type: 'text',
+          text: `\n--- КРАЙ НА ФАЙЛ: ${fileData.name} ---\n`
+        });
+      }
     }
 
     const topicListForPrompt = topics.length > 0
@@ -374,9 +415,17 @@ export async function POST(request: Request) {
       ? `\n\nВАЖНО: Този документ е СКАНИРАН (изображение). Прочети внимателно всеки текст от изображението.`
       : '';
 
+    const multiPartNote = isMultiPart
+      ? `\n\nВАЖНО: Това са ${fileDataArray.length} ОТДЕЛНИ ФАЙЛА от един и същ сборник:
+${fileDataArray.map((f, i) => `  ${i + 1}. ${f.name}`).join('\n')}
+
+ВЪПРОСИТЕ може да са в един файл, а ОТГОВОРИТЕ - в друг!
+Обедини информацията от всички файлове за да извлечеш пълни въпроси с верни отговори.`
+      : '';
+
     content.push({
       type: 'text',
-      text: `Извлечи ВСИЧКИ въпроси от този сборник по "${subjectName}".${scannedPdfNote}
+      text: `Извлечи ВСИЧКИ въпроси от този сборник по "${subjectName}".${scannedPdfNote}${multiPartNote}
 
 ТИПОВЕ ВЪПРОСИ:
 1. "mcq" - Multiple choice (A/B/C/D/E)
@@ -437,8 +486,8 @@ ${topicListForPrompt}
     });
 
     console.log('[EXTRACT-Q] Starting Claude API call...');
-    console.log('[EXTRACT-Q] File type:', file.type);
-    console.log('[EXTRACT-Q] File size:', Math.round(base64.length / 1024), 'KB (base64)');
+    console.log('[EXTRACT-Q] Files:', fileDataArray.length, 'Type:', fileDataArray[0]?.mediaType);
+    console.log('[EXTRACT-Q] Total size:', Math.round(totalSize / 1024), 'KB (base64)');
 
     let fullText = '';
     let inputTokens = 0;

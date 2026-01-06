@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle, ScanLine, FileType } from 'lucide-react';
+import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle, ScanLine, FileType, Files, Trash2, Plus } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
 import { BankQuestion, ClinicalCase } from '@/lib/types';
@@ -48,6 +48,7 @@ export default function ImportQuestionsModal({
 }: ImportQuestionsModalProps) {
   const { addQuestionBank, addQuestionsToBank, incrementApiCalls } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const multiFileInputRef = useRef<HTMLInputElement>(null);
 
   const [apiKey, setApiKey] = useState<string | null | undefined>(undefined);
   const [file, setFile] = useState<File | null>(null);
@@ -62,6 +63,10 @@ export default function ImportQuestionsModal({
   const [wasRepaired, setWasRepaired] = useState(false);
   const [wasChunked, setWasChunked] = useState(false);
   const [numChunks, setNumChunks] = useState(0);
+
+  // Multi-part file support
+  const [isMultiPart, setIsMultiPart] = useState(false);
+  const [fileParts, setFileParts] = useState<File[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -90,22 +95,54 @@ export default function ImportQuestionsModal({
     e.preventDefault();
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) {
-      setFile(droppedFile);
-      setExtractedQuestions(null);
-      setError(null);
-      setRawResponse(null);
-      setPdfAnalysis(null);
-      setWasRepaired(false);
-      setWasChunked(false);
-      setNumChunks(0);
-      if (!bankName) {
-        setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
+      if (isMultiPart) {
+        // Add to parts list
+        addFilePart(droppedFile);
+      } else {
+        setFile(droppedFile);
+        setExtractedQuestions(null);
+        setError(null);
+        setRawResponse(null);
+        setPdfAnalysis(null);
+        setWasRepaired(false);
+        setWasChunked(false);
+        setNumChunks(0);
+        if (!bankName) {
+          setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
+        }
       }
     }
   };
 
+  // Multi-part handlers
+  const addFilePart = (newFile: File) => {
+    setFileParts(prev => {
+      const updated = [...prev, newFile].sort((a, b) => a.name.localeCompare(b.name));
+      // Auto-set bank name from first file
+      if (updated.length === 1 && !bankName) {
+        setBankName(newFile.name.replace(/(_Part\d+|_part\d+|\.\d+)?\.[^/.]+$/, ''));
+      }
+      return updated;
+    });
+    setExtractedQuestions(null);
+    setError(null);
+  };
+
+  const removeFilePart = (index: number) => {
+    setFileParts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMultiFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      Array.from(files).forEach(f => addFilePart(f));
+    }
+  };
+
   const handleExtract = async () => {
-    if (!file || !apiKey) return;
+    // Check if we have files to process
+    const hasFiles = isMultiPart ? fileParts.length > 0 : file !== null;
+    if (!hasFiles || !apiKey) return;
 
     setIsProcessing(true);
     setError(null);
@@ -113,7 +150,19 @@ export default function ImportQuestionsModal({
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+
+      if (isMultiPart && fileParts.length > 0) {
+        // Multi-part: append all files
+        fileParts.forEach((part, index) => {
+          formData.append(`file_${index}`, part);
+        });
+        formData.append('multiPart', 'true');
+        formData.append('fileCount', fileParts.length.toString());
+      } else if (file) {
+        // Single file
+        formData.append('file', file);
+      }
+
       formData.append('apiKey', apiKey);
       formData.append('subjectName', subjectName);
       formData.append('topicNames', JSON.stringify(topics));
@@ -294,43 +343,139 @@ export default function ImportQuestionsModal({
             />
           </div>
 
-          {/* File Upload */}
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-              file
-                ? 'border-purple-500/50 bg-purple-500/10'
-                : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/30'
-            }`}
-          >
+          {/* Multi-part toggle */}
+          <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-colors">
             <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,image/*"
-              onChange={handleFileChange}
-              className="hidden"
+              type="checkbox"
+              checked={isMultiPart}
+              onChange={(e) => {
+                setIsMultiPart(e.target.checked);
+                setFile(null);
+                setFileParts([]);
+                setExtractedQuestions(null);
+                setError(null);
+              }}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500"
             />
-            <div className={`mx-auto mb-3 ${file ? 'text-purple-400' : 'text-slate-500'}`}>
-              {file ? <FileText size={32} /> : <Upload size={32} />}
+            <div className="flex items-center gap-2">
+              <Files size={18} className="text-purple-400" />
+              <span className="text-sm text-slate-300 font-mono">Файлът е разделен на части</span>
             </div>
-            {file ? (
-              <div>
-                <p className="text-slate-200 font-medium">{file.name}</p>
-                <p className="text-sm text-slate-500 font-mono">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
+            <span className="text-xs text-slate-500 font-mono ml-auto">
+              (въпроси + отговори в отделни файлове)
+            </span>
+          </label>
+
+          {/* File Upload - Single or Multi */}
+          {!isMultiPart ? (
+            /* Single file upload */
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
+                file
+                  ? 'border-purple-500/50 bg-purple-500/10'
+                  : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/30'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,image/*"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+              <div className={`mx-auto mb-3 ${file ? 'text-purple-400' : 'text-slate-500'}`}>
+                {file ? <FileText size={32} /> : <Upload size={32} />}
+              </div>
+              {file ? (
+                <div>
+                  <p className="text-slate-200 font-medium">{file.name}</p>
+                  <p className="text-sm text-slate-500 font-mono">
+                    {(file.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-slate-400 font-medium">Качи PDF със сборник</p>
+                  <p className="text-sm text-slate-500 font-mono">
+                    Тестове, казуси, изпитни въпроси
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Multi-part file upload */
+            <div className="space-y-3">
+              {/* Parts list */}
+              {fileParts.length > 0 && (
+                <div className="space-y-2">
+                  {fileParts.map((part, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg"
+                    >
+                      <CheckCircle size={18} className="text-green-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-200 font-mono truncate">{part.name}</p>
+                        <p className="text-xs text-slate-500 font-mono">
+                          {(part.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <span className="text-xs text-purple-400 font-mono shrink-0">
+                        Part {index + 1}
+                      </span>
+                      <button
+                        onClick={() => removeFilePart(index)}
+                        className="p-1.5 hover:bg-red-500/20 rounded transition-colors"
+                      >
+                        <Trash2 size={14} className="text-red-400" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add more parts */}
+              <div
+                onClick={() => multiFileInputRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-2 border-dashed border-slate-700 hover:border-purple-500/50 rounded-xl p-6 text-center cursor-pointer transition-all hover:bg-slate-800/30"
+              >
+                <input
+                  ref={multiFileInputRef}
+                  type="file"
+                  accept=".pdf,image/*"
+                  multiple
+                  onChange={handleMultiFileChange}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-center gap-2 text-slate-400">
+                  <Plus size={20} />
+                  <span className="font-mono text-sm">
+                    {fileParts.length === 0 ? 'Добави файлове' : 'Добави още части'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 font-mono mt-1">
+                  Файловете ще бъдат сортирани по име
                 </p>
               </div>
-            ) : (
-              <div>
-                <p className="text-slate-400 font-medium">Качи PDF със сборник</p>
-                <p className="text-sm text-slate-500 font-mono">
-                  Тестове, казуси, изпитни въпроси
-                </p>
-              </div>
-            )}
-          </div>
+
+              {/* Summary */}
+              {fileParts.length > 0 && (
+                <div className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg">
+                  <span className="text-xs text-slate-400 font-mono">
+                    {fileParts.length} файла • {(fileParts.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB общо
+                  </span>
+                  <span className="text-xs text-purple-400 font-mono">
+                    Ще бъдат обработени заедно
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -356,18 +501,23 @@ export default function ImportQuestionsModal({
           {!extractedQuestions && (
             <button
               onClick={handleExtract}
-              disabled={!file || !bankName.trim() || isProcessing}
+              disabled={
+                (!isMultiPart && !file) ||
+                (isMultiPart && fileParts.length === 0) ||
+                !bankName.trim() ||
+                isProcessing
+              }
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Claude извлича въпроси...
+                  {isMultiPart ? `Claude обработва ${fileParts.length} файла...` : 'Claude извлича въпроси...'}
                 </>
               ) : (
                 <>
                   <Sparkles size={18} />
-                  Извлечи въпроси
+                  {isMultiPart ? `Обработи ${fileParts.length} части заедно` : 'Извлечи въпроси'}
                 </>
               )}
             </button>

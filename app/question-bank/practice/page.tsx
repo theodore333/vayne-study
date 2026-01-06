@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { BankQuestion, ClinicalCase } from '@/lib/types';
-import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Target, Clock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Target, Clock, Timer } from 'lucide-react';
 import Link from 'next/link';
 
 function LoadingFallback() {
@@ -47,6 +47,17 @@ function PracticeContent() {
   const [sessionComplete, setSessionComplete] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
 
+  // Timer state
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  // Format time helper
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Helper: Check if question has multiple correct answers
   const hasMultipleCorrect = (correctAnswer: string) => {
     return correctAnswer.includes(',') || correctAnswer.includes(' ');
@@ -66,6 +77,66 @@ function PracticeContent() {
     const shuffled = [...allQuestions].sort(() => Math.random() - 0.5);
     setShuffledQuestions(shuffled);
   }, [subjectId, bankId]);
+
+  // Start timer when questions are ready
+  useEffect(() => {
+    if (shuffledQuestions.length > 0 && !sessionComplete && !startTime) {
+      setStartTime(Date.now());
+    }
+  }, [shuffledQuestions.length, sessionComplete, startTime]);
+
+  // Timer tick
+  useEffect(() => {
+    if (!startTime || sessionComplete) return;
+
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime, sessionComplete]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (shuffledQuestions.length === 0 || sessionComplete) return;
+
+    const question = currentQuestion;
+    if (!question || question.type === 'open') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't handle if typing in textarea
+      if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+
+      const options = question.options || [];
+      const isMultiple = hasMultipleCorrect(question.correctAnswer);
+
+      // A-E keys to select
+      if (!showResult) {
+        if (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'E') {
+          const letter = e.key.toUpperCase();
+          const index = letter.charCodeAt(0) - 65; // A=0, B=1, etc.
+          if (index < options.length) {
+            handleAnswer(letter);
+          }
+        }
+
+        // Enter to submit
+        if (e.key === 'Enter' && selectedAnswers.size > 0) {
+          e.preventDefault();
+          handleSubmit();
+        }
+      } else {
+        // After result, Enter to go next
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleNext();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers]);
 
   const currentQuestion = shuffledQuestions[currentIndex];
   const currentCase = currentQuestion?.caseId
@@ -139,6 +210,8 @@ function PracticeContent() {
     setAnswers([]);
     setSessionComplete(false);
     setOpenAnswer('');
+    setStartTime(Date.now());
+    setElapsedTime(0);
   };
 
   if (!subject || shuffledQuestions.length === 0) {
@@ -176,7 +249,13 @@ function PracticeContent() {
             </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-4 gap-4 mb-8">
+            <div className="bg-slate-800/50 rounded-lg p-4 text-center">
+              <div className="text-3xl font-bold text-cyan-400 font-mono tabular-nums">
+                {formatTime(elapsedTime)}
+              </div>
+              <div className="text-xs text-slate-500 font-mono mt-1">Време</div>
+            </div>
             <div className="bg-slate-800/50 rounded-lg p-4 text-center">
               <div className="text-3xl font-bold text-blue-400 font-mono">
                 {answers.length}
@@ -232,15 +311,28 @@ function PracticeContent() {
           <ArrowLeft size={16} />
           Question Bank
         </Link>
-        <div className="flex items-center gap-4 text-sm font-mono">
-          <span className="text-slate-400">
+        <div className="flex items-center gap-6 font-mono">
+          {/* Timer */}
+          <div className="flex items-center gap-2 text-cyan-400">
+            <Timer size={18} />
+            <span className="text-lg font-semibold tabular-nums">{formatTime(elapsedTime)}</span>
+          </div>
+
+          {/* Progress */}
+          <span className="text-slate-400 text-sm">
             {currentIndex + 1} / {shuffledQuestions.length}
           </span>
-          <div className="flex items-center gap-2">
-            <Check size={14} className="text-green-400" />
-            <span className="text-green-400">{answers.filter(a => a.correct).length}</span>
-            <X size={14} className="text-red-400 ml-2" />
-            <span className="text-red-400">{answers.filter(a => !a.correct).length}</span>
+
+          {/* Score */}
+          <div className="flex items-center gap-3 text-sm">
+            <div className="flex items-center gap-1.5">
+              <Check size={16} className="text-green-400" />
+              <span className="text-green-400 font-semibold">{answers.filter(a => a.correct).length}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <X size={16} className="text-red-400" />
+              <span className="text-red-400 font-semibold">{answers.filter(a => !a.correct).length}</span>
+            </div>
           </div>
         </div>
       </div>

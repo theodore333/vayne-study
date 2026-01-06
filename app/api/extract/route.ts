@@ -1,7 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextResponse } from 'next/server';
 
-export const maxDuration = 60; // Allow up to 60 seconds for large PDFs
+// Railway: No edge runtime needed, Node.js supports longer timeouts
 
 export async function POST(request: Request) {
   try {
@@ -11,20 +10,16 @@ export async function POST(request: Request) {
     const subjectName = formData.get('subjectName') as string;
 
     if (!file || !apiKey) {
-      return NextResponse.json({ error: 'Missing file or API key' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     const anthropic = new Anthropic({ apiKey });
 
     const fileBuffer = await file.arrayBuffer();
     const base64 = Buffer.from(fileBuffer).toString('base64');
-
-    // Determine media type
-    let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' | 'application/pdf' = 'image/jpeg';
-    if (file.type === 'image/png') mediaType = 'image/png';
-    else if (file.type === 'image/gif') mediaType = 'image/gif';
-    else if (file.type === 'image/webp') mediaType = 'image/webp';
-    else if (file.type === 'application/pdf') mediaType = 'application/pdf';
 
     const isPDF = file.type === 'application/pdf';
 
@@ -41,11 +36,16 @@ export async function POST(request: Request) {
         }
       });
     } else {
+      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+      if (file.type === 'image/png') mediaType = 'image/png';
+      else if (file.type === 'image/gif') mediaType = 'image/gif';
+      else if (file.type === 'image/webp') mediaType = 'image/webp';
+
       content.push({
         type: 'image',
         source: {
           type: 'base64',
-          media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
+          media_type: mediaType,
           data: base64
         }
       });
@@ -74,13 +74,17 @@ RULES:
 - Do NOT truncate - list EVERY topic to the end`
     });
 
-    // Use streaming to capture full response
+    // Streaming with full logging
+    console.log('[EXTRACT] Starting Claude API call...');
+    console.log('[EXTRACT] File type:', file.type);
+    console.log('[EXTRACT] File size:', Math.round(base64.length / 1024), 'KB (base64)');
+
     let fullText = '';
     let inputTokens = 0;
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-3-5-sonnet-20241022', // Fast & reliable for PDF extraction
       max_tokens: 16384,
       messages: [{ role: 'user', content }],
       stream: true
@@ -98,20 +102,44 @@ RULES:
       }
     }
 
+    // === FULL RAW RESPONSE LOG ===
+    console.log('[EXTRACT] ========== FULL RAW RESPONSE ==========');
+    console.log(fullText);
+    console.log('[EXTRACT] ========== END RAW RESPONSE ==========');
+    console.log('[EXTRACT] Tokens - Input:', inputTokens, 'Output:', outputTokens);
+
     if (!fullText) {
-      return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+      console.error('[EXTRACT] ERROR: Empty response from Claude');
+      return new Response(JSON.stringify({
+        error: 'No response from Claude',
+        debug: { inputTokens, outputTokens }
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     let responseText = fullText.trim();
 
-    // Clean up the response - remove markdown code blocks if present
-    responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
-    responseText = responseText.trim();
+    // Check if Claude returned an error message
+    if (responseText.toLowerCase().startsWith('an error') ||
+        responseText.toLowerCase().startsWith('i cannot') ||
+        responseText.toLowerCase().startsWith('i\'m sorry') ||
+        responseText.toLowerCase().startsWith('sorry')) {
+      return new Response(JSON.stringify({
+        error: 'Claude не може да обработи файла',
+        raw: responseText
+      }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
     // Parse the JSON response
     let topics;
     try {
-      // Find the JSON array in the response
       const startIdx = responseText.indexOf('[');
       const endIdx = responseText.lastIndexOf(']');
 
@@ -121,73 +149,87 @@ RULES:
         topics = JSON.parse(responseText);
       }
 
-      // Validate that topics is an array
       if (!Array.isArray(topics)) {
         throw new Error('Response is not an array');
       }
 
-      // Validate and clean topic objects
       topics = topics.map((t: { number?: number | string; name?: string }, i: number) => ({
         number: t.number ?? i + 1,
         name: String(t.name || `Topic ${i + 1}`).trim()
       }));
 
     } catch (parseError) {
-      console.error('Failed to parse Claude response:', responseText.substring(0, 1000));
-      console.error('Parse error:', parseError);
+      // Check if Claude returned text instead of JSON
+      if (!responseText.includes('[')) {
+        return new Response(JSON.stringify({
+          error: `Claude отговори с текст: "${responseText.substring(0, 200)}..."`,
+          raw: responseText.substring(0, 1000)
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
 
-      // Try to salvage partial response
-      const partialMatch = responseText.match(/\[\s*\{[\s\S]*\}\s*,?/);
+      // Try to salvage partial JSON
+      const partialMatch = responseText.match(/\[\s*\{[\s\S]*\}/);
       if (partialMatch) {
         try {
-          // Try to fix truncated JSON by closing the array
-          let fixedJson = partialMatch[0];
-          // Remove trailing comma if present
-          fixedJson = fixedJson.replace(/,\s*$/, '');
-          // Close the array
-          if (!fixedJson.endsWith(']')) {
-            fixedJson += ']';
-          }
+          let fixedJson = partialMatch[0].replace(/,\s*$/, '') + ']';
           topics = JSON.parse(fixedJson);
-          console.log('Salvaged', topics.length, 'topics from partial response');
         } catch {
-          return NextResponse.json({
-            error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
-            raw: responseText.substring(0, 500)
-          }, { status: 500 });
+          return new Response(JSON.stringify({
+            error: 'JSON parsing failed',
+            raw: responseText.substring(0, 1000)
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
         }
       } else {
-        return NextResponse.json({
-          error: 'Claude не успя да извлече теми. Опитай с по-ясна снимка или PDF.',
-          raw: responseText.substring(0, 500)
-        }, { status: 500 });
+        return new Response(JSON.stringify({
+          error: 'No JSON found in response',
+          raw: responseText.substring(0, 1000)
+        }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
       }
     }
 
-    // Calculate approximate cost (Sonnet 4.5 pricing: $3/1M input, $15/1M output)
     const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
 
-    return NextResponse.json({
+    return new Response(JSON.stringify({
       topics,
       usage: {
         inputTokens,
         outputTokens,
         cost: Math.round(cost * 1000000) / 1000000
       }
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error: unknown) {
     console.error('Extract error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
 
-    // Better error messages
     if (message.includes('Could not process image')) {
-      return NextResponse.json({ error: 'Не мога да прочета изображението. Опитай с друг формат или по-ясна снимка.' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'Не мога да прочета файла. Опитай с друг формат.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
     if (message.includes('invalid_api_key')) {
-      return NextResponse.json({ error: 'Невалиден API ключ. Провери настройките.' }, { status: 401 });
+      return new Response(JSON.stringify({ error: 'Невалиден API ключ.' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }

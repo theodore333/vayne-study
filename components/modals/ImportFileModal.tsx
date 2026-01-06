@@ -62,7 +62,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   const { addTopics, incrementApiCalls } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [apiKey, setApiKey] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null | undefined>(undefined); // undefined = loading, null = no key
   const [file, setFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,7 +135,18 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         body: formData
       });
 
-      const result = await response.json();
+      // Get response text first to handle non-JSON responses
+      const responseText = await response.text();
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        // Server returned non-JSON (probably Vercel error)
+        setError('Сървърът върна невалиден отговор');
+        setRawResponse(responseText.substring(0, 1000));
+        return;
+      }
 
       if (!response.ok) {
         setError(result.error || 'Failed to extract topics');
@@ -249,8 +260,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     return <Image size={32} />;
   };
 
-  // Loading API key
-  if (apiKey === null) {
+  // Loading API key (undefined = still loading)
+  if (apiKey === undefined) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
@@ -261,7 +272,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     );
   }
 
-  // No API key
+  // No API key (null or empty string)
   if (!apiKey) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

@@ -67,6 +67,7 @@ export default function ImportQuestionsModal({
   // Multi-part file support
   const [isMultiPart, setIsMultiPart] = useState(false);
   const [fileParts, setFileParts] = useState<File[]>([]);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -149,20 +150,70 @@ export default function ImportQuestionsModal({
     setRawResponse(null);
 
     try {
-      const formData = new FormData();
-
+      // Multi-part: process each file separately and combine results
       if (isMultiPart && fileParts.length > 0) {
-        // Multi-part: append all files
-        fileParts.forEach((part, index) => {
-          formData.append(`file_${index}`, part);
-        });
-        formData.append('multiPart', 'true');
-        formData.append('fileCount', fileParts.length.toString());
-      } else if (file) {
-        // Single file
-        formData.append('file', file);
+        const allQuestions: ExtractedQuestion[] = [];
+        const allCases: ExtractedCase[] = [];
+        let totalCost = 0;
+        let lastPdfAnalysis: PDFAnalysisResult | null = null;
+
+        for (let i = 0; i < fileParts.length; i++) {
+          const part = fileParts[i];
+          setProcessingStatus(`Обработка на част ${i + 1}/${fileParts.length}: ${part.name}`);
+
+          const formData = new FormData();
+          formData.append('file', part);
+          formData.append('apiKey', apiKey);
+          formData.append('subjectName', subjectName);
+          formData.append('topicNames', JSON.stringify(topics));
+
+          const response = await fetch('/api/extract-questions', {
+            method: 'POST',
+            body: formData
+          });
+
+          const responseText = await response.text();
+          let result;
+          try {
+            result = JSON.parse(responseText);
+          } catch {
+            console.error(`Part ${i + 1} parse error:`, responseText.substring(0, 500));
+            continue; // Skip failed part, continue with others
+          }
+
+          if (response.ok && result.questions) {
+            // Add part number to questions for reference
+            const questionsWithPart = result.questions.map((q: any) => ({
+              ...q,
+              partNumber: i + 1
+            }));
+            allQuestions.push(...questionsWithPart);
+            if (result.cases) allCases.push(...result.cases);
+            if (result.usage?.cost) totalCost += result.usage.cost;
+            if (result.pdfAnalysis) lastPdfAnalysis = result.pdfAnalysis;
+          }
+        }
+
+        setProcessingStatus(null);
+
+        if (allQuestions.length === 0) {
+          setError('Не бяха извлечени въпроси от нито един файл');
+          return;
+        }
+
+        setExtractedQuestions(allQuestions);
+        setExtractedCases(allCases);
+        setSelectedQuestions(new Set(allQuestions.map((_, i) => i)));
+        if (lastPdfAnalysis) setPdfAnalysis(lastPdfAnalysis);
+        setWasChunked(true);
+        setNumChunks(fileParts.length);
+        incrementApiCalls(totalCost);
+        return;
       }
 
+      // Single file mode
+      const formData = new FormData();
+      formData.append('file', file!);
       formData.append('apiKey', apiKey);
       formData.append('subjectName', subjectName);
       formData.append('topicNames', JSON.stringify(topics));
@@ -512,7 +563,7 @@ export default function ImportQuestionsModal({
               {isProcessing ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  {isMultiPart ? `Claude обработва ${fileParts.length} файла...` : 'Claude извлича въпроси...'}
+                  {processingStatus || (isMultiPart ? `Claude обработва ${fileParts.length} файла...` : 'Claude извлича въпроси...')}
                 </>
               ) : (
                 <>

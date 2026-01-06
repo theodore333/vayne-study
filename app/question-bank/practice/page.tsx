@@ -272,7 +272,11 @@ function PracticeContent() {
 
     let isCorrect: boolean;
 
-    if (currentQuestion.type === 'open') {
+    // Treat open questions AND case_study without options as self-evaluated (always correct)
+    const isOpenType = currentQuestion.type === 'open' ||
+      (currentQuestion.type === 'case_study' && !currentQuestion.options?.length);
+
+    if (isOpenType) {
       isCorrect = true;
     } else {
       const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
@@ -718,8 +722,8 @@ function PracticeContent() {
             </div>
           )}
 
-          {/* Open Answer */}
-          {currentQuestion.type === 'open' && (
+          {/* Open Answer - for 'open' type OR case_study without options */}
+          {(currentQuestion.type === 'open' || (currentQuestion.type === 'case_study' && !currentQuestion.options?.length)) && (
             <div>
               <textarea
                 value={openAnswer}
@@ -772,7 +776,7 @@ function PracticeContent() {
           {!showResult ? (
             <button
               onClick={handleSubmit}
-              disabled={selectedAnswers.size === 0 && currentQuestion.type !== 'open'}
+              disabled={selectedAnswers.size === 0 && currentQuestion.type !== 'open' && !(currentQuestion.type === 'case_study' && !currentQuestion.options?.length)}
               className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Check size={18} />

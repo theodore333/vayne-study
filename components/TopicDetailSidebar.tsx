@@ -80,7 +80,7 @@ export default function TopicDetailSidebar({ topic, subjectId, subjectColor, onC
                   {STATUS_CONFIG[topic.status].emoji}
                 </span>
               </div>
-              <h2 className="text-lg font-semibold text-slate-100">
+              <h2 className="text-lg font-semibold text-slate-100 line-clamp-3" title={topic.name}>
                 {topic.name}
               </h2>
             </div>

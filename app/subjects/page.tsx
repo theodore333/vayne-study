@@ -297,11 +297,16 @@ function SubjectsContent() {
                           >
                             <span className="text-2xl">{config.emoji}</span>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ backgroundColor: selectedSubject.color + "30", color: selectedSubject.color }}>
+                              <div className="flex items-start gap-2">
+                                <span className="text-xs font-mono px-2 py-0.5 rounded shrink-0 mt-0.5" style={{ backgroundColor: selectedSubject.color + "30", color: selectedSubject.color }}>
                                   #{topic.number}
                                 </span>
-                                <span className="text-slate-200 font-medium truncate">{topic.name}</span>
+                                <span
+                                  className="text-slate-200 font-medium line-clamp-2 text-sm leading-snug"
+                                  title={topic.name}
+                                >
+                                  {topic.name}
+                                </span>
                               </div>
                               <div className="flex items-center gap-4 mt-1 text-xs text-slate-500 font-mono">
                                 <span>{config.label}</span>

@@ -546,9 +546,9 @@ function QuizContent() {
                       href={`/quiz?subject=${subj.id}&topic=${t.id}`}
                       className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 transition-all"
                     >
-                      <div className="flex items-center gap-2">
-                        <span>{STATUS_CONFIG[t.status].emoji}</span>
-                        <span className="text-slate-200 font-mono text-sm">
+                      <div className="flex items-start gap-2">
+                        <span className="shrink-0">{STATUS_CONFIG[t.status].emoji}</span>
+                        <span className="text-slate-200 font-mono text-sm line-clamp-2" title={`#${t.number} ${t.name}`}>
                           #{t.number} {t.name}
                         </span>
                       </div>

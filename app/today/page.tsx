@@ -185,15 +185,16 @@ export default function TodayPage() {
                           {task.topics.map(topic => (
                             <span
                               key={topic.id}
-                              className="text-xs px-2 py-1 rounded font-mono"
+                              className="text-xs px-2 py-1 rounded font-mono max-w-[200px] truncate inline-block"
                               style={{
                                 backgroundColor: STATUS_CONFIG[topic.status].bg,
                                 color: STATUS_CONFIG[topic.status].text,
                                 borderColor: STATUS_CONFIG[topic.status].border,
                                 borderWidth: 1
                               }}
+                              title={`#${topic.number} ${topic.name}`}
                             >
-                              #{topic.number} {topic.name.length > 25 ? topic.name.slice(0, 25) + "..." : topic.name}
+                              #{topic.number} {topic.name}
                             </span>
                           ))}
                         </div>

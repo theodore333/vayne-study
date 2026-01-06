@@ -1,13 +1,14 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS } from '@/lib/constants';
 import { Topic, TopicStatus, Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
+import ImportFileModal from '@/components/modals/ImportFileModal';
 import TopicDetailSidebar from '@/components/TopicDetailSidebar';
 
 function LoadingFallback() {
@@ -33,6 +34,7 @@ function SubjectsContent() {
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
+  const [showAIImport, setShowAIImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<TopicStatus | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
@@ -196,10 +198,16 @@ function SubjectsContent() {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setShowImportTopics(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-mono text-sm"
+                      onClick={() => setShowAIImport(true)}
+                      className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-colors font-mono text-sm"
                     >
-                      <Upload size={16} /> Импортирай
+                      <Sparkles size={16} /> AI Импорт
+                    </button>
+                    <button
+                      onClick={() => setShowImportTopics(true)}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-mono text-sm"
+                    >
+                      <Upload size={16} /> Ръчен
                     </button>
                     <button
                       onClick={() => { if (confirm("Изтрий предмета?")) { deleteSubject(selectedSubject.id); setSelectedSubjectId(null); } }}
@@ -252,10 +260,10 @@ function SubjectsContent() {
                     </p>
                     {selectedSubject.topics.length === 0 && (
                       <button
-                        onClick={() => setShowImportTopics(true)}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono text-sm"
+                        onClick={() => setShowAIImport(true)}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg font-mono text-sm"
                       >
-                        <Upload size={16} /> Импортирай конспект
+                        <Sparkles size={16} /> AI Импорт от PDF/снимка
                       </button>
                     )}
                   </div>
@@ -306,6 +314,13 @@ function SubjectsContent() {
 
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
       {showImportTopics && selectedSubjectId && <ImportTopicsModal subjectId={selectedSubjectId} onClose={() => setShowImportTopics(false)} />}
+      {showAIImport && selectedSubjectId && selectedSubject && (
+        <ImportFileModal
+          subjectId={selectedSubjectId}
+          subjectName={selectedSubject.name}
+          onClose={() => setShowAIImport(false)}
+        />
+      )}
       {selectedTopic && selectedSubject && (
         <TopicDetailSidebar
           topic={selectedTopic}

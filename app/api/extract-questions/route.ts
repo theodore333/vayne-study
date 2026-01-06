@@ -84,38 +84,124 @@ interface PDFAnalysis {
   textLength: number;
   pageCount: number;
   confidence: 'high' | 'medium' | 'low';
+  textByPage?: string[]; // Text content per page (for chunking)
 }
 
-async function analyzePDF(buffer: Buffer): Promise<PDFAnalysis> {
+const PAGES_PER_CHUNK = 12; // Process 12 pages at a time
+
+async function analyzePDF(buffer: Buffer, extractPageText = false): Promise<PDFAnalysis> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const parser = new PDFParse({ data: buffer, verbosity: 0 }) as any;
     const doc = await parser.load();
     const textResult = await parser.getText();
-    const textLength = (textResult.text as string).replace(/\s+/g, ' ').trim().length;
+    const fullText = textResult.text as string;
+    const textLength = fullText.replace(/\s+/g, ' ').trim().length;
     const pageCount = doc.numPages as number;
+
+    // Extract text per page if requested (for chunking)
+    let textByPage: string[] | undefined;
+    if (extractPageText && pageCount > 1) {
+      textByPage = [];
+      for (let i = 1; i <= pageCount; i++) {
+        try {
+          const pageText = await parser.getPageText({ pageNumber: i });
+          textByPage.push(pageText.text || '');
+        } catch {
+          textByPage.push('');
+        }
+      }
+    }
+
     await parser.destroy();
 
     // Heuristic: scanned PDFs have very little extractable text
-    // ~500 chars per page is a reasonable threshold for text-based PDFs
     const charsPerPage = textLength / Math.max(pageCount, 1);
-    const isScanned = charsPerPage < 100; // Less than 100 chars/page = likely scanned
+    const isScanned = charsPerPage < 100;
 
-    // Confidence based on how clear the determination is
     let confidence: 'high' | 'medium' | 'low' = 'high';
     if (charsPerPage >= 50 && charsPerPage < 200) {
-      confidence = 'medium'; // Borderline case
+      confidence = 'medium';
     } else if (charsPerPage < 50) {
-      confidence = 'high'; // Clearly scanned
+      confidence = 'high';
     } else if (charsPerPage > 500) {
-      confidence = 'high'; // Clearly text-based
+      confidence = 'high';
     }
 
-    return { isScanned, textLength, pageCount, confidence };
+    return { isScanned, textLength, pageCount, confidence, textByPage };
   } catch {
-    // If pdf-parse fails, assume scanned
     return { isScanned: true, textLength: 0, pageCount: 1, confidence: 'low' };
   }
+}
+
+// Process a single chunk of text and extract questions
+async function extractQuestionsFromText(
+  anthropic: Anthropic,
+  text: string,
+  subjectName: string,
+  topics: string[],
+  chunkInfo: string
+): Promise<{ questions: any[]; cases: any[]; inputTokens: number; outputTokens: number }> {
+  const topicListForPrompt = topics.length > 0
+    ? `\n\nТЕМИ ЗА СВЪРЗВАНЕ:\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
+    : '';
+
+  const prompt = `Извлечи ВСИЧКИ въпроси от този текст (${chunkInfo}) по "${subjectName}".
+
+ТЕКСТ:
+${text}
+
+ТИПОВЕ ВЪПРОСИ:
+1. "mcq" - Multiple choice (A/B/C/D/E)
+2. "open" - Отворен въпрос
+3. "case_study" - Клиничен казус
+${topicListForPrompt}
+
+ФОРМАТ - Върни САМО JSON:
+{"questions": [{"type": "mcq", "text": "...", "options": ["A. ...", "B. ..."], "correctAnswer": "A", "explanation": null, "linkedTopicIndex": null, "caseId": null}], "cases": []}
+
+ПРАВИЛА:
+- linkedTopicIndex е 1-based индекс или null
+- Върни САМО валиден JSON`;
+
+  let fullText = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const stream = await anthropic.messages.create({
+    model: 'claude-sonnet-4-5-20250929',
+    max_tokens: 16000,
+    messages: [{ role: 'user', content: prompt }],
+    stream: true
+  });
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      fullText += event.delta.text;
+    }
+    if (event.type === 'message_delta' && event.usage) {
+      outputTokens = event.usage.output_tokens;
+    }
+    if (event.type === 'message_start' && event.message.usage) {
+      inputTokens = event.message.usage.input_tokens;
+    }
+  }
+
+  // Parse response
+  let result: { questions: any[]; cases: any[] } = { questions: [], cases: [] };
+  try {
+    const cleaned = fullText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const startIdx = cleaned.indexOf('{');
+    const endIdx = cleaned.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx > startIdx) {
+      result = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+    }
+  } catch {
+    const repaired = repairTruncatedJSON(fullText);
+    if (repaired) result = repaired;
+  }
+
+  return { ...result, inputTokens, outputTokens };
 }
 
 export async function POST(request: Request) {
@@ -124,7 +210,7 @@ export async function POST(request: Request) {
     const file = formData.get('file') as File;
     const apiKey = formData.get('apiKey') as string;
     const subjectName = formData.get('subjectName') as string;
-    const topicNames = formData.get('topicNames') as string; // JSON array of topic names
+    const topicNames = formData.get('topicNames') as string;
 
     if (!file || !apiKey) {
       return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
@@ -141,14 +227,104 @@ export async function POST(request: Request) {
 
     const isPDF = file.type === 'application/pdf';
 
-    // Analyze PDF type (text vs scanned)
-    let pdfAnalysis: PDFAnalysis | null = null;
-    if (isPDF) {
-      pdfAnalysis = await analyzePDF(buffer);
-      console.log('[EXTRACT-Q] PDF Analysis:', pdfAnalysis);
+    // Parse topic names
+    let topics: string[] = [];
+    try {
+      topics = JSON.parse(topicNames || '[]');
+    } catch {
+      topics = [];
     }
 
-    // Build the message content
+    // Analyze PDF - check if we should use chunking
+    let pdfAnalysis: PDFAnalysis | null = null;
+    const shouldChunk = isPDF;
+
+    if (isPDF) {
+      // For large text-based PDFs, extract page text for chunking
+      pdfAnalysis = await analyzePDF(buffer, shouldChunk);
+      console.log('[EXTRACT-Q] PDF Analysis:', {
+        isScanned: pdfAnalysis.isScanned,
+        pageCount: pdfAnalysis.pageCount,
+        textLength: pdfAnalysis.textLength,
+        hasPageText: !!pdfAnalysis.textByPage
+      });
+
+      // Use chunking for text-based PDFs with more than PAGES_PER_CHUNK pages
+      if (!pdfAnalysis.isScanned && pdfAnalysis.pageCount > PAGES_PER_CHUNK && pdfAnalysis.textByPage) {
+        console.log(`[EXTRACT-Q] Using CHUNKED extraction for ${pdfAnalysis.pageCount} pages`);
+
+        const allQuestions: any[] = [];
+        const allCases: any[] = [];
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+        const numChunks = Math.ceil(pdfAnalysis.pageCount / PAGES_PER_CHUNK);
+
+        for (let chunkIdx = 0; chunkIdx < numChunks; chunkIdx++) {
+          const startPage = chunkIdx * PAGES_PER_CHUNK;
+          const endPage = Math.min(startPage + PAGES_PER_CHUNK, pdfAnalysis.pageCount);
+          const chunkText = pdfAnalysis.textByPage.slice(startPage, endPage).join('\n\n--- СТРАНИЦА ---\n\n');
+
+          console.log(`[EXTRACT-Q] Processing chunk ${chunkIdx + 1}/${numChunks} (pages ${startPage + 1}-${endPage})`);
+
+          const chunkResult = await extractQuestionsFromText(
+            anthropic,
+            chunkText,
+            subjectName,
+            topics,
+            `страници ${startPage + 1}-${endPage} от ${pdfAnalysis.pageCount}`
+          );
+
+          allQuestions.push(...(chunkResult.questions || []));
+          allCases.push(...(chunkResult.cases || []));
+          totalInputTokens += chunkResult.inputTokens;
+          totalOutputTokens += chunkResult.outputTokens;
+
+          console.log(`[EXTRACT-Q] Chunk ${chunkIdx + 1} extracted ${chunkResult.questions?.length || 0} questions`);
+        }
+
+        // Transform and return chunked results
+        const questions = allQuestions.map((q: any) => ({
+          type: q.type || 'mcq',
+          text: q.text || '',
+          options: q.options || null,
+          correctAnswer: q.correctAnswer || '',
+          explanation: q.explanation || '',
+          linkedTopicIds: q.linkedTopicIndex && topics[q.linkedTopicIndex - 1]
+            ? [topics[q.linkedTopicIndex - 1]]
+            : [],
+          caseId: q.caseId || null,
+          stats: { attempts: 0, correct: 0 }
+        }));
+
+        const cost = (totalInputTokens * 0.003 + totalOutputTokens * 0.015) / 1000;
+
+        console.log(`[EXTRACT-Q] CHUNKED extraction complete: ${questions.length} total questions from ${numChunks} chunks`);
+
+        return new Response(JSON.stringify({
+          questions,
+          cases: allCases,
+          pdfAnalysis: {
+            isScanned: pdfAnalysis.isScanned,
+            pageCount: pdfAnalysis.pageCount,
+            confidence: pdfAnalysis.confidence
+          },
+          wasChunked: true,
+          numChunks,
+          usage: {
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            cost: Math.round(cost * 1000000) / 1000000
+          }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // Standard extraction (for scanned PDFs, images, or small text PDFs)
+    console.log('[EXTRACT-Q] Using STANDARD extraction');
+
     const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
 
     if (isPDF) {
@@ -176,21 +352,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // Parse topic names for auto-linking
-    let topics: string[] = [];
-    try {
-      topics = JSON.parse(topicNames || '[]');
-    } catch {
-      topics = [];
-    }
-
     const topicListForPrompt = topics.length > 0
       ? `\n\nТЕМИ ЗА СВЪРЗВАНЕ (избери най-подходящата за всеки въпрос):\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
       : '';
 
-    // Add extra instructions for scanned PDFs
     const scannedPdfNote = pdfAnalysis?.isScanned
-      ? `\n\nВАЖНО: Този документ е СКАНИРАН (изображение). Прочети внимателно всеки текст от изображението. Ако някои букви са неясни, използвай контекста за да определиш думата.`
+      ? `\n\nВАЖНО: Този документ е СКАНИРАН (изображение). Прочети внимателно всеки текст от изображението.`
       : '';
 
     content.push({

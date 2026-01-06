@@ -60,6 +60,8 @@ export default function ImportQuestionsModal({
   const [selectedQuestions, setSelectedQuestions] = useState<Set<number>>(new Set());
   const [pdfAnalysis, setPdfAnalysis] = useState<PDFAnalysisResult | null>(null);
   const [wasRepaired, setWasRepaired] = useState(false);
+  const [wasChunked, setWasChunked] = useState(false);
+  const [numChunks, setNumChunks] = useState(0);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -75,6 +77,8 @@ export default function ImportQuestionsModal({
       setRawResponse(null);
       setPdfAnalysis(null);
       setWasRepaired(false);
+      setWasChunked(false);
+      setNumChunks(0);
       // Auto-generate bank name from file name
       if (!bankName) {
         setBankName(selectedFile.name.replace(/\.[^/.]+$/, ''));
@@ -92,6 +96,8 @@ export default function ImportQuestionsModal({
       setRawResponse(null);
       setPdfAnalysis(null);
       setWasRepaired(false);
+      setWasChunked(false);
+      setNumChunks(0);
       if (!bankName) {
         setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
       }
@@ -148,6 +154,12 @@ export default function ImportQuestionsModal({
       // Check if JSON was repaired (truncated response)
       if (result.wasRepaired) {
         setWasRepaired(true);
+      }
+
+      // Check if chunked extraction was used
+      if (result.wasChunked) {
+        setWasChunked(true);
+        setNumChunks(result.numChunks || 0);
       }
 
       if (result.usage) {
@@ -407,8 +419,18 @@ export default function ImportQuestionsModal({
                 )}
               </div>
 
+              {/* Info if chunked extraction was used */}
+              {wasChunked && (
+                <div className="p-2 bg-green-900/20 border border-green-700/30 rounded-lg flex items-start gap-2">
+                  <CheckCircle size={16} className="text-green-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-green-300 font-mono">
+                    PDF обработен на {numChunks} части. Извлечени {extractedQuestions.length} въпроса.
+                  </div>
+                </div>
+              )}
+
               {/* Warning if response was truncated and repaired */}
-              {wasRepaired && (
+              {wasRepaired && !wasChunked && (
                 <div className="p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
                   <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
                   <div className="text-xs text-amber-300 font-mono">

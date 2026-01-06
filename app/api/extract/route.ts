@@ -51,9 +51,11 @@ export async function POST(request: Request) {
 
     content.push({
       type: 'text',
-      text: `Analyze this document for "${subjectName}".
+      text: `Analyze this ENTIRE document for "${subjectName}".
 
-Extract ALL topics/chapters from this document. For each topic provide:
+CRITICAL: You MUST process ALL pages of this document from start to finish. Do not stop early.
+
+Extract EVERY topic/chapter/section from the ENTIRE document. For each topic provide:
 1. Number (if present, or sequential number)
 2. Name/title of the topic
 
@@ -61,13 +63,19 @@ Return ONLY a valid JSON array in this exact format, no other text:
 [{"number": 1, "name": "Topic name"}, {"number": 2, "name": "Another topic"}]
 
 If there are subtopics, use notation like "1.1", "1.2".
-IMPORTANT: Return ONLY the JSON array, no markdown, no code blocks, no explanation.`
+
+IMPORTANT RULES:
+- Process ALL pages, not just the first few
+- Include EVERY topic/section you find
+- Return ONLY the JSON array, no markdown, no code blocks, no explanation
+- If the document has 50+ topics, include ALL of them`
     });
 
     // Use Haiku for simple extraction tasks (cheaper and faster)
+    // No max_tokens limit - let it handle documents of any size
     const response = await anthropic.messages.create({
       model: 'claude-3-5-haiku-20241022',
-      max_tokens: 4096,
+      max_tokens: 65536, // Maximum allowed for Haiku
       messages: [{ role: 'user', content }]
     });
 
@@ -86,10 +94,13 @@ IMPORTANT: Return ONLY the JSON array, no markdown, no code blocks, no explanati
     // Parse the JSON response
     let topics;
     try {
-      // Try to find JSON array in the response
-      const jsonMatch = responseText.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        topics = JSON.parse(jsonMatch[0]);
+      // Try to find the complete JSON array in the response (greedy match)
+      // Find the first [ and the last ] to get the full array
+      const startIdx = responseText.indexOf('[');
+      const endIdx = responseText.lastIndexOf(']');
+
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        topics = JSON.parse(responseText.substring(startIdx, endIdx + 1));
       } else {
         topics = JSON.parse(responseText);
       }

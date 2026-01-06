@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, BookOpen, Calendar } from 'lucide-react';
+import { X, BookOpen, Calendar, FileText } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { PRESET_COLORS } from '@/lib/constants';
 
@@ -14,12 +14,13 @@ export default function AddSubjectModal({ onClose }: Props) {
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);
   const [examDate, setExamDate] = useState('');
+  const [examFormat, setExamFormat] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    addSubject(name.trim(), color, examDate || null);
+    addSubject(name.trim(), color, examDate || null, examFormat.trim() || null);
     onClose();
   };
 
@@ -95,6 +96,24 @@ export default function AddSubjectModal({ onClose }: Props) {
               onChange={(e) => setExamDate(e.target.value)}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
             />
+          </div>
+
+          {/* Exam Format */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              <FileText size={14} className="inline mr-2" />
+              Формат на изпита (незадължително)
+            </label>
+            <textarea
+              value={examFormat}
+              onChange={(e) => setExamFormat(e.target.value)}
+              placeholder="напр. 20 тестови въпроса, 2 казуса, 1 есе"
+              rows={2}
+              className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"
+            />
+            <p className="text-xs text-slate-500 mt-1 font-mono">
+              AI ще генерира quiz въпроси в този формат
+            </p>
           </div>
 
           {/* Preview */}

@@ -3,8 +3,29 @@ export interface Subject {
   name: string;
   color: string;
   examDate: string | null;
+  examFormat: string | null; // Description of exam format (e.g., "20 теста, 2 казуса, 1 есе")
   topics: Topic[];
   createdAt: string;
+}
+
+// Bloom's Taxonomy levels (1-6)
+export type BloomLevel = 1 | 2 | 3 | 4 | 5 | 6;
+
+export const BLOOM_LEVELS: { level: BloomLevel; name: string; nameEn: string; description: string }[] = [
+  { level: 1, name: 'Запомняне', nameEn: 'Remember', description: 'Възпроизвеждане на факти и концепции' },
+  { level: 2, name: 'Разбиране', nameEn: 'Understand', description: 'Обясняване на идеи и концепции' },
+  { level: 3, name: 'Прилагане', nameEn: 'Apply', description: 'Използване на знанията в нови ситуации' },
+  { level: 4, name: 'Анализиране', nameEn: 'Analyze', description: 'Разграничаване на връзки и компоненти' },
+  { level: 5, name: 'Оценяване', nameEn: 'Evaluate', description: 'Обосноваване на становище или решение' },
+  { level: 6, name: 'Създаване', nameEn: 'Create', description: 'Създаване на нов продукт или гледна точка' },
+];
+
+export interface QuizResult {
+  date: string;
+  bloomLevel: BloomLevel;
+  score: number; // 0-100
+  questionsCount: number;
+  correctAnswers: number;
 }
 
 export interface Topic {
@@ -18,6 +39,9 @@ export interface Topic {
   quizCount: number;
   material: string;
   materialImages: string[];
+  // Bloom's Taxonomy tracking
+  currentBloomLevel: BloomLevel; // Current mastery level
+  quizHistory: QuizResult[]; // History of quiz results by Bloom level
 }
 
 export type TopicStatus = 'gray' | 'orange' | 'yellow' | 'green';

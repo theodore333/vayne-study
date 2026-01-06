@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -14,7 +14,7 @@ interface AppContextType {
   syncNow: () => Promise<void>;
 
   // Subject operations
-  addSubject: (name: string, color: string, examDate: string | null) => void;
+  addSubject: (name: string, color: string, examDate: string | null, examFormat: string | null) => void;
   updateSubject: (id: string, updates: Partial<Subject>) => void;
   deleteSubject: (id: string) => void;
 
@@ -135,7 +135,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [data]);
 
   // Subject operations
-  const addSubject = useCallback((name: string, color: string, examDate: string | null) => {
+  const addSubject = useCallback((name: string, color: string, examDate: string | null, examFormat: string | null) => {
     updateData(prev => ({
       ...prev,
       subjects: [...prev.subjects, {
@@ -143,6 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name,
         color,
         examDate,
+        examFormat,
         topics: [],
         createdAt: new Date().toISOString()
       }]

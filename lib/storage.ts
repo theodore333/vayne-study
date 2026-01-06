@@ -49,13 +49,17 @@ export function loadData(): AppData {
     // Remove deprecated focusSession
     delete data.focusSession;
 
-    // Migrate topics - add material fields if missing
+    // Migrate subjects and topics - add missing fields
     data.subjects = data.subjects.map((subject: any) => ({
       ...subject,
+      examFormat: subject.examFormat ?? null, // Add exam format field
       topics: subject.topics.map((topic: any) => ({
         ...topic,
         material: topic.material || '',
-        materialImages: topic.materialImages || []
+        materialImages: topic.materialImages || [],
+        // Bloom's Taxonomy tracking
+        currentBloomLevel: topic.currentBloomLevel || 1,
+        quizHistory: topic.quizHistory || []
       }))
     }));
 

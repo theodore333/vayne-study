@@ -41,6 +41,7 @@ function SubjectsContent() {
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState('');
   const [editExamDate, setEditExamDate] = useState('');
+  const [editExamFormat, setEditExamFormat] = useState('');
 
   useEffect(() => {
     const id = searchParams.get('id');
@@ -74,6 +75,7 @@ function SubjectsContent() {
     setEditName(subject.name);
     setEditColor(subject.color);
     setEditExamDate(subject.examDate || '');
+    setEditExamFormat(subject.examFormat || '');
   };
 
   const handleSaveEdit = () => {
@@ -81,7 +83,8 @@ function SubjectsContent() {
       updateSubject(editingSubject, {
         name: editName.trim(),
         color: editColor,
-        examDate: editExamDate || null
+        examDate: editExamDate || null,
+        examFormat: editExamFormat.trim() || null
       });
       setEditingSubject(null);
     }
@@ -135,6 +138,14 @@ function SubjectsContent() {
                             value={editExamDate}
                             onChange={(e) => setEditExamDate(e.target.value)}
                             className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 font-mono"
+                            placeholder="Дата на изпит"
+                          />
+                          <textarea
+                            value={editExamFormat}
+                            onChange={(e) => setEditExamFormat(e.target.value)}
+                            placeholder="Формат на изпит (напр. 20 теста, 2 казуса)"
+                            rows={2}
+                            className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-slate-100 font-mono resize-none"
                           />
                           <div className="flex gap-2">
                             <button onClick={handleSaveEdit} className="flex-1 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-mono">Запази</button>

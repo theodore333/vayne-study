@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights, QuestionBank } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES } from './constants';
 
 /**
@@ -257,7 +257,11 @@ export function calculateEffectiveHours(status: DailyStatus): number {
   return Math.max(1, Math.round(hours * 10) / 10);
 }
 
-export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = false): PredictedGrade {
+export function calculatePredictedGrade(
+  subject: Subject,
+  vayneMode: boolean = false,
+  questionBanks: QuestionBank[] = []
+): PredictedGrade {
   const topics = subject.topics;
   const totalTopics = topics.length;
 
@@ -313,25 +317,46 @@ export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = f
   }).length;
   let decayRisk = notReviewedIn5Days / totalTopics;
 
+  // 6. Question Bank Performance (NEW)
+  const subjectBanks = questionBanks.filter(b => b.subjectId === subject.id);
+  const allQuestions = subjectBanks.flatMap(b => b.questions);
+  const attemptedQuestions = allQuestions.filter(q => q.stats.attempts > 0);
+
+  let questionBankScore = 0;
+  let questionBankAccuracy = 0;
+  let hasQuestionBankData = false;
+
+  if (attemptedQuestions.length >= 5) {  // Minimum 5 attempts for meaningful data
+    hasQuestionBankData = true;
+    const totalAttempts = attemptedQuestions.reduce((sum, q) => sum + q.stats.attempts, 0);
+    const totalCorrect = attemptedQuestions.reduce((sum, q) => sum + q.stats.correct, 0);
+    questionBankAccuracy = totalCorrect / totalAttempts;  // 0-1
+
+    // Convert to score: 50% = 0, 100% = 1, below 50% = negative
+    questionBankScore = (questionBankAccuracy - 0.5) * 2;  // -1 to 1
+  }
+
   // Vayne mode adjustments
   if (vayneMode) {
     coverageScore = Math.min(1, coverageScore * 1.3);
     consistencyScore = Math.min(1, consistencyScore + 0.5);
     decayRisk = decayRisk * 0.5;
+    if (hasQuestionBankData) questionBankScore = Math.min(1, questionBankScore + 0.2);
   }
 
-  // Final calculation
+  // Final calculation - Question Bank влияе с до 0.5 точки
   const baseGrade = (coverageScore * 3 + (avgQuizGrade / 6) * 3) * timeFactor;
   const consistencyBonus = consistencyScore * 0.5;
   const decayPenalty = decayRisk * 0.5;
+  const questionBankBonus = hasQuestionBankData ? questionBankScore * 0.5 : 0;
 
-  let predicted = baseGrade + consistencyBonus - decayPenalty + 2;
+  let predicted = baseGrade + consistencyBonus - decayPenalty + questionBankBonus + 2;
   predicted = Math.min(6, Math.max(2, predicted));
   predicted = Math.round(predicted * 4) / 4;
 
   // Calculate both modes
   const currentPrediction = vayneMode ? predicted : predicted;
-  const vaynePrediction = vayneMode ? predicted : calculatePredictedGrade(subject, true).current;
+  const vaynePrediction = vayneMode ? predicted : calculatePredictedGrade(subject, true, questionBanks).current;
 
   // Generate factors
   const factors: GradeFactor[] = [
@@ -372,6 +397,17 @@ export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = f
     }
   ];
 
+  // Add Question Bank factor if we have data
+  if (hasQuestionBankData) {
+    factors.push({
+      name: 'questionBank',
+      value: Math.round(questionBankAccuracy * 100),
+      maxValue: 100,
+      label: `Сборници (${attemptedQuestions.length} въпроса)`,
+      impact: questionBankAccuracy >= 0.7 ? 'positive' : questionBankAccuracy >= 0.5 ? 'neutral' : 'negative'
+    });
+  }
+
   // Generate tips based on weak factors
   const tips: string[] = [];
   if (coverageScore < 0.5) tips.push('Фокусирай се върху незапочнатите теми.');
@@ -379,6 +415,7 @@ export function calculatePredictedGrade(subject: Subject, vayneMode: boolean = f
   if (consistencyScore < 0.3) tips.push('Преговаряй редовно - поне 3-4 теми на седмица.');
   if (decayRisk > 0.3) tips.push('Внимание! Много теми са в риск от забравяне.');
   if (daysUntilExam <= 7) tips.push('Изпитът наближава! Максимизирай учебните часове.');
+  if (hasQuestionBankData && questionBankAccuracy < 0.5) tips.push('Практикувай повече от сборниците - accuracy е под 50%.');
 
   // Monte Carlo simulation for exam outcomes
   const examFormat = parseExamFormat(subject.examFormat);

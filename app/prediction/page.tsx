@@ -23,7 +23,7 @@ export default function PredictionPage() {
     ? data.subjects.find(s => s.id === selectedSubjectId)
     : data.subjects[0];
 
-  const prediction = selectedSubject ? calculatePredictedGrade(selectedSubject) : null;
+  const prediction = selectedSubject ? calculatePredictedGrade(selectedSubject, false, data.questionBanks || []) : null;
   const progress = selectedSubject ? getSubjectProgress(selectedSubject) : null;
 
   const gradeColor = (grade: number) => {
@@ -69,7 +69,7 @@ export default function PredictionPage() {
               <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-3">Предмети</h3>
               <div className="space-y-2">
                 {data.subjects.map(subject => {
-                  const pred = calculatePredictedGrade(subject);
+                  const pred = calculatePredictedGrade(subject, false, data.questionBanks || []);
                   const days = getDaysUntil(subject.examDate);
                   const isSelected = (selectedSubject?.id || data.subjects[0]?.id) === subject.id;
 

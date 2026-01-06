@@ -125,9 +125,10 @@ function SubjectsSection({ subjects, onAddClick }: any) {
 }
 
 function SubjectCard({ subject }: any) {
+  const { data } = useApp();
   const progress = getSubjectProgress(subject);
   const daysUntil = getDaysUntil(subject.examDate);
-  const prediction = calculatePredictedGrade(subject);
+  const prediction = calculatePredictedGrade(subject, false, data.questionBanks || []);
   const daysClass = daysUntil <= 3 ? "text-red-400" : daysUntil <= 7 ? "text-orange-400" : "text-slate-400";
   const predClass = prediction.current >= 5 ? "text-green-400" : prediction.current >= 4 ? "text-yellow-400" : "text-orange-400";
 

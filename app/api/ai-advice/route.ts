@@ -32,13 +32,16 @@ export async function POST(request: NextRequest) {
     );
     const todayMinutes = todaySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
 
-    // Subject summaries
+    // Subject summaries with workload calculation
     const subjectSummaries = subjects.map((s: any) => {
       const totalTopics = s.topics.length;
       const greenTopics = s.topics.filter((t: any) => t.status === 'green').length;
       const yellowTopics = s.topics.filter((t: any) => t.status === 'yellow').length;
       const orangeTopics = s.topics.filter((t: any) => t.status === 'orange').length;
       const grayTopics = s.topics.filter((t: any) => t.status === 'gray').length;
+
+      // Remaining topics (not green)
+      const remainingTopics = totalTopics - greenTopics;
 
       // Weak topics (low quiz scores)
       const weakTopics = s.topics
@@ -49,11 +52,23 @@ export async function POST(request: NextRequest) {
         })
         .map((t: any) => t.name);
 
-      // Days until exam
+      // Days until exam & topics per day
       let daysUntilExam = null;
+      let topicsPerDay = 0;
+      let workloadWarning = '';
       if (s.examDate) {
         const examDate = new Date(s.examDate);
         daysUntilExam = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysUntilExam > 0 && remainingTopics > 0) {
+          topicsPerDay = Math.ceil(remainingTopics / daysUntilExam);
+          if (topicsPerDay > 20) {
+            workloadWarning = `НЕВЪЗМОЖНО: ${remainingTopics} теми за ${daysUntilExam} дни = ${topicsPerDay}/ден!`;
+          } else if (topicsPerDay > 10) {
+            workloadWarning = `МНОГО ТЕЖКО: ${topicsPerDay} теми/ден`;
+          } else if (topicsPerDay > 5) {
+            workloadWarning = `Интензивно: ${topicsPerDay} теми/ден`;
+          }
+        }
       }
 
       // Progress = topics that are not gray (have been touched)
@@ -61,16 +76,36 @@ export async function POST(request: NextRequest) {
       const progressPercent = totalTopics > 0 ? Math.round((touchedTopics / totalTopics) * 100) : 0;
       const readyPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
 
+      // Exam format analysis
+      const examFormat = s.examFormat || '';
+      let formatStrategy = '';
+      if (examFormat.toLowerCase().includes('случайн') || examFormat.toLowerCase().includes('тегл') || examFormat.toLowerCase().includes('random')) {
+        formatStrategy = 'СЛУЧАЕН ИЗБОР: По-добре покрий ПОВЕЧЕ теми повърхностно, отколкото малко в дълбочина!';
+      } else if (examFormat.toLowerCase().includes('казус') || examFormat.toLowerCase().includes('case')) {
+        formatStrategy = 'КАЗУСИ: Фокусирай се на практическо приложение и клинично мислене.';
+      } else if (examFormat.toLowerCase().includes('тест') || examFormat.toLowerCase().includes('mcq')) {
+        formatStrategy = 'ТЕСТОВЕ: Важни са детайлите и точните факти.';
+      } else if (examFormat.toLowerCase().includes('устен') || examFormat.toLowerCase().includes('oral')) {
+        formatStrategy = 'УСТЕН: Трябва да можеш да обясниш с думи, не само да разпознаеш.';
+      }
+
       return {
         name: s.name,
         type: s.subjectType,
-        examFormat: s.examFormat,
+        examFormat,
+        formatStrategy,
         daysUntilExam,
         totalTopics,
-        progress: `${greenTopics}/${totalTopics} green, ${yellowTopics} yellow, ${orangeTopics} orange, ${grayTopics} gray`,
-        weakTopics: weakTopics.slice(0, 3),
+        remainingTopics,
+        topicsPerDay,
+        workloadWarning,
+        greenTopics,
+        yellowTopics,
+        orangeTopics,
+        grayTopics,
+        weakTopics: weakTopics.slice(0, 5),
         percentComplete: readyPercent,
-        progressPercent, // Topics touched (not gray)
+        progressPercent,
         touchedTopics
       };
     }).filter((s: any) => s.totalTopics > 0);
@@ -121,36 +156,62 @@ export async function POST(request: NextRequest) {
     const isLate = currentHour >= 15 && todayHours < (dailyTarget * 0.25);
     const isCriticallyLate = currentHour >= 18 && todayHours < (dailyTarget * 0.4);
 
+    // Build detailed subject info for prompt
+    const subjectDetails = subjectSummaries.map((s: any) => {
+      let info = `${s.name}:`;
+      info += ` ${s.remainingTopics}/${s.totalTopics} оставащи`;
+      if (s.daysUntilExam !== null) {
+        info += ` | ${s.daysUntilExam}д до изпит`;
+        if (s.topicsPerDay > 0) {
+          info += ` | Нужни ${s.topicsPerDay} теми/ден`;
+        }
+      }
+      if (s.workloadWarning) info += ` | ${s.workloadWarning}`;
+      if (s.examFormat) info += `\n  Формат: ${s.examFormat}`;
+      if (s.formatStrategy) info += `\n  Стратегия: ${s.formatStrategy}`;
+      if (s.weakTopics.length > 0) info += `\n  Слаби теми: ${s.weakTopics.join(', ')}`;
+      info += `\n  Статус: ${s.greenTopics} зелени, ${s.yellowTopics} жълти, ${s.orangeTopics} оранжеви, ${s.grayTopics} сиви`;
+      return info;
+    }).join('\n\n');
+
     if (type === 'daily') {
-      prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Говориш директно, без украшения.
+      prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Анализирай данните и дай КОНКРЕТЕН съвет.
 
 СЕГА Е ${timeStr}! ${isWeekend ? '(уикенд)' : '(делник)'}
 
-СТАТИСТИКА:
-- Учил днес: ${todayMinutes} мин (${todayHours}ч)
-- Дневна цел: ${dailyTarget}ч ${baseGoalHours !== dailyTarget ? `(база ${baseGoalHours}ч, коригирана)` : ''}
+ВРЕМЕ ДНЕС:
+- Учил: ${todayMinutes} мин (${todayHours}ч)
+- Дневна цел: ${dailyTarget}ч
 - Нужни още: ${hoursNeeded}ч
 - Оставащи часове до 23:00: ~${productiveHoursLeft}ч
 ${urgencyBoost ? '- ' + urgencyBoost : ''}
 ${statusNote ? '- ' + statusNote : ''}
-${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, а си учил само ' + todayHours + 'ч от ' + dailyTarget + 'ч цел!' : ''}
-${isCriticallyLate ? '- КРИТИЧНО: Ще трябва да учиш до късно за да стигнеш целта!' : ''}
+${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, само ' + todayHours + 'ч от ' + dailyTarget + 'ч!' : ''}
 
-СЕДМИЦА: ${Math.round(weeklyMinutes / 60)}ч | Streak: ${userProgress?.stats?.longestStreak || 0} дни
+СЕДМИЦА: ${Math.round(weeklyMinutes / 60)}ч
 
-ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `${s.name}: ${s.touchedTopics}/${s.totalTopics} минати (${s.progressPercent}%), ${s.percentComplete}% зелени${s.daysUntilExam !== null ? ' | ' + s.daysUntilExam + 'д до изпит' : ''}${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
+ПРЕДМЕТИ И НАТОВАРВАНЕ:
+${subjectDetails}
 
-${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.touchedTopics}/${mostUrgent.totalTopics} минати.` : ''}
+${hasCriticalExam ? `
+КРИТИЧЕН ИЗПИТ: ${mostUrgent.name}
+- След ${mostUrgent.daysUntilExam} дни!
+- Оставащи теми: ${mostUrgent.remainingTopics}
+- Нужни на ден: ${mostUrgent.topicsPerDay} теми
+${mostUrgent.workloadWarning ? '- ' + mostUrgent.workloadWarning : ''}
+${mostUrgent.formatStrategy ? '- ' + mostUrgent.formatStrategy : ''}
+` : ''}
 
-ИНСТРУКЦИИ:
+ИНСТРУКЦИИ ЗА ОТГОВОР:
 - Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
-- Коментирай часа и прогреса спрямо ДИНАМИЧНАТА цел от ${dailyTarget}ч (не фиксирана!)
-- Ако е късно и има много за навакасване - кажи до колко часа трябва да учи
-- ${dailyStatus?.sick ? 'Студентът е БОЛЕН - бъди разбиращ но насърчи леко учене (' + dailyTarget + 'ч днес)' : dailyStatus?.holiday ? 'Студентът е в ПОЧИВКА - все пак насърчи ' + dailyTarget + 'ч учене' : 'Бъди строг и директен'}
-- Кажи ТОЧНО кои теми първо (yellow към green е най-бързо)
-- Максимум 4-5 изречения
-- Говори като треньор`;
+- Кажи КОНКРЕТНО колко теми трябва да мине ДНЕС за всеки предмет с изпит
+- Ако има случаен избор на изпита (теглят се теми) - препоръчай широко покритие вместо дълбочина
+- Ако натоварването е нереалистично (>15 теми/ден) - кажи го директно и предложи приоритизация
+- Кои теми да ПРОПУСНЕ ако няма време за всички? (най-малко вероятни, най-лесни за научаване набързо)
+- Кои теми са ЗАДЪЛЖИТЕЛНИ? (high-yield, чести на изпит)
+- ${dailyStatus?.sick ? 'БОЛЕН - бъди разбиращ, ' + dailyTarget + 'ч цел' : dailyStatus?.holiday ? 'ПОЧИВКА - ' + dailyTarget + 'ч цел' : 'Бъди строг'}
+- Максимум 5-6 изречения, директно и конкретно
+- Говори като треньор който знае медицина`;
     } else {
       // Weekly review
       prompt = `Ти си СТРОГ учебен coach за медицински студент. Прави седмичен преглед.
@@ -158,17 +219,21 @@ ${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.
 СЕДМИЦА:
 - Сесии: ${weeklySessions.length}
 - Време: ${Math.round(weeklyMinutes / 60)} часа
-- Теми завършени: ${userProgress?.stats?.topicsCompleted || 0}
-- Зелени теми: ${userProgress?.stats?.greenTopics || 0}
 
-ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `${s.name}: ${s.percentComplete}% готов, ${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'}${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
+ПРЕДМЕТИ И ПРОГРЕС:
+${subjectDetails}
+
+ПРЕДСТОЯЩИ ИЗПИТИ:
+${subjectSummaries.filter((s: any) => s.daysUntilExam !== null && s.daysUntilExam <= 14).map((s: any) =>
+  `- ${s.name}: ${s.daysUntilExam}д | ${s.remainingTopics} оставащи | ${s.topicsPerDay} теми/ден нужни`
+).join('\n') || 'Няма изпити в следващите 2 седмици'}
 
 ИНСТРУКЦИИ:
 - Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
-- Кратка оценка: какво е направено, какво липсва
-- Конкретни приоритети за следващата седмица
-- Ако часовете са малко за медицина - кажи го директно
+- Оцени седмицата: достатъчно ли е времето спрямо предстоящите изпити?
+- Конкретни приоритети за следващата седмица базирани на теми/ден нужни
+- Ако темпото е недостатъчно за изпитите - кажи го директно с числа
+- Препоръчай стратегия: широко покритие vs дълбочина, базирано на формата
 - Максимум 5-6 изречения`;
     }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2 } from 'lucide-react';
 import { TopicStatus } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
@@ -141,8 +141,8 @@ export default function TopicDetailPage() {
     }
   };
 
-  const daysSinceReview = getDaysSince(topic.lastReview);
-  const reviewWarning = daysSinceReview >= 7 && topic.status !== 'gray';
+  const daysSinceLastRead = getDaysSince(topic.lastRead);
+  const reviewWarning = daysSinceLastRead >= 7 && topic.status !== 'gray';
   const hasMaterial = material.trim().length > 0;
   const config = STATUS_CONFIG[topic.status];
 
@@ -309,56 +309,38 @@ export default function TopicDetailPage() {
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Last Review */}
-          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock size={16} className="text-slate-400" />
-              <span className="text-sm font-medium text-slate-400 font-mono">
-                Последен преговор
-              </span>
-            </div>
-            <div className={`text-xl font-mono ${reviewWarning ? 'text-orange-400' : 'text-slate-200'}`}>
-              {topic.lastReview
-                ? daysSinceReview === 0
-                  ? 'Днес'
-                  : daysSinceReview === 1
-                    ? 'Вчера'
-                    : `Преди ${daysSinceReview} дни`
-                : 'Никога'
-              }
-              {reviewWarning && ' ⚠️'}
-            </div>
-          </div>
-
-          {/* Reading Stats */}
+          {/* Study Progress */}
           <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <BookOpen size={16} className="text-cyan-400" />
               <span className="text-sm font-medium text-slate-400 font-mono">
-                Четене
+                Преговори
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 bg-slate-800/30 rounded-lg">
-                <div className="text-xs text-slate-500 font-mono mb-1">Прочетено</div>
-                <div className="text-lg font-mono text-cyan-400">
-                  {topic.readCount || 0}x
-                </div>
-              </div>
-              <div className="p-3 bg-slate-800/30 rounded-lg">
-                <div className="text-xs text-slate-500 font-mono mb-1">Последно</div>
-                <div className="text-sm font-mono text-slate-300">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-3xl font-mono font-bold text-cyan-400">
+                {topic.readCount || 0}x
+              </span>
+              <div className={`text-right ${reviewWarning ? 'text-orange-400' : 'text-slate-400'}`}>
+                <div className="text-xs font-mono text-slate-500">Последно</div>
+                <div className="text-sm font-mono">
                   {topic.lastRead
                     ? getDaysSince(topic.lastRead) === 0
                       ? 'Днес'
                       : getDaysSince(topic.lastRead) === 1
                         ? 'Вчера'
-                        : `${getDaysSince(topic.lastRead)}д`
-                    : '—'
+                        : `Преди ${getDaysSince(topic.lastRead)} дни`
+                    : 'Никога'
                   }
+                  {reviewWarning && ' ⚠️'}
                 </div>
               </div>
             </div>
+            {(topic.readCount || 0) === 0 && (
+              <p className="text-xs text-slate-500 font-mono">
+                Завърши тест за да отбележиш преговор
+              </p>
+            )}
           </div>
 
           {/* Grades Section */}

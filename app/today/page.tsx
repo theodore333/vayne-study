@@ -1,16 +1,39 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { CheckCircle2, Circle, Clock, Target, Zap, AlertTriangle, BookOpen } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { CheckCircle2, Circle, Clock, Target, Zap, BookOpen, Check } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, calculateEffectiveHours, getDaysSince } from '@/lib/algorithms';
+import { generateDailyPlan, calculateEffectiveHours } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
+import Link from 'next/link';
 
 export default function TodayPage() {
   const { data, isLoading } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
+  const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
+
+  // Check which topics have been reviewed today (quiz or status change)
+  const today = new Date().toISOString().split('T')[0];
+
+  // Auto-mark topics that were reviewed today
+  useEffect(() => {
+    const reviewedToday = new Set<string>();
+    data.subjects.forEach(subject => {
+      subject.topics.forEach(topic => {
+        if (topic.lastReview && topic.lastReview.startsWith(today)) {
+          reviewedToday.add(topic.id);
+        }
+      });
+    });
+    // Merge with manually completed
+    setCompletedTopics(prev => {
+      const merged = new Set(prev);
+      reviewedToday.forEach(id => merged.add(id));
+      return merged;
+    });
+  }, [data.subjects, today]);
 
   const effectiveHours = useMemo(() => calculateEffectiveHours(data.dailyStatus), [data.dailyStatus]);
   const dailyPlan = useMemo(
@@ -37,6 +60,25 @@ export default function TodayPage() {
       return next;
     });
   };
+
+  const toggleTopic = (topicId: string) => {
+    setCompletedTopics(prev => {
+      const next = new Set(prev);
+      if (next.has(topicId)) {
+        next.delete(topicId);
+      } else {
+        next.add(topicId);
+      }
+      return next;
+    });
+  };
+
+  // Calculate total topics and completed topics for progress
+  const allPlanTopics = dailyPlan.flatMap(task => task.topics);
+  const completedTopicCount = allPlanTopics.filter(t => completedTopics.has(t.id)).length;
+  const topicProgressPercent = allPlanTopics.length > 0
+    ? Math.round((completedTopicCount / allPlanTopics.length) * 100)
+    : 0;
 
   const totalMinutes = dailyPlan.reduce((sum, t) => sum + t.estimatedMinutes, 0);
   const completedMinutes = dailyPlan
@@ -91,13 +133,13 @@ export default function TodayPage() {
         <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
           <div className="flex items-center gap-2 mb-2">
             <Target size={18} className="text-blue-400" />
-            <span className="text-sm text-slate-400 font-mono">Задачи</span>
+            <span className="text-sm text-slate-400 font-mono">Теми</span>
           </div>
           <div className="text-3xl font-bold text-blue-400 font-mono">
-            {completedTasks.size}/{dailyPlan.length}
+            {completedTopicCount}/{allPlanTopics.length}
           </div>
           <div className="text-xs text-slate-500 font-mono mt-1">
-            {Math.round(completedMinutes / 60 * 10) / 10}ч от {Math.round(totalMinutes / 60 * 10) / 10}ч
+            {dailyPlan.length} {dailyPlan.length === 1 ? 'блок' : 'блока'}
           </div>
         </div>
 
@@ -106,11 +148,11 @@ export default function TodayPage() {
             <CheckCircle2 size={18} className="text-purple-400" />
             <span className="text-sm text-slate-400 font-mono">Прогрес</span>
           </div>
-          <div className="text-3xl font-bold text-purple-400 font-mono">{progressPercent}%</div>
+          <div className="text-3xl font-bold text-purple-400 font-mono">{topicProgressPercent}%</div>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden mt-2">
             <div
               className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
-              style={{ width: progressPercent + "%" }}
+              style={{ width: topicProgressPercent + "%" }}
             />
           </div>
         </div>
@@ -181,22 +223,51 @@ export default function TodayPage() {
                       </p>
 
                       {task.topics.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {task.topics.map(topic => (
-                            <span
-                              key={topic.id}
-                              className="text-xs px-2 py-1 rounded font-mono max-w-[200px] truncate inline-block"
-                              style={{
-                                backgroundColor: STATUS_CONFIG[topic.status].bg,
-                                color: STATUS_CONFIG[topic.status].text,
-                                borderColor: STATUS_CONFIG[topic.status].border,
-                                borderWidth: 1
-                              }}
-                              title={`#${topic.number} ${topic.name}`}
-                            >
-                              #{topic.number} {topic.name}
-                            </span>
-                          ))}
+                        <div className="space-y-1.5">
+                          {task.topics.map(topic => {
+                            const isTopicDone = completedTopics.has(topic.id);
+                            const subject = data.subjects.find(s => s.topics.some(t => t.id === topic.id));
+                            return (
+                              <div
+                                key={topic.id}
+                                className={`flex items-center gap-2 p-2 rounded-lg transition-all ${
+                                  isTopicDone ? 'bg-green-500/10' : 'hover:bg-slate-800/50'
+                                }`}
+                              >
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleTopic(topic.id);
+                                  }}
+                                  className="shrink-0"
+                                >
+                                  {isTopicDone ? (
+                                    <CheckCircle2 size={18} className="text-green-500" />
+                                  ) : (
+                                    <Circle size={18} className="text-slate-600 hover:text-slate-400" />
+                                  )}
+                                </button>
+                                <Link
+                                  href={subject ? `/subjects/${subject.id}/topics/${topic.id}` : '#'}
+                                  className={`flex-1 text-xs font-mono truncate ${
+                                    isTopicDone ? 'line-through text-slate-500' : 'text-slate-300 hover:text-white'
+                                  }`}
+                                  title={`#${topic.number} ${topic.name}`}
+                                >
+                                  <span
+                                    className="inline-block w-2 h-2 rounded-full mr-1.5"
+                                    style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
+                                  />
+                                  #{topic.number} {topic.name}
+                                </Link>
+                                {isTopicDone && topic.lastReview?.startsWith(today) && (
+                                  <span className="text-[10px] text-green-400 font-mono shrink-0">
+                                    Quiz ✓
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -209,17 +280,17 @@ export default function TodayPage() {
       </div>
 
       {/* Motivational Footer */}
-      {dailyPlan.length > 0 && progressPercent < 100 && (
+      {dailyPlan.length > 0 && topicProgressPercent < 100 && (
         <div className="mt-6 p-4 rounded-xl bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-700/30 text-center">
           <p className="text-purple-300 font-mono">
-            {progressPercent < 30 && "💪 Започни с първата задача - всяка стъпка има значение!"}
-            {progressPercent >= 30 && progressPercent < 70 && "🔥 Страхотен прогрес! Продължавай така!"}
-            {progressPercent >= 70 && "🏆 Почти там! Финалният спринт!"}
+            {topicProgressPercent < 30 && "💪 Започни с първата тема - всяка стъпка има значение!"}
+            {topicProgressPercent >= 30 && topicProgressPercent < 70 && "🔥 Страхотен прогрес! Продължавай така!"}
+            {topicProgressPercent >= 70 && "🏆 Почти там! Финалният спринт!"}
           </p>
         </div>
       )}
 
-      {progressPercent === 100 && dailyPlan.length > 0 && (
+      {topicProgressPercent === 100 && dailyPlan.length > 0 && (
         <div className="mt-6 p-6 rounded-xl bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-700/30 text-center">
           <div className="text-4xl mb-2">🎉</div>
           <p className="text-green-300 font-mono text-lg">Всички задачи за днес са завършени!</p>

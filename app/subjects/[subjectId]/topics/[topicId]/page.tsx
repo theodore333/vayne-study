@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Clock, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, FilePlus } from 'lucide-react';
+import { ArrowLeft, Clock, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2 } from 'lucide-react';
 import { TopicStatus } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
@@ -262,26 +262,14 @@ export default function TopicDetailPage() {
               className="w-full h-64 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"
             />
 
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={handleSaveMaterial}
-                disabled={materialSaved}
-                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-500 hover:to-cyan-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                <Save size={16} />
-                {materialSaved ? 'Запазено' : 'Запази материал'}
-              </button>
-              {hasMaterial && (
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={!apiKey || isExtracting}
-                  className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  title="Добави още от PDF"
-                >
-                  <FilePlus size={16} />
-                </button>
-              )}
-            </div>
+            <button
+              onClick={handleSaveMaterial}
+              disabled={materialSaved}
+              className="w-full mt-3 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-500 hover:to-cyan-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Save size={16} />
+              {materialSaved ? 'Запазено' : 'Запази материал'}
+            </button>
 
             <p className="mt-2 text-xs text-slate-500 font-mono text-center">
               AI ще генерира Quiz въпроси базирани на този материал

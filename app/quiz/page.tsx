@@ -108,6 +108,9 @@ function QuizContent() {
   // Early termination state
   const [showEarlyStopConfirm, setShowEarlyStopConfirm] = useState(false);
 
+  // Question count warning
+  const [countWarning, setCountWarning] = useState<string | null>(null);
+
   const MAX_HINTS = 3;
 
   const subject = data.subjects.find(s => s.id === subjectId);
@@ -367,6 +370,13 @@ function QuizContent() {
 
       if (result.usage) {
         incrementApiCalls(result.usage.cost);
+      }
+
+      // Check for count warning
+      if (result.countWarning) {
+        setCountWarning(result.countWarning);
+      } else {
+        setCountWarning(null);
       }
 
       setQuizState({
@@ -1004,6 +1014,22 @@ function QuizContent() {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Question count warning banner */}
+        {countWarning && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-200 font-mono">{countWarning}</p>
+            </div>
+            <button
+              onClick={() => setCountWarning(null)}
+              className="text-amber-400/60 hover:text-amber-400 text-lg leading-none"
+            >
+              ×
+            </button>
           </div>
         )}
 

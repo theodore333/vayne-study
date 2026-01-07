@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
@@ -51,6 +51,9 @@ function SubjectsContent() {
   // Analyze relations state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Track if initial subject selection has been done
+  const initialSelectionDone = useRef(false);
 
   // Load API key
   useEffect(() => {
@@ -179,14 +182,20 @@ function SubjectsContent() {
     }
   };
 
+  // Initial subject selection - only runs once on mount/URL change
   useEffect(() => {
+    // Skip if we've already done initial selection
+    if (initialSelectionDone.current) return;
+
     const id = searchParams.get('id');
     if (id && data.subjects.find(s => s.id === id)) {
       setSelectedSubjectId(id);
-    } else if (data.subjects.length > 0 && !selectedSubjectId) {
+      initialSelectionDone.current = true;
+    } else if (data.subjects.length > 0) {
       setSelectedSubjectId(data.subjects[0].id);
+      initialSelectionDone.current = true;
     }
-  }, [searchParams, data.subjects, selectedSubjectId]);
+  }, [searchParams, data.subjects]);
 
   if (isLoading) {
     return (

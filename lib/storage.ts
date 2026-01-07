@@ -28,6 +28,7 @@ interface LegacyTopic {
   cluster?: string | null;
   prerequisites?: string[];
   wrongAnswers?: Array<{ question: string; userAnswer: string | null; correctAnswer: string; concept: string; bloomLevel: number; date: string; drillCount: number }>;
+  highlights?: Array<{ id: string; text: string; startOffset: number; endOffset: number; color: 'yellow' | 'green' | 'blue' | 'pink'; createdAt: string }>;
 }
 
 interface LegacySubject {
@@ -230,7 +231,9 @@ export function loadData(): AppData {
         cluster: topic.cluster ?? null,
         prerequisites: topic.prerequisites ?? [],
         // Gap Analysis: Track wrong answers
-        wrongAnswers: topic.wrongAnswers ?? []
+        wrongAnswers: topic.wrongAnswers ?? [],
+        // Reader Mode: Highlights
+        highlights: topic.highlights ?? []
       }))
     }));
 

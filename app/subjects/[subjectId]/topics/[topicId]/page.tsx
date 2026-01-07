@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
+import ReaderMode from '@/components/ReaderMode';
+import { TextHighlight } from '@/lib/types';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
@@ -12,7 +14,7 @@ import Link from 'next/link';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -33,6 +35,7 @@ export default function TopicDetailPage() {
   const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
+  const [showReaderMode, setShowReaderMode] = useState(false);
 
   // Load API key
   useEffect(() => {
@@ -270,8 +273,26 @@ export default function TopicDetailPage() {
   const hasMaterial = material.trim().length > 0;
   const config = STATUS_CONFIG[topic.status];
 
+  // Handle saving highlights from ReaderMode
+  const handleSaveHighlights = (highlights: TextHighlight[]) => {
+    updateTopic(subjectId, topicId, { highlights });
+  };
+
+  // ReaderMode needs the full topic with current material
+  const topicForReader = { ...topic, material };
+
   return (
-    <div className="max-w-4xl mx-auto">
+    <>
+      {/* Reader Mode Overlay */}
+      {showReaderMode && (
+        <ReaderMode
+          topic={topicForReader}
+          onClose={() => setShowReaderMode(false)}
+          onSaveHighlights={handleSaveHighlights}
+        />
+      )}
+
+      <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <Link
@@ -428,6 +449,17 @@ export default function TopicDetailPage() {
                   onChange={handleFileUpload}
                   className="hidden"
                 />
+                {/* Reader Mode Button */}
+                {material.trim().length > 0 && (
+                  <button
+                    onClick={() => setShowReaderMode(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-mono text-xs transition-all"
+                    title="Режим за четене - светъл фон, голям текст, маркиране"
+                  >
+                    <Maximize2 size={14} />
+                    Чети
+                  </button>
+                )}
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={!apiKey || isExtracting}
@@ -793,5 +825,6 @@ export default function TopicDetailPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

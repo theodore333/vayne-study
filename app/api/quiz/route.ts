@@ -623,7 +623,13 @@ IMPORTANT:
   * Bloom 3-4: 3-5 sentences (application/analysis)
   * Bloom 5-6: 5-8 sentences (evaluation/creation) - MUST be detailed!
 - Explanations should be educational
-- Return ONLY the JSON array`
+- Return ONLY the JSON array
+${questionCount ? `
+FINAL VERIFICATION (CRITICAL):
+Before responding, COUNT your questions. You MUST have EXACTLY ${questionCount} questions in your array.
+If you have fewer than ${questionCount}, ADD more questions until you reach ${questionCount}.
+If you have more than ${questionCount}, REMOVE questions until you have exactly ${questionCount}.
+This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUST receive exactly ${questionCount}.` : ''}`
     }]
   });
 
@@ -646,8 +652,22 @@ IMPORTANT:
 
   const cost = (response.usage.input_tokens * 0.015 + response.usage.output_tokens * 0.075) / 1000;
 
+  // Validate question count and generate warning if mismatch
+  let countWarning: string | null = null;
+  if (questionCount && questionCount > 0 && questions.length !== questionCount) {
+    const diff = questionCount - questions.length;
+    if (diff > 0) {
+      countWarning = `Заявени: ${questionCount}, генерирани: ${questions.length}. AI генерира ${diff} по-малко въпроса - вероятно материалът не съдържа достатъчно различни концепции за ${questionCount} уникални въпроса.`;
+    } else {
+      countWarning = `Заявени: ${questionCount}, генерирани: ${questions.length}. AI генерира ${-diff} повече въпроса.`;
+    }
+  }
+
   return NextResponse.json({
     questions,
+    countWarning,
+    requestedCount: questionCount,
+    actualCount: questions.length,
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

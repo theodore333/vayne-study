@@ -257,7 +257,9 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         cluster: null,
         prerequisites: [],
         // Gap Analysis
-        wrongAnswers: []
+        wrongAnswers: [],
+        // Reader Mode
+        highlights: []
       }));
 
     addTopics(subjectId, topicsToAdd);

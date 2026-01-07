@@ -185,6 +185,18 @@ export interface Topic {
   prerequisites: string[]; // IDs of prerequisite topics
   // Gap Analysis: Track wrong answers for drilling
   wrongAnswers: WrongAnswer[]; // Recent wrong answers for drill weakness mode
+  // Reader Mode: Highlights
+  highlights: TextHighlight[]; // Highlighted text passages
+}
+
+// Text highlight for reader mode
+export interface TextHighlight {
+  id: string;
+  text: string; // The highlighted text content
+  startOffset: number; // Character offset from start of material
+  endOffset: number; // End character offset
+  color: 'yellow' | 'green' | 'blue' | 'pink'; // Highlight color
+  createdAt: string;
 }
 
 export type TopicStatus = 'gray' | 'orange' | 'yellow' | 'green';

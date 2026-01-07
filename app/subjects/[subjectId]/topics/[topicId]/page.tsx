@@ -12,7 +12,7 @@ import Link from 'next/link';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, trackTopicRead } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -43,15 +43,6 @@ export default function TopicDetailPage() {
       setMaterialSaved(true);
     }
   }, [topic?.id, topic?.material]);
-
-  // Track topic read when page is opened with material
-  const hasTrackedRead = useRef(false);
-  useEffect(() => {
-    if (topic && topic.material && topic.material.trim().length > 0 && !hasTrackedRead.current) {
-      trackTopicRead(subjectId, topic.id);
-      hasTrackedRead.current = true;
-    }
-  }, [topic?.id, topic?.material, subjectId, trackTopicRead]);
 
   if (isLoading) {
     return (

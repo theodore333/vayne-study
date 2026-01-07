@@ -46,7 +46,7 @@ function QuizContent() {
   const isMultiMode = searchParams.get('multi') === 'true';
   const topicsParam = searchParams.get('topics');
 
-  const { data, addGrade, incrementApiCalls, updateTopic } = useApp();
+  const { data, addGrade, incrementApiCalls, updateTopic, trackTopicRead } = useApp();
 
   // Parse multi-topic params
   const multiTopics = useMemo(() => {
@@ -510,6 +510,7 @@ function QuizContent() {
     const percentage = (score / quizState.questions.length) * 100;
 
     addGrade(subjectId, topicId, grade);
+    trackTopicRead(subjectId, topicId); // Track as read when quiz is completed
 
     // Determine new Bloom level
     let newBloomLevel: BloomLevel = topic.currentBloomLevel || 1;
@@ -560,6 +561,7 @@ function QuizContent() {
     if (!subjectId || !topicId || !topic || !freeRecallEvaluation) return;
 
     addGrade(subjectId, topicId, freeRecallEvaluation.grade);
+    trackTopicRead(subjectId, topicId); // Track as read when free recall is completed
 
     // Free recall gets standard weight
     const quizResult = {

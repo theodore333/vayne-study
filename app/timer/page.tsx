@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { Play, Pause, Square, Clock, BookOpen, Target, Settings, RotateCcw, Coffee, Brain, TrendingUp, Calendar, Volume2, VolumeX, History, BarChart3, GraduationCap, FileText } from 'lucide-react';
+import { Play, Pause, Square, Clock, BookOpen, Target, Settings, RotateCcw, Coffee, Brain, TrendingUp, Calendar, Volume2, VolumeX, History, BarChart3, GraduationCap, FileText, Plus, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
 type TimerMode = 'normal' | 'pomodoro';
@@ -33,6 +33,13 @@ export default function TimerPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [initialized, setInitialized] = useState(false);
+
+  // Manual time entry
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualHours, setManualHours] = useState(0);
+  const [manualMinutes, setManualMinutes] = useState(30);
+  const [manualSubject, setManualSubject] = useState('');
+  const [manualNote, setManualNote] = useState('');
 
   // Audio context
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -428,6 +435,14 @@ export default function TimerPage() {
         <div className="flex items-center gap-3">
           {activeTab === 'timer' && (
             <>
+              <button
+                onClick={() => setShowManualEntry(true)}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-green-600/20 text-green-400 hover:bg-green-600/30 transition-colors font-mono text-sm"
+                title="Добави време ръчно"
+              >
+                <Plus size={16} />
+                Ръчно
+              </button>
               <button
                 onClick={() => setShowHistory(!showHistory)}
                 className={`p-2 rounded-lg transition-colors ${showHistory ? 'bg-slate-700 text-slate-200' : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'}`}
@@ -943,6 +958,105 @@ export default function TimerPage() {
               className="w-full py-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm">
               Пропусни оценката
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Time Entry Modal */}
+      {showManualEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowManualEntry(false)} />
+          <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl p-6 w-full max-w-md">
+            <button
+              onClick={() => setShowManualEntry(false)}
+              className="absolute top-4 right-4 p-1 text-slate-500 hover:text-slate-300"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-lg font-semibold text-slate-100 mb-4 font-mono flex items-center gap-2">
+              <Plus size={20} className="text-green-400" />
+              Добави време ръчно
+            </h3>
+            <p className="text-sm text-slate-500 mb-4 font-mono">
+              За учене извън приложението (Anki, книга, лекции...)
+            </p>
+
+            <div className="space-y-4">
+              {/* Duration */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-2 font-mono">Продължителност</label>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      value={manualHours}
+                      onChange={(e) => setManualHours(Math.max(0, parseInt(e.target.value) || 0))}
+                      min="0"
+                      max="12"
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center"
+                    />
+                    <span className="text-xs text-slate-500 font-mono block text-center mt-1">часа</span>
+                  </div>
+                  <div className="flex-1">
+                    <input
+                      type="number"
+                      value={manualMinutes}
+                      onChange={(e) => setManualMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                      min="0"
+                      max="59"
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center"
+                    />
+                    <span className="text-xs text-slate-500 font-mono block text-center mt-1">минути</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-2 font-mono">Предмет (незадължително)</label>
+                <select
+                  value={manualSubject}
+                  onChange={(e) => setManualSubject(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
+                >
+                  <option value="">Общо учене</option>
+                  {data.subjects.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Note */}
+              <div>
+                <label className="block text-sm text-slate-400 mb-2 font-mono">Бележка (незадължително)</label>
+                <input
+                  type="text"
+                  value={manualNote}
+                  onChange={(e) => setManualNote(e.target.value)}
+                  placeholder="Anki, лекции, учебник..."
+                  className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm"
+                />
+              </div>
+
+              {/* Submit */}
+              <button
+                onClick={() => {
+                  const totalMinutes = manualHours * 60 + manualMinutes;
+                  if (totalMinutes > 0) {
+                    addPomodoroSession(totalMinutes, manualSubject || 'manual', null);
+                    setShowManualEntry(false);
+                    setManualHours(0);
+                    setManualMinutes(30);
+                    setManualSubject('');
+                    setManualNote('');
+                  }
+                }}
+                disabled={manualHours * 60 + manualMinutes === 0}
+                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Добави {manualHours > 0 ? `${manualHours}ч ` : ''}{manualMinutes}м
+              </button>
+            </div>
           </div>
         </div>
       )}

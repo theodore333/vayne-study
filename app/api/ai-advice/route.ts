@@ -56,6 +56,11 @@ export async function POST(request: NextRequest) {
         daysUntilExam = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       }
 
+      // Progress = topics that are not gray (have been touched)
+      const touchedTopics = greenTopics + yellowTopics + orangeTopics;
+      const progressPercent = totalTopics > 0 ? Math.round((touchedTopics / totalTopics) * 100) : 0;
+      const readyPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
+
       return {
         name: s.name,
         type: s.subjectType,
@@ -64,7 +69,9 @@ export async function POST(request: NextRequest) {
         totalTopics,
         progress: `${greenTopics}/${totalTopics} green, ${yellowTopics} yellow, ${orangeTopics} orange, ${grayTopics} gray`,
         weakTopics: weakTopics.slice(0, 3),
-        percentComplete: totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0
+        percentComplete: readyPercent,
+        progressPercent, // Topics touched (not gray)
+        touchedTopics
       };
     }).filter((s: any) => s.totalTopics > 0);
 
@@ -76,29 +83,53 @@ export async function POST(request: NextRequest) {
     const hasCriticalExam = criticalExams.length > 0;
     const mostUrgent = criticalExams.sort((a: any, b: any) => a.daysUntilExam - b.daysUntilExam)[0];
 
+    // Current time analysis
+    const currentHour = today.getHours();
+    const currentMinute = today.getMinutes();
+    const timeStr = `${currentHour}:${currentMinute.toString().padStart(2, '0')}`;
+    const hoursLeftInDay = Math.max(0, 24 - currentHour - 1); // Assume sleep at midnight
+    const productiveHoursLeft = Math.max(0, 23 - currentHour); // Until 23:00
+    const todayHours = Math.round(todayMinutes / 60 * 10) / 10;
+
+    // Calculate target and deficit
+    const dailyTarget = hasCriticalExam && mostUrgent?.daysUntilExam <= 3 ? 10 : hasCriticalExam ? 8 : 6;
+    const hoursNeeded = Math.max(0, dailyTarget - todayHours);
+    const isLate = currentHour >= 15 && todayHours < 2;
+    const isCriticallyLate = currentHour >= 18 && todayHours < 3;
+
     if (type === 'daily') {
       prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Говориш директно, без украшения.
 
 КОНТЕКСТ: Медицина изисква 8-12 часа учене на ден при критични изпити. Това е нормално. Push hard.
 
-ДАННИ:
-- Днес: ${todayMinutes} минути (${Math.round(todayMinutes / 60 * 10) / 10} часа)
-- Тази седмица: ${Math.round(weeklyMinutes / 60)} часа
-- Streak: ${userProgress?.stats?.longestStreak || 0} дни
-- Статус: ${dailyStatus?.sick ? 'Болен' : dailyStatus?.holiday ? 'Почивка' : 'Нормален'}
+СЕГА Е ${timeStr}!
+- Учил си днес: ${todayMinutes} минути (${todayHours} часа)
+- Оставащи продуктивни часове: ~${productiveHoursLeft}ч (до 23:00)
+- Нужни още: ${hoursNeeded}ч за да стигнеш ${dailyTarget}ч дневна цел
+${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, а си учил само ' + todayHours + 'ч!' : ''}
+${isCriticallyLate ? '- КРИТИЧНО ЗАКЪСНЕНИЕ: Ще трябва да учиш до късно!' : ''}
+
+СЕДМИЦА: ${Math.round(weeklyMinutes / 60)} часа
+Streak: ${userProgress?.stats?.longestStreak || 0} дни
+${dailyStatus?.sick ? 'СТАТУС: БОЛЕН - намали изискванията, но продължавай леко ако можеш' : dailyStatus?.holiday ? 'СТАТУС: ПОЧИВКА - намалено натоварване но не спирай напълно' : ''}
 
 ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `${s.name}: ${s.progress} (${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'})${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
+${subjectSummaries.map((s: any) => `${s.name}: ${s.touchedTopics}/${s.totalTopics} минати (${s.progressPercent}%), ${s.percentComplete}% зелени (${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'})${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
 
-${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.percentComplete}% готов.` : ''}
+${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.touchedTopics}/${mostUrgent.totalTopics} минати (${mostUrgent.progressPercent}%), ${mostUrgent.percentComplete}% зелени.` : ''}
 
 ИНСТРУКЦИИ:
 - Пиши ЧИСТ текст без форматиране (без **, без #, без emoji в началото на редове)
+- ЗАДЪЛЖИТЕЛНО коментирай текущия час и колко е учил - ако е следобед и е учил малко, кажи директно "${currentHour}:00 е, ${todayHours}ч не са достатъчни, започвай ВЕДНАГА"
+- Ако трябва да учи до късно за да навакса - кажи го: "ще трябва да стоиш до 1-2 през нощта"
 - Бъди ДИРЕКТЕН и АГРЕСИВЕН с времето - медицина изисква много часове
 - Ако има изпит до 3 дни - препоръчай 8-10+ часа на ден
 - Ако има изпит до 7 дни - препоръчай 6-8 часа на ден
+- АКО Е БОЛЕН: бъди по-мек, препоръчай 2-4 часа леко учене ако може, почивка е важна за възстановяване
+- АКО Е ПОЧИВКА/ПРАЗНИК: все още препоръчай учене но намалено (4-6 часа)
 - Кажи ТОЧНО кои теми да направи първо (yellow към green е най-бързо)
-- Максимум 3-4 изречения, без списъци с точки
+- Показвай "минати" (touched) теми, не само зелени - това е по-реалистичен прогрес
+- Максимум 4-5 изречения, без списъци с точки
 - Говори като треньор, не като приятел`;
     } else {
       // Weekly review

@@ -4,6 +4,11 @@ import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals,
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
+import LZString from 'lz-string';
+
+// Separate storage keys for optimization
+const MATERIALS_KEY = 'vayne-materials';
+const COMPRESSED_FLAG = 'vayne-compressed';
 
 const defaultDailyStatus: DailyStatus = {
   date: getTodayString(),
@@ -62,12 +67,62 @@ const defaultData: AppData = {
   userProgress: defaultUserProgress
 };
 
+// Materials storage helpers
+function loadMaterials(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(MATERIALS_KEY);
+    if (!stored) return {};
+    // Materials are always compressed
+    const decompressed = LZString.decompress(stored);
+    return decompressed ? JSON.parse(decompressed) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveMaterials(materials: Record<string, string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const compressed = LZString.compress(JSON.stringify(materials));
+    localStorage.setItem(MATERIALS_KEY, compressed);
+  } catch (error) {
+    console.error('Error saving materials:', error);
+  }
+}
+
+export function getMaterial(topicId: string): string {
+  const materials = loadMaterials();
+  return materials[topicId] || '';
+}
+
+export function setMaterial(topicId: string, material: string): void {
+  const materials = loadMaterials();
+  if (material) {
+    materials[topicId] = material;
+  } else {
+    delete materials[topicId];
+  }
+  saveMaterials(materials);
+}
+
 export function loadData(): AppData {
   if (typeof window === 'undefined') return defaultData;
 
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    let stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return defaultData;
+
+    // Check if data is compressed
+    const isCompressed = localStorage.getItem(COMPRESSED_FLAG) === 'true';
+    if (isCompressed) {
+      const decompressed = LZString.decompress(stored);
+      if (!decompressed) {
+        console.error('Failed to decompress data');
+        return defaultData;
+      }
+      stored = decompressed;
+    }
 
     const data = JSON.parse(stored);
 
@@ -135,6 +190,17 @@ export function loadData(): AppData {
     // Apply decay to all topics
     data.subjects = applyDecayToSubjects(data.subjects);
 
+    // Load materials from separate storage and merge into topics
+    const materials = loadMaterials();
+    data.subjects = data.subjects.map((subject: any) => ({
+      ...subject,
+      topics: subject.topics.map((topic: any) => ({
+        ...topic,
+        // Load material from separate storage if available, fallback to topic.material (for migration)
+        material: materials[topic.id] || topic.material || ''
+      }))
+    }));
+
     // Migrate dailyStatus - remove old fields, add holiday
     const today = getTodayString();
     if (data.dailyStatus.date !== today || data.dailyStatus.holiday === undefined) {
@@ -167,7 +233,44 @@ export function saveData(data: AppData): void {
   if (typeof window === 'undefined') return;
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // Extract materials from topics and save separately
+    const materials: Record<string, string> = loadMaterials();
+
+    // Create a copy of data without materials in topics (to reduce main storage size)
+    const dataToSave = {
+      ...data,
+      subjects: data.subjects.map(subject => ({
+        ...subject,
+        topics: subject.topics.map(topic => {
+          // If topic has material, save it separately
+          if (topic.material && topic.material.length > 0) {
+            materials[topic.id] = topic.material;
+          }
+          // Return topic without material (material is loaded lazily)
+          return {
+            ...topic,
+            material: '', // Don't store in main data
+            materialImages: topic.materialImages || []
+          };
+        })
+      }))
+    };
+
+    // Save materials separately (always compressed)
+    saveMaterials(materials);
+
+    // Compress and save main data
+    const jsonString = JSON.stringify(dataToSave);
+    const compressed = LZString.compress(jsonString);
+
+    // Only use compression if it actually saves space
+    if (compressed && compressed.length < jsonString.length) {
+      localStorage.setItem(STORAGE_KEY, compressed);
+      localStorage.setItem(COMPRESSED_FLAG, 'true');
+    } else {
+      localStorage.setItem(STORAGE_KEY, jsonString);
+      localStorage.setItem(COMPRESSED_FLAG, 'false');
+    }
   } catch (error) {
     console.error('Error saving data:', error);
   }
@@ -176,4 +279,6 @@ export function saveData(data: AppData): void {
 export function clearData(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(MATERIALS_KEY);
+  localStorage.removeItem(COMPRESSED_FLAG);
 }

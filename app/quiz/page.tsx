@@ -626,160 +626,6 @@ function QuizContent() {
     }).filter(Boolean);
   };
 
-  // Multi-topic mode setup screen
-  if (isMultiMode && multiTopics.length > 0 && !showPreview && quizState.questions.length === 0) {
-    return (
-      <div className="min-h-screen p-6 space-y-6">
-        <Link href="/quiz" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm">
-          <ArrowLeft size={16} /> Назад
-        </Link>
-
-        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-2xl">
-          <div className="flex items-center gap-3 mb-6">
-            <Brain size={24} className="text-purple-400" />
-            <div>
-              <h2 className="text-lg font-semibold text-slate-100 font-mono">Mix Quiz: {multiTopics.length} теми</h2>
-              <p className="text-sm text-slate-400 font-mono">Въпросите ще бъдат смесени от всички теми</p>
-            </div>
-          </div>
-
-          {/* Selected topics */}
-          <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
-            <div className="space-y-2">
-              {multiTopics.map(({ topic: t, subject: s }) => (
-                <div key={t.id} className="flex items-center gap-2 text-sm font-mono">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                  <span className="text-slate-300">#{t.number}</span>
-                  <span className="text-slate-200 truncate" title={t.name}>
-                    {t.name.length > 40 ? t.name.slice(0, 40) + '...' : t.name}
-                  </span>
-                  <span className="text-slate-500 text-xs ml-auto">Bloom {t.currentBloomLevel || 1}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {quizState.error && (
-            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              {quizState.error === 'API_KEY_MISSING' ? (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle size={18} className="text-amber-400" />
-                    <span className="text-amber-400 font-mono text-sm">Нужен е API ключ</span>
-                  </div>
-                  <Link href="/settings" className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg font-mono text-sm">
-                    <Settings size={14} /> Настройки
-                  </Link>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
-                  <AlertCircle size={18} /> {quizState.error}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Mode Selection - simplified for multi-topic */}
-          <div className="mb-6">
-            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider">Избери режим</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setMode('assessment')}
-                className={`p-4 rounded-xl border text-left transition-all ${
-                  mode === 'assessment' ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                }`}
-              >
-                <TrendingUp size={20} className={mode === 'assessment' ? 'text-amber-400' : 'text-slate-400'} />
-                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'assessment' ? 'text-amber-400' : 'text-slate-300'}`}>
-                  Assessment
-                </span>
-                <span className="text-xs text-slate-500 font-mono">Всички Bloom нива</span>
-              </button>
-
-              <button
-                onClick={() => setMode('mid_order')}
-                className={`p-4 rounded-xl border text-left transition-all ${
-                  mode === 'mid_order' ? 'bg-blue-500/20 border-blue-500 ring-2 ring-blue-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                }`}
-              >
-                <Zap size={20} className={mode === 'mid_order' ? 'text-blue-400' : 'text-slate-400'} />
-                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'mid_order' ? 'text-blue-400' : 'text-slate-300'}`}>
-                  Mid-Order
-                </span>
-                <span className="text-xs text-slate-500 font-mono">Apply, Analyze</span>
-              </button>
-
-              <button
-                onClick={() => setMode('higher_order')}
-                className={`p-4 rounded-xl border text-left transition-all ${
-                  mode === 'higher_order' ? 'bg-pink-500/20 border-pink-500 ring-2 ring-pink-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                }`}
-              >
-                <Brain size={20} className={mode === 'higher_order' ? 'text-pink-400' : 'text-slate-400'} />
-                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'higher_order' ? 'text-pink-400' : 'text-slate-300'}`}>
-                  Higher-Order
-                </span>
-                <span className="text-xs text-slate-500 font-mono">Evaluate, Create</span>
-              </button>
-
-              <button
-                onClick={() => setMode('gap_analysis')}
-                className={`p-4 rounded-xl border text-left transition-all ${
-                  mode === 'gap_analysis' ? 'bg-red-500/20 border-red-500 ring-2 ring-red-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                }`}
-              >
-                <Target size={20} className={mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-400'} />
-                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-300'}`}>
-                  Gap Analysis
-                </span>
-                <span className="text-xs text-slate-500 font-mono">Слаби места</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Quiz Length */}
-          {mode && (
-            <div className="mb-6">
-              <label className="block text-xs text-slate-500 mb-2 font-mono uppercase tracking-wider">
-                Дължина
-              </label>
-              <div className="grid grid-cols-4 gap-2">
-                {(Object.keys(QUIZ_LENGTH_PRESETS) as QuizLengthPreset[]).map(preset => {
-                  const config = QUIZ_LENGTH_PRESETS[preset];
-                  return (
-                    <button
-                      key={preset}
-                      onClick={() => setQuizLength(preset)}
-                      className={`p-2 rounded-lg border text-center transition-all ${
-                        quizLength === preset
-                          ? 'bg-purple-500/20 border-purple-500'
-                          : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                      }`}
-                    >
-                      <span className={`block font-mono text-sm ${quizLength === preset ? 'text-purple-300' : 'text-slate-300'}`}>
-                        {config.label}
-                      </span>
-                      <span className="text-xs text-slate-500 font-mono">{config.questions}q</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Start Button */}
-          <button
-            onClick={openPreview}
-            disabled={!mode}
-            className="w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all"
-          >
-            <Settings size={20} /> Преглед и редакция
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   // No topic selected - show simple topic selection (skip if multi-topic mode or showing preview)
   if ((!subject || !topic) && !isMultiMode && !showPreview) {
     return (
@@ -1379,13 +1225,41 @@ function QuizContent() {
       </Link>
 
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-2xl">
-        <div className="flex items-center gap-3 mb-6">
-          <Brain size={24} className="text-pink-400" />
-          <div>
-            <h2 className="text-lg font-semibold text-slate-100 font-mono">{topic?.name}</h2>
-            <p className="text-sm font-mono" style={{ color: subject?.color }}>{subject?.name}</p>
+        {/* Header - different for single vs multi-topic */}
+        {isMultiMode && multiTopics.length > 0 ? (
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-4">
+              <Brain size={24} className="text-purple-400" />
+              <div>
+                <h2 className="text-lg font-semibold text-slate-100 font-mono">Mix Quiz: {multiTopics.length} теми</h2>
+                <p className="text-sm text-slate-400 font-mono">Въпросите ще бъдат смесени от всички теми</p>
+              </div>
+            </div>
+            {/* Selected topics list */}
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {multiTopics.map(({ topic: t, subject: s }) => (
+                  <div key={t.id} className="flex items-center gap-2 text-sm font-mono">
+                    <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="text-slate-300 shrink-0">#{t.number}</span>
+                    <span className="text-slate-200 truncate" title={t.name}>
+                      {t.name.length > 40 ? t.name.slice(0, 40) + '...' : t.name}
+                    </span>
+                    <span className="text-slate-500 text-xs ml-auto shrink-0">Bloom {t.currentBloomLevel || 1}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3 mb-6">
+            <Brain size={24} className="text-pink-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100 font-mono">{topic?.name}</h2>
+              <p className="text-sm font-mono" style={{ color: subject?.color }}>{subject?.name}</p>
+            </div>
+          </div>
+        )}
 
         {quizState.error && (
           <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -1407,8 +1281,8 @@ function QuizContent() {
           </div>
         )}
 
-        {/* AI Recommendation Banner */}
-        {aiRecommendation && (
+        {/* AI Recommendation Banner - only for single topic */}
+        {aiRecommendation && !isMultiMode && (
           <div className="mb-6 p-4 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl">
             <div className="flex items-center gap-2 mb-1">
               <Sparkles size={18} className="text-purple-400" />
@@ -1437,19 +1311,21 @@ function QuizContent() {
               <span className="text-xs text-slate-500 font-mono">Всички Bloom нива</span>
             </button>
 
-            {/* Free Recall */}
-            <button
-              onClick={() => { setMode('free_recall'); setShowCustomOptions(false); }}
-              className={`p-4 rounded-xl border text-left transition-all ${
-                mode === 'free_recall' ? 'bg-emerald-500/20 border-emerald-500 ring-2 ring-emerald-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-              }`}
-            >
-              <FileText size={20} className={mode === 'free_recall' ? 'text-emerald-400' : 'text-slate-400'} />
-              <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'free_recall' ? 'text-emerald-400' : 'text-slate-300'}`}>
-                Free Recall
-              </span>
-              <span className="text-xs text-slate-500 font-mono">Пиши → AI оценява</span>
-            </button>
+            {/* Free Recall - only for single topic */}
+            {!isMultiMode && (
+              <button
+                onClick={() => { setMode('free_recall'); setShowCustomOptions(false); }}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'free_recall' ? 'bg-emerald-500/20 border-emerald-500 ring-2 ring-emerald-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <FileText size={20} className={mode === 'free_recall' ? 'text-emerald-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'free_recall' ? 'text-emerald-400' : 'text-slate-300'}`}>
+                  Free Recall
+                </span>
+                <span className="text-xs text-slate-500 font-mono">Пиши → AI оценява</span>
+              </button>
+            )}
 
             {/* Mid-Order */}
             <button
@@ -1602,7 +1478,11 @@ function QuizContent() {
         {/* Start Button */}
         <button
           onClick={mode === 'free_recall' ? () => {} : openPreview}
-          disabled={quizState.isGenerating || (!topic?.material && mode !== 'free_recall') || !mode}
+          disabled={
+            quizState.isGenerating ||
+            !mode ||
+            (isMultiMode ? multiTopics.length === 0 : (!topic?.material && mode !== 'free_recall'))
+          }
           className={`w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 ${
             mode === 'free_recall'
               ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'

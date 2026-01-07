@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, userProgress, timerSessions, dailyStatus, type, apiKey } = await request.json();
+    const { subjects, userProgress, timerSessions, dailyStatus, type, apiKey, studyGoals } = await request.json();
 
     if (!apiKey) {
       return NextResponse.json(
@@ -87,50 +87,70 @@ export async function POST(request: NextRequest) {
     const currentHour = today.getHours();
     const currentMinute = today.getMinutes();
     const timeStr = `${currentHour}:${currentMinute.toString().padStart(2, '0')}`;
-    const hoursLeftInDay = Math.max(0, 24 - currentHour - 1); // Assume sleep at midnight
     const productiveHoursLeft = Math.max(0, 23 - currentHour); // Until 23:00
     const todayHours = Math.round(todayMinutes / 60 * 10) / 10;
 
-    // Calculate target and deficit
-    const dailyTarget = hasCriticalExam && mostUrgent?.daysUntilExam <= 3 ? 10 : hasCriticalExam ? 8 : 6;
+    // User's base daily goal (from settings, default 8 hours)
+    const isWeekend = today.getDay() === 0 || today.getDay() === 6;
+    const userDailyGoalMinutes = studyGoals?.dailyMinutes || 480;
+    const userWeekendGoalMinutes = studyGoals?.weekendDailyMinutes || userDailyGoalMinutes;
+    const baseGoalHours = Math.round((isWeekend ? userWeekendGoalMinutes : userDailyGoalMinutes) / 60);
+
+    // Dynamic daily target based on exam urgency
+    let dailyTarget = baseGoalHours;
+    let urgencyBoost = '';
+    if (hasCriticalExam && mostUrgent?.daysUntilExam <= 2) {
+      dailyTarget = Math.max(baseGoalHours, Math.round(baseGoalHours * 1.5)); // +50% for 2 days or less
+      urgencyBoost = `ИЗПИТ СЛЕД ${mostUrgent.daysUntilExam} ДНИ! Цел увеличена с 50%: ${dailyTarget}ч`;
+    } else if (hasCriticalExam && mostUrgent?.daysUntilExam <= 5) {
+      dailyTarget = Math.max(baseGoalHours, Math.round(baseGoalHours * 1.25)); // +25% for 5 days or less
+      urgencyBoost = `Изпит скоро (${mostUrgent.daysUntilExam} дни). Цел увеличена: ${dailyTarget}ч`;
+    }
+
+    // Adjust for sick/holiday (50% reduction)
+    let statusNote = '';
+    if (dailyStatus?.sick) {
+      dailyTarget = Math.round(dailyTarget * 0.5);
+      statusNote = `БОЛЕН: Намалена цел до ${dailyTarget}ч (50% от нормалното). Почивката е важна!`;
+    } else if (dailyStatus?.holiday) {
+      dailyTarget = Math.round(dailyTarget * 0.5);
+      statusNote = `ПОЧИВКА: Намалена цел до ${dailyTarget}ч (50%). Все пак учи малко!`;
+    }
+
     const hoursNeeded = Math.max(0, dailyTarget - todayHours);
-    const isLate = currentHour >= 15 && todayHours < 2;
-    const isCriticallyLate = currentHour >= 18 && todayHours < 3;
+    const isLate = currentHour >= 15 && todayHours < (dailyTarget * 0.25);
+    const isCriticallyLate = currentHour >= 18 && todayHours < (dailyTarget * 0.4);
 
     if (type === 'daily') {
       prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Говориш директно, без украшения.
 
-КОНТЕКСТ: Медицина изисква 8-12 часа учене на ден при критични изпити. Това е нормално. Push hard.
+СЕГА Е ${timeStr}! ${isWeekend ? '(уикенд)' : '(делник)'}
 
-СЕГА Е ${timeStr}!
-- Учил си днес: ${todayMinutes} минути (${todayHours} часа)
-- Оставащи продуктивни часове: ~${productiveHoursLeft}ч (до 23:00)
-- Нужни още: ${hoursNeeded}ч за да стигнеш ${dailyTarget}ч дневна цел
-${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, а си учил само ' + todayHours + 'ч!' : ''}
-${isCriticallyLate ? '- КРИТИЧНО ЗАКЪСНЕНИЕ: Ще трябва да учиш до късно!' : ''}
+СТАТИСТИКА:
+- Учил днес: ${todayMinutes} мин (${todayHours}ч)
+- Дневна цел: ${dailyTarget}ч ${baseGoalHours !== dailyTarget ? `(база ${baseGoalHours}ч, коригирана)` : ''}
+- Нужни още: ${hoursNeeded}ч
+- Оставащи часове до 23:00: ~${productiveHoursLeft}ч
+${urgencyBoost ? '- ' + urgencyBoost : ''}
+${statusNote ? '- ' + statusNote : ''}
+${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, а си учил само ' + todayHours + 'ч от ' + dailyTarget + 'ч цел!' : ''}
+${isCriticallyLate ? '- КРИТИЧНО: Ще трябва да учиш до късно за да стигнеш целта!' : ''}
 
-СЕДМИЦА: ${Math.round(weeklyMinutes / 60)} часа
-Streak: ${userProgress?.stats?.longestStreak || 0} дни
-${dailyStatus?.sick ? 'СТАТУС: БОЛЕН - намали изискванията, но продължавай леко ако можеш' : dailyStatus?.holiday ? 'СТАТУС: ПОЧИВКА - намалено натоварване но не спирай напълно' : ''}
+СЕДМИЦА: ${Math.round(weeklyMinutes / 60)}ч | Streak: ${userProgress?.stats?.longestStreak || 0} дни
 
 ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `${s.name}: ${s.touchedTopics}/${s.totalTopics} минати (${s.progressPercent}%), ${s.percentComplete}% зелени (${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'})${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
+${subjectSummaries.map((s: any) => `${s.name}: ${s.touchedTopics}/${s.totalTopics} минати (${s.progressPercent}%), ${s.percentComplete}% зелени${s.daysUntilExam !== null ? ' | ' + s.daysUntilExam + 'д до изпит' : ''}${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
 
-${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.touchedTopics}/${mostUrgent.totalTopics} минати (${mostUrgent.progressPercent}%), ${mostUrgent.percentComplete}% зелени.` : ''}
+${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.touchedTopics}/${mostUrgent.totalTopics} минати.` : ''}
 
 ИНСТРУКЦИИ:
-- Пиши ЧИСТ текст без форматиране (без **, без #, без emoji в началото на редове)
-- ЗАДЪЛЖИТЕЛНО коментирай текущия час и колко е учил - ако е следобед и е учил малко, кажи директно "${currentHour}:00 е, ${todayHours}ч не са достатъчни, започвай ВЕДНАГА"
-- Ако трябва да учи до късно за да навакса - кажи го: "ще трябва да стоиш до 1-2 през нощта"
-- Бъди ДИРЕКТЕН и АГРЕСИВЕН с времето - медицина изисква много часове
-- Ако има изпит до 3 дни - препоръчай 8-10+ часа на ден
-- Ако има изпит до 7 дни - препоръчай 6-8 часа на ден
-- АКО Е БОЛЕН: бъди по-мек, препоръчай 2-4 часа леко учене ако може, почивка е важна за възстановяване
-- АКО Е ПОЧИВКА/ПРАЗНИК: все още препоръчай учене но намалено (4-6 часа)
-- Кажи ТОЧНО кои теми да направи първо (yellow към green е най-бързо)
-- Показвай "минати" (touched) теми, не само зелени - това е по-реалистичен прогрес
-- Максимум 4-5 изречения, без списъци с точки
-- Говори като треньор, не като приятел`;
+- Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
+- Коментирай часа и прогреса спрямо ДИНАМИЧНАТА цел от ${dailyTarget}ч (не фиксирана!)
+- Ако е късно и има много за навакасване - кажи до колко часа трябва да учи
+- ${dailyStatus?.sick ? 'Студентът е БОЛЕН - бъди разбиращ но насърчи леко учене (' + dailyTarget + 'ч днес)' : dailyStatus?.holiday ? 'Студентът е в ПОЧИВКА - все пак насърчи ' + dailyTarget + 'ч учене' : 'Бъди строг и директен'}
+- Кажи ТОЧНО кои теми първо (yellow към green е най-бързо)
+- Максимум 4-5 изречения
+- Говори като треньор`;
     } else {
       // Weekly review
       prompt = `Ти си СТРОГ учебен coach за медицински студент. Прави седмичен преглед.

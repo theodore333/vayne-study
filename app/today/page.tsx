@@ -126,6 +126,7 @@ export default function TodayPage() {
           userProgress: data.userProgress,
           timerSessions: data.timerSessions,
           dailyStatus: data.dailyStatus,
+          studyGoals: data.studyGoals,
           type,
           apiKey
         })

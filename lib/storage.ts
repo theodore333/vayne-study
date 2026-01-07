@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, UserProgress, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Play, Square, Clock, Minimize2, Maximize2, Brain, Coffee, Pause, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Square, Clock, Minimize2, Maximize2, Brain, Coffee, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';

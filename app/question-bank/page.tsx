@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/context';
-import { Book, Upload, Play, Trash2, FileQuestion, CheckCircle, XCircle, BarChart3, PenLine } from 'lucide-react';
+import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import ImportQuestionsModal from '@/components/modals/ImportQuestionsModal';
 import AddQuestionModal from '@/components/modals/AddQuestionModal';

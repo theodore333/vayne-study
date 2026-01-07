@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, XCircle, ScanLine, FileType, Files, Trash2, Plus } from 'lucide-react';
+import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, CheckCircle, ScanLine, FileType, Files, Trash2, Plus } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
-import { BankQuestion, ClinicalCase, Topic } from '@/lib/types';
+import { Topic } from '@/lib/types';
 
 interface ImportQuestionsModalProps {
   subjectId: string;
@@ -36,9 +36,7 @@ interface PDFAnalysisResult {
   confidence: 'high' | 'medium' | 'low';
 }
 
-interface ExtractionWarning {
-  wasRepaired: boolean;
-}
+// ExtractionWarning interface kept for future use with wasRepaired flag
 
 export default function ImportQuestionsModal({
   subjectId,

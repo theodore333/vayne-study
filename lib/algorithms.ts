@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights, QuestionBank, CrunchModeStatus } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG } from './constants';
 
 /**
@@ -451,7 +451,7 @@ export function calculatePredictedGrade(
 
   // 2. Mastery Score - average quiz grade
   const gradedTopics = topics.filter(t => t.avgGrade !== null);
-  let avgQuizGrade = gradedTopics.length > 0
+  const avgQuizGrade = gradedTopics.length > 0
     ? gradedTopics.reduce((sum, t) => sum + (t.avgGrade || 0), 0) / gradedTopics.length
     : 3.5;
 

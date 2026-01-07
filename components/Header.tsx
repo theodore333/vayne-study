@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw, Star } from 'lucide-react';
+import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getLevelInfo, getXpForNextLevel } from '@/lib/gamification';
 import { STATUS_CONFIG } from '@/lib/constants';

@@ -148,8 +148,14 @@ function SubjectsContent() {
       }
 
       // Apply all updates
+      console.log('[ANALYZE] Updates to apply:', updates);
+      console.log('[ANALYZE] API result:', result);
+
       if (updates.length > 0) {
         batchUpdateTopicRelations(selectedSubject.id, updates);
+        console.log('[ANALYZE] Applied', updates.length, 'updates');
+      } else {
+        console.warn('[ANALYZE] No updates to apply!');
       }
 
       // Track API cost
@@ -157,7 +163,12 @@ function SubjectsContent() {
         incrementApiCalls(result.usage.cost);
       }
 
-      alert(`Анализът е готов! Намерени: ${Object.keys(result.clusters).length} клъстера, ${result.relations.length} връзки, ${result.prerequisites.length} prerequisites`);
+      // Count topics with clusters
+      const topicsWithClusters = updates.filter(u => u.cluster).length;
+      const topicsWithRelations = updates.filter(u => u.relatedTopics && u.relatedTopics.length > 0).length;
+      const topicsWithPrereqs = updates.filter(u => u.prerequisites && u.prerequisites.length > 0).length;
+
+      alert(`Анализът е готов!\n\nКлъстери: ${Object.keys(result.clusters).length} (${topicsWithClusters} теми)\nВръзки: ${result.relations.length} (${topicsWithRelations} теми)\nPrerequisites: ${result.prerequisites.length} (${topicsWithPrereqs} теми)\n\nОбновени теми: ${updates.length}`);
 
     } catch (error) {
       console.error('Analysis failed:', error);
@@ -190,7 +201,8 @@ function SubjectsContent() {
     const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
     const matchesSearch = searchQuery === '' ||
       topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      topic.number.toString().includes(searchQuery);
+      topic.number.toString().includes(searchQuery) ||
+      (topic.cluster && topic.cluster.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesStatus && matchesSearch;
   }) || [];
 
@@ -414,6 +426,40 @@ function SubjectsContent() {
                     ))}
                   </div>
                 </div>
+
+                {/* Clusters Overview - show if any topic has a cluster */}
+                {(() => {
+                  const clusters = new Map<string, number>();
+                  selectedSubject.topics.forEach(t => {
+                    if (t.cluster) {
+                      clusters.set(t.cluster, (clusters.get(t.cluster) || 0) + 1);
+                    }
+                  });
+                  if (clusters.size === 0) return null;
+                  return (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <span className="text-xs text-slate-500 font-mono self-center mr-1">Клъстери:</span>
+                      {Array.from(clusters.entries()).map(([name, count]) => (
+                        <button
+                          key={name}
+                          onClick={() => setSearchQuery(name)}
+                          className="px-2 py-1 text-xs font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/20 transition-all"
+                          title={`Филтрирай по ${name}`}
+                        >
+                          {name} ({count})
+                        </button>
+                      ))}
+                      {searchQuery && clusters.has(searchQuery) && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="px-2 py-1 text-xs font-mono bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
+                        >
+                          ✕ Изчисти филтър
+                        </button>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Topics List */}

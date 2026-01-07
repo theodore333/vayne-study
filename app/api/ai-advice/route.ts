@@ -25,6 +25,13 @@ export async function POST(request: NextRequest) {
     );
     const weeklyMinutes = weeklySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
 
+    // Today's sessions
+    const todayStr = today.toISOString().split('T')[0];
+    const todaySessions = timerSessions.filter((s: any) =>
+      s.endTime && s.startTime.startsWith(todayStr)
+    );
+    const todayMinutes = todaySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
+
     // Subject summaries
     const subjectSummaries = subjects.map((s: any) => {
       const totalTopics = s.topics.length;
@@ -75,8 +82,9 @@ export async function POST(request: NextRequest) {
 КОНТЕКСТ: Медицина изисква 8-12 часа учене на ден при критични изпити. Това е нормално. Push hard.
 
 ДАННИ:
+- Днес: ${todayMinutes} минути (${Math.round(todayMinutes / 60 * 10) / 10} часа)
+- Тази седмица: ${Math.round(weeklyMinutes / 60)} часа
 - Streak: ${userProgress?.stats?.longestStreak || 0} дни
-- Тази седмица: ${Math.round(weeklyMinutes / 60)} часа учене
 - Статус: ${dailyStatus?.sick ? 'Болен' : dailyStatus?.holiday ? 'Почивка' : 'Нормален'}
 
 ПРЕДМЕТИ:

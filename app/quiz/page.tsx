@@ -67,6 +67,10 @@ function QuizContent() {
   const [showExplanation, setShowExplanation] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
 
+  // Preview screen state
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewQuestionCount, setPreviewQuestionCount] = useState(12);
+
   // Free recall state
   const [freeRecallText, setFreeRecallText] = useState('');
   const [hintsUsed, setHintsUsed] = useState(0);
@@ -232,6 +236,15 @@ function QuizContent() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Open preview screen and set initial question count
+  const openPreview = () => {
+    const initialCount = mode === 'custom'
+      ? customQuestionCount
+      : QUIZ_LENGTH_PRESETS[quizLength].questions;
+    setPreviewQuestionCount(initialCount);
+    setShowPreview(true);
+  };
+
   const generateQuiz = async () => {
     if (!topic?.material && mode !== 'free_recall') {
       setQuizState(prev => ({ ...prev, error: 'Няма добавен материал към тази тема.' }));
@@ -247,10 +260,8 @@ function QuizContent() {
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
 
     try {
-      // Get question count from preset or custom
-      const questionCount = mode === 'custom'
-        ? customQuestionCount
-        : QUIZ_LENGTH_PRESETS[quizLength].questions;
+      // Use preview question count (user may have adjusted it)
+      const questionCount = previewQuestionCount;
 
       const response = await fetch('/api/quiz', {
         method: 'POST',
@@ -521,6 +532,7 @@ function QuizContent() {
     setHintsUsed(0);
     setQuizStartTime(null);
     setElapsedTime(0);
+    setShowPreview(false);
   };
 
   // No topic selected
@@ -928,6 +940,161 @@ function QuizContent() {
     );
   }
 
+  // Preview/Edit Screen
+  if (showPreview && !quizState.isGenerating && quizState.questions.length === 0) {
+    const getModeLabel = () => {
+      switch (mode) {
+        case 'assessment': return 'Assess My Level';
+        case 'mid_order': return 'Mid-Order (Apply/Analyze)';
+        case 'higher_order': return 'Higher-Order (Evaluate/Create)';
+        case 'gap_analysis': return 'Gap Analysis';
+        case 'custom': return `Custom (Bloom ${customBloomLevel})`;
+        default: return 'Quiz';
+      }
+    };
+
+    const getModeColor = () => {
+      switch (mode) {
+        case 'assessment': return 'amber';
+        case 'mid_order': return 'blue';
+        case 'higher_order': return 'pink';
+        case 'gap_analysis': return 'red';
+        case 'custom': return 'purple';
+        default: return 'slate';
+      }
+    };
+
+    const color = getModeColor();
+
+    return (
+      <div className="min-h-screen p-6 space-y-6">
+        <button
+          onClick={() => setShowPreview(false)}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> Обратно към настройки
+        </button>
+
+        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-lg mx-auto">
+          <div className="text-center mb-6">
+            <Brain size={40} className={`mx-auto mb-3 text-${color}-400`} />
+            <h2 className="text-xl font-bold text-slate-100 font-mono">Преглед на Quiz</h2>
+            <p className="text-sm text-slate-400 font-mono mt-1">Провери и коригирай преди старт</p>
+          </div>
+
+          {/* Summary */}
+          <div className="space-y-3 mb-6">
+            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+              <span className="text-slate-400 font-mono text-sm">Тема</span>
+              <span className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={topic.name}>
+                {topic.name}
+              </span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+              <span className="text-slate-400 font-mono text-sm">Режим</span>
+              <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
+            </div>
+            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+              <span className="text-slate-400 font-mono text-sm">Текущо Bloom ниво</span>
+              <span className="text-purple-400 font-mono text-sm">
+                {topic.currentBloomLevel || 1} - {BLOOM_LEVELS.find(b => b.level === (topic.currentBloomLevel || 1))?.name}
+              </span>
+            </div>
+          </div>
+
+          {/* Question Count Adjuster */}
+          <div className="mb-6">
+            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider text-center">
+              Брой въпроси
+            </label>
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 5))}
+                disabled={previewQuestionCount <= 3}
+                className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                -5
+              </button>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.max(1, previewQuestionCount - 1))}
+                disabled={previewQuestionCount <= 1}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                -1
+              </button>
+              <div className="w-20 text-center">
+                <span className="text-4xl font-bold text-white font-mono">{previewQuestionCount}</span>
+              </div>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 1))}
+                disabled={previewQuestionCount >= 50}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                +1
+              </button>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 5))}
+                disabled={previewQuestionCount >= 50}
+                className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                +5
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-mono text-center mt-2">
+              мин: 3 | макс: 50
+            </p>
+          </div>
+
+          {/* Quick presets */}
+          <div className="flex justify-center gap-2 mb-6">
+            {[5, 10, 15, 20, 30].map(n => (
+              <button
+                key={n}
+                onClick={() => setPreviewQuestionCount(n)}
+                className={`px-3 py-1.5 rounded-lg font-mono text-sm transition-all ${
+                  previewQuestionCount === n
+                    ? 'bg-purple-500/30 border border-purple-500 text-purple-300'
+                    : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+
+          {quizState.error && (
+            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
+                <AlertCircle size={16} /> {quizState.error}
+              </div>
+            </div>
+          )}
+
+          {/* Start Button */}
+          <button
+            onClick={generateQuiz}
+            disabled={quizState.isGenerating}
+            className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all ${
+              mode === 'gap_analysis'
+                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
+                : mode === 'mid_order'
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'
+                  : mode === 'higher_order'
+                    ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500'
+                    : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500'
+            }`}
+          >
+            {quizState.isGenerating ? (
+              <><RefreshCw size={20} className="animate-spin" /> Генериране...</>
+            ) : (
+              <><Play size={20} /> Старт Quiz ({previewQuestionCount} въпроса)</>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // Setup Screen
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -1158,7 +1325,7 @@ function QuizContent() {
 
         {/* Start Button */}
         <button
-          onClick={mode === 'free_recall' ? () => {} : generateQuiz}
+          onClick={mode === 'free_recall' ? () => {} : openPreview}
           disabled={quizState.isGenerating || (!topic.material && mode !== 'free_recall') || !mode}
           className={`w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 ${
             mode === 'free_recall'
@@ -1172,12 +1339,10 @@ function QuizContent() {
                     : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white'
           }`}
         >
-          {quizState.isGenerating ? (
-            <><RefreshCw size={20} className="animate-spin" /> AI генерира въпроси...</>
-          ) : mode === 'free_recall' ? (
+          {mode === 'free_recall' ? (
             <><FileText size={20} /> Започни Free Recall</>
           ) : (
-            <><Play size={20} /> Генерирай Quiz</>
+            <><Settings size={20} /> Преглед и редакция</>
           )}
         </button>
       </div>

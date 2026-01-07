@@ -27,6 +27,7 @@ export default function TimerPage() {
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>('work');
   const [pomodoroCount, setPomodoroCount] = useState(0);
   const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(0);
+  const [pomodoroEndTime, setPomodoroEndTime] = useState<number | null>(null); // When current phase ends
 
   // UI state
   const [showSettings, setShowSettings] = useState(false);
@@ -76,22 +77,28 @@ export default function TimerPage() {
     return () => clearInterval(interval);
   }, [isRunning, timerMode, activeSession]);
 
-  // Pomodoro timer tick
+  // Pomodoro timer tick - uses actual time to survive background throttling
   useEffect(() => {
-    if (!isRunning || timerMode !== 'pomodoro') return;
+    if (!isRunning || timerMode !== 'pomodoro' || !pomodoroEndTime) return;
 
-    const interval = setInterval(() => {
-      setPomodoroTimeLeft(prev => {
-        if (prev <= 1) {
-          handlePomodoroComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const updateTimer = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((pomodoroEndTime - now) / 1000));
+      setPomodoroTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        handlePomodoroComplete();
+      }
+    };
+
+    // Update immediately
+    updateTimer();
+
+    // Then update every 100ms for smoother display (catches up when tab becomes active)
+    const interval = setInterval(updateTimer, 100);
 
     return () => clearInterval(interval);
-  }, [isRunning, timerMode]);
+  }, [isRunning, timerMode, pomodoroEndTime]);
 
   const playSound = useCallback(() => {
     if (!settings.soundEnabled) return;
@@ -122,22 +129,30 @@ export default function TimerPage() {
 
   const handlePomodoroComplete = useCallback(() => {
     playSound();
+    setPomodoroEndTime(null);
     setIsRunning(false);
+
     if (pomodoroPhase === 'work') {
       const newCount = pomodoroCount + 1;
       setPomodoroCount(newCount);
-      if (newCount % settings.longBreakAfter === 0) {
-        setPomodoroPhase('longBreak');
-        setPomodoroTimeLeft(settings.longBreakDuration * 60);
-      } else {
-        setPomodoroPhase('shortBreak');
-        setPomodoroTimeLeft(settings.shortBreakDuration * 60);
+      const isLongBreak = newCount % settings.longBreakAfter === 0;
+      const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
+
+      setPomodoroPhase(isLongBreak ? 'longBreak' : 'shortBreak');
+      setPomodoroTimeLeft(breakDuration * 60);
+
+      if (settings.autoStartBreaks) {
+        setPomodoroEndTime(Date.now() + breakDuration * 60 * 1000);
+        setIsRunning(true);
       }
-      if (settings.autoStartBreaks) setIsRunning(true);
     } else {
       setPomodoroPhase('work');
       setPomodoroTimeLeft(settings.workDuration * 60);
-      if (settings.autoStartWork) setIsRunning(true);
+
+      if (settings.autoStartWork) {
+        setPomodoroEndTime(Date.now() + settings.workDuration * 60 * 1000);
+        setIsRunning(true);
+      }
     }
   }, [pomodoroPhase, pomodoroCount, settings, playSound]);
 
@@ -146,17 +161,31 @@ export default function TimerPage() {
       if (!selectedSubject) return;
       startTimer(selectedSubject, selectedTopic);
     }
+    if (timerMode === 'pomodoro') {
+      // Set end time based on current remaining time
+      const duration = pomodoroTimeLeft > 0 ? pomodoroTimeLeft : (
+        pomodoroPhase === 'work' ? settings.workDuration * 60 :
+        pomodoroPhase === 'shortBreak' ? settings.shortBreakDuration * 60 :
+        settings.longBreakDuration * 60
+      );
+      setPomodoroEndTime(Date.now() + duration * 1000);
+    }
     setIsRunning(true);
     setElapsed(0);
   };
 
-  const handlePause = () => setIsRunning(false);
+  const handlePause = () => {
+    // pomodoroTimeLeft is already updated by the timer tick, so just stop
+    setPomodoroEndTime(null);
+    setIsRunning(false);
+  };
 
   const handleStop = () => {
     if (timerMode === 'normal') {
       setShowRating(true);
     } else {
       setIsRunning(false);
+      setPomodoroEndTime(null);
       setPomodoroPhase('work');
       setPomodoroTimeLeft(settings.workDuration * 60);
       setPomodoroCount(0);
@@ -174,11 +203,13 @@ export default function TimerPage() {
   const handleSkipBreak = () => {
     setPomodoroPhase('work');
     setPomodoroTimeLeft(settings.workDuration * 60);
+    setPomodoroEndTime(null);
     setIsRunning(false);
   };
 
   const handleReset = () => {
     setIsRunning(false);
+    setPomodoroEndTime(null);
     setPomodoroPhase('work');
     setPomodoroTimeLeft(settings.workDuration * 60);
     setPomodoroCount(0);

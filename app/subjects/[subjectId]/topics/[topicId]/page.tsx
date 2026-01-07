@@ -30,12 +30,90 @@ export default function TopicDetailPage() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
+  const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
 
   // Load API key
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);
   }, []);
+
+  // Handle paste event for screenshots
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+      if (imageItems.length === 0) return;
+
+      e.preventDefault();
+
+      for (const item of imageItems) {
+        const file = item.getAsFile();
+        if (!file) continue;
+
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const base64 = e.target?.result as string;
+          setPastedImages(prev => [...prev, base64]);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, []);
+
+  // Process pasted images with AI
+  const processPastedImages = async () => {
+    if (pastedImages.length === 0 || !apiKey || !topic || !subject) return;
+
+    setIsExtracting(true);
+    setExtractError(null);
+
+    try {
+      // Convert base64 images to blobs and send
+      const response = await fetch('/api/extract-material', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          images: pastedImages,
+          apiKey,
+          topicName: topic.name,
+          subjectName: subject.name,
+          existingMaterial: material
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setExtractError(result.error || 'Грешка при извличане');
+        return;
+      }
+
+      // Append extracted material
+      if (material.trim()) {
+        setMaterial(prev => prev + '\n\n--- Добавено от screenshot ---\n\n' + result.text);
+      } else {
+        setMaterial(result.text);
+      }
+      setMaterialSaved(false);
+      setPastedImages([]); // Clear after processing
+
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : 'Грешка');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const clearPastedImages = () => {
+    setPastedImages([]);
+  };
 
   useEffect(() => {
     if (topic) {
@@ -255,10 +333,54 @@ export default function TopicDetailPage() {
               </div>
             )}
 
+            {/* Pasted Images Preview */}
+            {pastedImages.length > 0 && (
+              <div className="mb-3 p-3 bg-cyan-900/20 border border-cyan-700/30 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-cyan-300 font-mono">
+                    {pastedImages.length} {pastedImages.length === 1 ? 'снимка' : 'снимки'} готови за обработка
+                  </p>
+                  <button
+                    onClick={clearPastedImages}
+                    className="text-xs text-slate-400 hover:text-slate-200 font-mono"
+                  >
+                    Изчисти
+                  </button>
+                </div>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {pastedImages.map((img, i) => (
+                    <img
+                      key={i}
+                      src={img}
+                      alt={`Pasted ${i + 1}`}
+                      className="h-20 w-auto rounded border border-cyan-700/50 object-cover"
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={processPastedImages}
+                  disabled={!apiKey || isExtracting}
+                  className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-mono text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isExtracting ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Извличане...
+                    </>
+                  ) : (
+                    <>
+                      <Brain size={14} />
+                      Извлечи текст от снимките
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
             <textarea
               value={material}
               onChange={(e) => handleMaterialChange(e.target.value)}
-              placeholder="Постави текст от учебник, лекции или бележки тук...&#10;&#10;Или натисни 'Качи PDF' за автоматично извличане от документ."
+              placeholder="Постави текст от учебник, лекции или бележки тук...&#10;&#10;💡 Съвети:&#10;• Ctrl+V - пействай screenshot директно&#10;• 'Качи PDF' - за PDF документи"
               className="w-full h-64 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"
             />
 

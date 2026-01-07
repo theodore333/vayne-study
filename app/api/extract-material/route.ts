@@ -6,57 +6,103 @@ export async function POST(request: Request) {
   console.log('[EXTRACT-MATERIAL] === REQUEST STARTED ===');
 
   try {
-    const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const apiKey = formData.get('apiKey') as string;
-    const topicName = formData.get('topicName') as string;
-    const subjectName = formData.get('subjectName') as string;
-    const existingMaterial = formData.get('existingMaterial') as string || '';
+    const contentType = request.headers.get('content-type') || '';
+    let apiKey: string;
+    let topicName: string;
+    let subjectName: string;
+    let existingMaterial: string = '';
+    const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
 
-    console.log('[EXTRACT-MATERIAL] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+    // Handle JSON body (pasted images) or FormData (file upload)
+    if (contentType.includes('application/json')) {
+      // Pasted images as base64
+      const body = await request.json();
+      apiKey = body.apiKey;
+      topicName = body.topicName;
+      subjectName = body.subjectName;
+      existingMaterial = body.existingMaterial || '';
+      const images: string[] = body.images || [];
 
-    if (!file || !apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.log('[EXTRACT-MATERIAL] Pasted images count:', images.length);
+
+      if (!images.length || !apiKey) {
+        return new Response(JSON.stringify({ error: 'Missing images or API key' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Add each image to content
+      for (const imgData of images) {
+        // Extract base64 data and media type from data URL
+        const match = imgData.match(/^data:(image\/\w+);base64,(.+)$/);
+        if (!match) continue;
+
+        const mediaType = match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+        const base64 = match[2];
+
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: base64
+          }
+        });
+      }
+    } else {
+      // FormData - file upload
+      const formData = await request.formData();
+      const file = formData.get('file') as File;
+      apiKey = formData.get('apiKey') as string;
+      topicName = formData.get('topicName') as string;
+      subjectName = formData.get('subjectName') as string;
+      existingMaterial = formData.get('existingMaterial') as string || '';
+
+      console.log('[EXTRACT-MATERIAL] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+
+      if (!file || !apiKey) {
+        return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      const fileBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(fileBuffer);
+      const base64 = buffer.toString('base64');
+
+      console.log('[EXTRACT-MATERIAL] Base64 size:', Math.round(base64.length / 1024), 'KB');
+
+      const isPDF = file.type === 'application/pdf';
+
+      if (isPDF) {
+        content.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: base64
+          }
+        });
+      } else {
+        let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
+        if (file.type === 'image/png') mediaType = 'image/png';
+        else if (file.type === 'image/gif') mediaType = 'image/gif';
+        else if (file.type === 'image/webp') mediaType = 'image/webp';
+
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: base64
+          }
+        });
+      }
     }
 
     const anthropic = new Anthropic({ apiKey });
-
-    const fileBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(fileBuffer);
-    const base64 = buffer.toString('base64');
-
-    console.log('[EXTRACT-MATERIAL] Base64 size:', Math.round(base64.length / 1024), 'KB');
-
-    const isPDF = file.type === 'application/pdf';
-    const content: Anthropic.MessageCreateParams['messages'][0]['content'] = [];
-
-    if (isPDF) {
-      content.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: base64
-        }
-      });
-    } else {
-      let mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp' = 'image/jpeg';
-      if (file.type === 'image/png') mediaType = 'image/png';
-      else if (file.type === 'image/gif') mediaType = 'image/gif';
-      else if (file.type === 'image/webp') mediaType = 'image/webp';
-
-      content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: mediaType,
-          data: base64
-        }
-      });
-    }
 
     const appendMode = existingMaterial.trim().length > 0;
 

@@ -427,7 +427,7 @@ function SubjectsContent() {
                   </div>
                 </div>
 
-                {/* Clusters Overview - show if any topic has a cluster */}
+                {/* Clusters Overview - show clusters with 3+ topics */}
                 {(() => {
                   const clusters = new Map<string, number>();
                   selectedSubject.topics.forEach(t => {
@@ -435,26 +435,35 @@ function SubjectsContent() {
                       clusters.set(t.cluster, (clusters.get(t.cluster) || 0) + 1);
                     }
                   });
-                  if (clusters.size === 0) return null;
+                  // Only show clusters with 3+ topics
+                  const significantClusters = Array.from(clusters.entries())
+                    .filter(([, count]) => count >= 3)
+                    .sort((a, b) => b[1] - a[1]); // Sort by count descending
+
+                  if (significantClusters.length === 0) return null;
                   return (
                     <div className="mt-4 flex flex-wrap gap-2">
                       <span className="text-xs text-slate-500 font-mono self-center mr-1">Клъстери:</span>
-                      {Array.from(clusters.entries()).map(([name, count]) => (
+                      {significantClusters.map(([name, count]) => (
                         <button
                           key={name}
                           onClick={() => setSearchQuery(name)}
-                          className="px-2 py-1 text-xs font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/20 transition-all"
+                          className={`px-2 py-1 text-xs font-mono border rounded-lg transition-all ${
+                            searchQuery.toLowerCase() === name.toLowerCase()
+                              ? 'bg-cyan-500/30 text-cyan-300 border-cyan-400/50'
+                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20'
+                          }`}
                           title={`Филтрирай по ${name}`}
                         >
                           {name} ({count})
                         </button>
                       ))}
-                      {searchQuery && clusters.has(searchQuery) && (
+                      {searchQuery && (
                         <button
                           onClick={() => setSearchQuery('')}
                           className="px-2 py-1 text-xs font-mono bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
                         >
-                          ✕ Изчисти филтър
+                          ✕ Изчисти
                         </button>
                       )}
                     </div>
@@ -560,6 +569,22 @@ function SubjectsContent() {
                                     {topic.cluster}
                                   </span>
                                 )}
+                                {/* Prerequisites Indicator */}
+                                {topic.prerequisites && topic.prerequisites.length > 0 && (() => {
+                                  const prereqTopics = topic.prerequisites
+                                    .map(id => selectedSubject.topics.find(t => t.id === id))
+                                    .filter(Boolean);
+                                  const unmetPrereqs = prereqTopics.filter(t => t && t.status !== 'green' && t.status !== 'yellow');
+                                  if (unmetPrereqs.length === 0) return null;
+                                  return (
+                                    <span
+                                      className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                                      title={`Първо научи: ${unmetPrereqs.map(t => t?.name).join(', ')}`}
+                                    >
+                                      ⚠️ {unmetPrereqs.length} prereq
+                                    </span>
+                                  );
+                                })()}
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
                                 {(topic.readCount || 0) > 0 && (

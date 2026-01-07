@@ -126,16 +126,20 @@ export default function FloatingTimer() {
   };
 
   // Don't render if no active timer or on timer page
-  const hasPomodoro = pomodoroState !== null;
-  const hasNormalTimer = activeSession !== null;
+  // Pomodoro: must have state AND time remaining
+  const hasPomodoro = pomodoroState !== null && pomodoroTimeLeft > 0;
+  // Normal timer: must have active session AND have been running for at least 1 second
+  const hasNormalTimer = activeSession !== null && elapsed > 0;
 
-  // Reset hidden state when timer stops
+  // Reset hidden/minimized state when all timers stop
   useEffect(() => {
     if (!hasPomodoro && !hasNormalTimer) {
       setIsHidden(false);
+      setIsMinimized(false);
     }
   }, [hasPomodoro, hasNormalTimer]);
 
+  // Don't show if nothing is actually running
   if (isTimerPage || isHidden || (!hasPomodoro && !hasNormalTimer)) return null;
 
   const subject = activeSession ? data.subjects.find(s => s.id === activeSession.subjectId) : null;

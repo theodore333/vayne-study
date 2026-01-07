@@ -221,31 +221,32 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
           <div className="flex flex-col items-center gap-1 pb-3 border-b border-stone-200 w-full">
             <Type size={16} className="text-stone-400 mb-1" />
             <button
-              onClick={() => setFontSize(Math.max(14, fontSize - 2))}
-              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
-            >
-              <Minus size={14} />
-            </button>
-            <span className="text-xs text-stone-500 font-mono">{fontSize}</span>
-            <button
               onClick={() => setFontSize(Math.min(28, fontSize + 2))}
               className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
             >
               <Plus size={14} />
             </button>
+            <span className="text-xs text-stone-500 font-mono">{fontSize}</span>
+            <button
+              onClick={() => setFontSize(Math.max(14, fontSize - 2))}
+              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
+            >
+              <Minus size={14} />
+            </button>
           </div>
 
-          {/* Highlight colors */}
+          {/* Highlight colors - using inline styles to prevent Tailwind purge */}
           <div className="flex flex-col items-center gap-2 py-3 border-b border-stone-200 w-full">
             <Highlighter size={16} className="text-stone-400 mb-1" />
-            {HIGHLIGHT_COLORS.map(({ color, bgClass }) => (
+            {HIGHLIGHT_COLORS.map(({ color, bg }) => (
               <button
                 key={color}
                 onClick={() => {
                   setSelectedColor(color);
                   if (selectionInfo) addHighlight(color);
                 }}
-                className={`w-8 h-8 rounded-lg ${bgClass} border-2 transition-all hover:scale-110 ${
+                style={{ backgroundColor: bg }}
+                className={`w-8 h-8 rounded-lg border-2 transition-all hover:scale-110 ${
                   selectedColor === color ? 'border-stone-600 ring-2 ring-stone-400' : 'border-stone-300'
                 }`}
                 title={`Маркирай ${color}`}
@@ -253,22 +254,11 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
             ))}
           </div>
 
-          {/* Highlight count */}
+          {/* Highlight count - no delete all button, delete individual from sidebar */}
           {highlights.length > 0 && (
-            <div className="flex flex-col items-center gap-1 py-2">
+            <div className="flex flex-col items-center py-2">
               <span className="text-xs text-stone-400">{highlights.length}</span>
-              <button
-                onClick={() => {
-                  if (confirm('Изтрий всички маркирания?')) {
-                    setHighlights([]);
-                    onSaveHighlights([]);
-                  }
-                }}
-                className="p-2 text-stone-400 hover:text-red-500 transition-colors"
-                title="Изчисти всички"
-              >
-                <Trash2 size={16} />
-              </button>
+              <span className="text-[10px] text-stone-300">маркирани</span>
             </div>
           )}
         </aside>
@@ -377,11 +367,12 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
           }}
         >
           <span className="text-xs text-stone-500 mr-1">Маркирай:</span>
-          {HIGHLIGHT_COLORS.map(({ color, bgClass, name }) => (
+          {HIGHLIGHT_COLORS.map(({ color, bg, name }) => (
             <button
               key={color}
               onClick={() => addHighlight(color)}
-              className={`w-7 h-7 rounded ${bgClass} hover:scale-110 transition-transform border ${
+              style={{ backgroundColor: bg }}
+              className={`w-7 h-7 rounded hover:scale-110 transition-transform border ${
                 selectedColor === color ? 'border-stone-600' : 'border-stone-300'
               }`}
               title={name}

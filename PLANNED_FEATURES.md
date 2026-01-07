@@ -340,3 +340,395 @@ function generateSessionPlan(
 
 *Документ създаден: Януари 2025*
 *За имплементация: Преди лятна сесия 2025*
+
+---
+---
+
+## Smart Scheduling & Prioritization - Priority: HIGH
+
+### Overview
+
+Интелигентна система за приоритизиране на теми, базирана на:
+1. **Topic Size** - класификация на теми по дължина (small/medium/long)
+2. **Topic Relations** - групиране на свързани теми за по-ефективно учене
+3. **Crunch Mode** - автоматичен режим при time pressure, приоритизиращ кратки теми
+
+**Ключова идея:** При изпити със случаен избор на теми, по-добре е да знаеш 10 кратки теми отколкото 3 дълги.
+
+---
+
+### Feature 1: Topic Size Classification
+
+#### Когато се задава?
+- **Автоматично** при import/extract на материал - AI анализира и класифицира
+- **Ръчно** - потребителят може да промени ако не е съгласен с AI
+
+#### Категории
+```
+small:  Кратка тема, 15-25 мин за научаване
+medium: Средна тема, 30-45 мин за научаване
+large:  Дълга/сложна тема, 60+ мин за научаване
+```
+
+#### AI Classification Prompt (при extract-material)
+```
+Анализирай материала и определи размера на темата:
+- small: Малко съдържание, 1-2 основни концепции, лесно за запомняне
+- medium: Умерено съдържание, 3-5 концепции, нужен е преговор
+- large: Много съдържание, 6+ концепции, сложни взаимовръзки
+
+Върни JSON: { "size": "small" | "medium" | "large" }
+```
+
+#### Data Model
+```typescript
+// В Topic type добави:
+interface Topic {
+  // ... existing fields
+  size: 'small' | 'medium' | 'large' | null;  // null = не е класифицирано
+  sizeSetBy: 'ai' | 'user' | null;            // кой е задал размера
+}
+```
+
+#### UI
+- В Topic Detail: показва badge "S" / "M" / "L" до името
+- Dropdown за ръчна промяна
+- При extract: показва AI suggestion с опция за override
+
+---
+
+### Feature 2: Topic Relations (Clustering)
+
+#### Когато се задава?
+1. **При import** - AI автоматично тагва related topics от същия предмет
+2. **Batch Analysis** - бутон "Анализирай връзки" за цял предмет/конспект
+
+#### Какво прави?
+- Групира теми със споделен материал (напр. всички теми за бели дробове → "Пулмология")
+- Идентифицира prerequisite връзки (Тема B изисква знание от Тема A)
+- Scheduler слага свързани теми в един ден за по-бързо учене
+
+#### Data Model
+```typescript
+// В Topic type добави:
+interface Topic {
+  // ... existing fields
+  relatedTopics: string[];     // Topic IDs на свързани теми
+  cluster: string | null;      // Име на групата (напр. "Пулмология")
+  prerequisites: string[];     // Topic IDs които трябва да се научат първо
+}
+
+// Или отделна структура за по-сложни връзки:
+interface TopicRelation {
+  topicId: string;
+  relatedTopicId: string;
+  relationType: 'similar' | 'prerequisite' | 'same-cluster';
+  strength: number;            // 0-1, колко силна е връзката
+}
+```
+
+#### AI Analysis Prompt (batch)
+```
+Анализирай следните теми от предмет "${subjectName}":
+${topicNames.join('\n')}
+
+За всяка тема определи:
+1. cluster: Група/категория (напр. "Пулмология", "Кардиология")
+2. relatedTopics: Кои други теми са свързани (споделят концепции)
+3. prerequisites: Кои теми трябва да се научат ПРЕДИ тази
+
+Върни JSON масив с резултати.
+```
+
+#### UI
+- В Subjects page: визуализация на clusters (grouped view)
+- Topic Detail: секция "Свързани теми" с линкове
+- При Batch Analysis: progress indicator + preview на резултати
+
+#### Scheduler Integration
+```
+При генериране на дневен план:
+
+1. Вземи приоритетните теми за деня
+2. Групирай ги по cluster
+3. Ако две теми са related И се събират в един ден:
+   → Сложи ги последователно
+   → Показва: "Тема X + Тема Y (свързани, учи заедно)"
+
+Пример:
+  Ден 1: Генни мутации → Хромозомни аберации (related)
+  Ден 2: ДНК репарация → Генетични болести (related)
+
+  ВМЕСТО:
+  Ден 1: Генни мутации → Популационна генетика (unrelated)
+```
+
+---
+
+### Feature 3: Crunch Mode
+
+#### Кога се активира?
+
+```typescript
+const isCrunchMode = (
+  workloadPerDay > 5  // Много работа
+  ||
+  (daysUntilExam < 7 && workloadPerDay > 3)  // Скоро + умерено натоварен
+);
+```
+
+**Thresholds:**
+- `workloadPerDay > 5 units` → CRUNCH (независимо от времето)
+- `daysUntilExam < 7 AND workloadPerDay > 3 units` → CRUNCH (скоро + натоварен)
+
+#### Какво се променя в Crunch Mode?
+
+```typescript
+// НОРМАЛЕН режим:
+priority = decayScore + weightedStatus;
+
+// CRUNCH режим (за СИВИ теми):
+priority = decayScore + weightedStatus + sizeBonus;
+
+const sizeBonus = {
+  'small': 3,   // Кратките получават голям бонус
+  'medium': 1,  // Средните - малък бонус
+  'large': 0    // Дългите - без бонус
+};
+
+// Резултат: Кратките сиви теми изплуват нагоре в приоритета
+```
+
+#### Логика
+```
+При случаен изпит + малко време:
+  → По-добре да покриеш 10 кратки теми
+  → Отколкото да научиш 3 дълги перфектно
+  → Защото шансът да изтеглиш позната тема е по-голям
+```
+
+#### UI Indicators
+
+**Today Page (при активен Crunch Mode):**
+```
+┌─────────────────────────────────────────────────────┐
+│ ⚡ CRUNCH MODE                                       │
+│    5.2 units/ден | Изпит след 4 дни                │
+│    Приоритет: кратки непокрити теми                │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ Препоръчани днес:                                  │
+│ 🟢 S  Тема X ────────────────────── свързана с Y   │
+│ 🟢 S  Тема Y ────────────────────── свързана с X   │
+│ 🟡 M  Тема Z                                        │
+│ ⚪ L  Тема W ────────────────────── ако остане време│
+│                                                     │
+│ Стратегия: Мини първо кратките (S), после средните │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+**Size Badges:**
+```
+🟢 S = Small (кратка)
+🟡 M = Medium (средна)
+🔴 L = Large (дълга)
+```
+
+**AI Advice Integration:**
+```
+При crunch mode, AI получава:
+- isCrunchMode: true
+- workloadPerDay: 5.2
+- topicsBySize: { small: 15, medium: 20, large: 10 }
+
+AI може да каже:
+"CRUNCH MODE: Имаш 15 кратки теми непокрити.
+ Ако минеш 5 кратки днес вместо 2 дълги,
+ шансът да изтеглиш позната тема се увеличава значително."
+```
+
+---
+
+### Data Model Summary
+
+```typescript
+// Additions to Topic interface in types.ts
+interface Topic {
+  // ... existing fields (id, name, status, material, etc.)
+
+  // NEW: Size classification
+  size: 'small' | 'medium' | 'large' | null;
+  sizeSetBy: 'ai' | 'user' | null;
+
+  // NEW: Relations
+  relatedTopics: string[];      // IDs of related topics
+  cluster: string | null;       // Group name (e.g., "Пулмология")
+  prerequisites: string[];      // IDs of prerequisite topics
+}
+
+// Helper type for relation analysis
+interface TopicCluster {
+  name: string;                 // e.g., "Пулмология"
+  topicIds: string[];
+  subjectId: string;
+}
+```
+
+---
+
+### Algorithm: Smart Daily Schedule
+
+```typescript
+function generateSmartDailyPlan(
+  subject: Subject,
+  daysUntilExam: number,
+  workloadPerDay: number,
+  dailyCapacity: number  // max topics per day
+): Topic[] {
+
+  const isCrunchMode = workloadPerDay > 5 || (daysUntilExam < 7 && workloadPerDay > 3);
+
+  // 1. Get all non-green topics
+  let candidates = subject.topics.filter(t => t.status !== 'green');
+
+  // 2. Calculate priority for each
+  candidates = candidates.map(topic => ({
+    ...topic,
+    priority: calculatePriority(topic, isCrunchMode)
+  }));
+
+  // 3. Sort by priority (highest first)
+  candidates.sort((a, b) => b.priority - a.priority);
+
+  // 4. Select topics for today (respect capacity)
+  let selected: Topic[] = [];
+  let remainingCapacity = dailyCapacity;
+
+  for (const topic of candidates) {
+    if (remainingCapacity <= 0) break;
+
+    // Check if a related topic is already selected
+    const hasRelatedSelected = topic.relatedTopics.some(
+      relId => selected.find(s => s.id === relId)
+    );
+
+    // Boost priority if related topic already selected (keep them together)
+    if (hasRelatedSelected) {
+      selected.push(topic);
+      remainingCapacity--;
+      continue;
+    }
+
+    selected.push(topic);
+    remainingCapacity--;
+  }
+
+  // 5. Sort selected by cluster (group related topics)
+  selected.sort((a, b) => {
+    if (a.cluster === b.cluster) return 0;
+    return (a.cluster || '').localeCompare(b.cluster || '');
+  });
+
+  return selected;
+}
+
+function calculatePriority(topic: Topic, isCrunchMode: boolean): number {
+  let priority = 0;
+
+  // Base priority from status (gray = highest need)
+  const statusWeight = { gray: 10, orange: 7, yellow: 3, green: 0 };
+  priority += statusWeight[topic.status];
+
+  // Decay score (older = higher priority)
+  priority += topic.decayScore || 0;
+
+  // Crunch mode: boost small topics
+  if (isCrunchMode && topic.status === 'gray') {
+    const sizeBonus = { small: 3, medium: 1, large: 0 };
+    priority += sizeBonus[topic.size || 'medium'];
+  }
+
+  // Prerequisite penalty (if prerequisites not done, lower priority)
+  const unmetPrereqs = topic.prerequisites.filter(
+    preId => !isTopicComplete(preId)
+  ).length;
+  priority -= unmetPrereqs * 2;
+
+  return priority;
+}
+```
+
+---
+
+### Implementation Steps
+
+**Phase 1: Data Model**
+1. Add `size`, `sizeSetBy`, `relatedTopics`, `cluster`, `prerequisites` to Topic type
+2. Add migration in storage.ts for existing topics (default: null)
+3. Update context.tsx with update functions
+
+**Phase 2: Size Classification**
+1. Update extract-material API to return size classification
+2. Add size badge to Topic Detail page
+3. Add manual size override dropdown
+4. Update Topic card to show size indicator
+
+**Phase 3: Relations & Clustering**
+1. Create "Analyze Relations" API endpoint
+2. Add batch analysis button to Subject page
+3. Show related topics in Topic Detail
+4. Add cluster grouping view option in Subjects
+
+**Phase 4: Crunch Mode Logic**
+1. Add `isCrunchMode()` helper in algorithms.ts
+2. Update priority calculation to include size bonus
+3. Update Today page to show crunch mode indicator
+4. Update AI Advice to mention crunch strategy
+
+**Phase 5: Smart Scheduling**
+1. Implement `generateSmartDailyPlan()`
+2. Group related topics in daily recommendations
+3. Show "learn together" hints in UI
+4. Add prerequisite warnings
+
+**Phase 6: Polish**
+1. Visual indicators for size (S/M/L badges)
+2. Cluster visualization in subject overview
+3. Crunch mode banner with strategy tips
+4. Settings for threshold customization
+
+---
+
+### Edge Cases
+
+1. **No size data** - If topic.size is null, treat as 'medium' for calculations
+2. **Circular prerequisites** - Detect and warn, don't block
+3. **Orphan topics** - Topics with no relations still get scheduled normally
+4. **Manual override** - User size choice always wins over AI
+5. **Large cluster** - If cluster has 10+ topics, split across days intelligently
+
+---
+
+### Integration with Session Mode
+
+When Session Mode is active:
+- Crunch Mode can still trigger within a session
+- Size/relations affect daily topic distribution
+- Calendar view shows clusters visually
+- Rebalance respects size priorities
+
+---
+
+### Future Enhancements (v2)
+
+- **Learning time tracking** - Actual time per topic to improve size estimates
+- **Difficulty rating** - Separate from size (short but hard vs long but easy)
+- **Concept graph** - Visual map of topic relationships
+- **Smart review** - Spaced repetition using relations (review related topics together)
+- **Import from syllabus** - Bulk extract relations from official syllabus PDF
+
+---
+
+*Добавено: Януари 2025*
+*За имплементация: След Session Mode или паралелно*

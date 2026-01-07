@@ -51,6 +51,9 @@ export default function TimerPage() {
   // Find active session
   const activeSession = data.timerSessions.find(s => s.endTime === null);
 
+  // Track if we need to complete a missed pomodoro (expired while tab closed)
+  const [pendingCompletion, setPendingCompletion] = useState<{ phase: PomodoroPhase; count: number } | null>(null);
+
   // Restore Pomodoro state from localStorage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -71,8 +74,8 @@ export default function TimerPage() {
           setPomodoroEndTime(state.endTime);
           setIsRunning(true);
         } else if (state.endTime && state.endTime <= now) {
-          // Timer expired while closed - trigger completion
-          // Don't auto-complete, just show current state
+          // Timer expired while tab was closed - mark for completion
+          setPendingCompletion({ phase: state.phase, count: state.count || 0 });
           setPomodoroEndTime(null);
           setIsRunning(false);
         }
@@ -102,7 +105,7 @@ export default function TimerPage() {
   // Initialize pomodoro time (only if not restored from localStorage)
   useEffect(() => {
     if (!initialized) return;
-    if (timerMode === 'pomodoro' && !isRunning && !pomodoroEndTime) {
+    if (timerMode === 'pomodoro' && !isRunning && !pomodoroEndTime && !pendingCompletion) {
       const duration = pomodoroPhase === 'work'
         ? settings.workDuration
         : pomodoroPhase === 'shortBreak'
@@ -110,7 +113,7 @@ export default function TimerPage() {
           : settings.longBreakDuration;
       setPomodoroTimeLeft(duration * 60);
     }
-  }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized]);
+  }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized, pendingCompletion]);
 
   // Restore active session
   useEffect(() => {
@@ -133,6 +136,62 @@ export default function TimerPage() {
 
     return () => clearInterval(interval);
   }, [isRunning, timerMode, activeSession]);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const showNotification = useCallback((title: string, body: string) => {
+    if (typeof window === 'undefined') return;
+
+    // Browser notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification(title, {
+          body,
+          icon: '/icon-192.png',
+          tag: 'pomodoro-timer',
+          requireInteraction: true
+        });
+      } catch (e) {
+        console.error('Notification error:', e);
+      }
+    }
+  }, []);
+
+  // Handle pending completion (timer expired while tab was closed)
+  useEffect(() => {
+    if (!initialized || !pendingCompletion) return;
+
+    // Complete the missed pomodoro
+    if (pendingCompletion.phase === 'work') {
+      // Record the completed work session
+      addPomodoroSession(settings.workDuration, selectedSubject || undefined, selectedTopic);
+
+      const newCount = pendingCompletion.count + 1;
+      setPomodoroCount(newCount);
+      const isLongBreak = newCount % settings.longBreakAfter === 0;
+      const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
+
+      setPomodoroPhase(isLongBreak ? 'longBreak' : 'shortBreak');
+      setPomodoroTimeLeft(breakDuration * 60);
+
+      // Show notification that we recorded the missed pomodoro
+      showNotification(
+        `Pomodoro #${newCount} записан!`,
+        'Таймерът изтече докато беше в друг таб'
+      );
+    } else {
+      // Break ended
+      setPomodoroPhase('work');
+      setPomodoroTimeLeft(settings.workDuration * 60);
+    }
+
+    setPendingCompletion(null);
+  }, [initialized, pendingCompletion, settings, addPomodoroSession, selectedSubject, selectedTopic, showNotification]);
 
   const playSound = useCallback(() => {
     if (!settings.soundEnabled) return;
@@ -175,6 +234,12 @@ export default function TimerPage() {
       const isLongBreak = newCount % settings.longBreakAfter === 0;
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
 
+      // Show notification
+      showNotification(
+        `Pomodoro #${newCount} завърши!`,
+        isLongBreak ? `Време за дълга почивка (${breakDuration} мин)` : `Време за почивка (${breakDuration} мин)`
+      );
+
       setPomodoroPhase(isLongBreak ? 'longBreak' : 'shortBreak');
       setPomodoroTimeLeft(breakDuration * 60);
 
@@ -183,6 +248,9 @@ export default function TimerPage() {
         setIsRunning(true);
       }
     } else {
+      // Show notification for break end
+      showNotification('Почивката свърши!', 'Време е за работа');
+
       setPomodoroPhase('work');
       setPomodoroTimeLeft(settings.workDuration * 60);
 
@@ -191,7 +259,25 @@ export default function TimerPage() {
         setIsRunning(true);
       }
     }
-  }, [pomodoroPhase, pomodoroCount, settings, playSound, addPomodoroSession, selectedSubject, selectedTopic]);
+  }, [pomodoroPhase, pomodoroCount, settings, playSound, showNotification, addPomodoroSession, selectedSubject, selectedTopic]);
+
+  // Handle visibility change - catch expired timers when tab becomes visible
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && pomodoroEndTime && timerMode === 'pomodoro') {
+        const now = Date.now();
+        if (pomodoroEndTime <= now) {
+          // Timer expired while tab was hidden - trigger completion
+          handlePomodoroComplete();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pomodoroEndTime, timerMode, handlePomodoroComplete]);
 
   // Pomodoro timer tick - uses actual time to survive background throttling
   useEffect(() => {

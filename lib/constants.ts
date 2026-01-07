@@ -1,4 +1,4 @@
-import { ClassType, TopicStatus } from './types';
+import { ClassType, TopicStatus, TopicSize } from './types';
 
 export const STATUS_CONFIG: Record<TopicStatus, {
   bg: string;
@@ -47,6 +47,27 @@ export const MOTIVATIONAL_MESSAGES = {
     "⭐ Vayne mode ACTIVATED. Продължавай така!",
     "🎓 При това темпо — изпитът е твой."
   ]
+};
+
+// Smart Scheduling: Topic Size Configuration
+export const TOPIC_SIZE_CONFIG: Record<TopicSize, {
+  label: string;
+  short: string;
+  color: string;
+  bgColor: string;
+  crunchBonus: number;
+  minutes: number;
+}> = {
+  small: { label: 'Малка', short: 'S', color: '#4ade80', bgColor: '#052e16', crunchBonus: 3, minutes: 15 },
+  medium: { label: 'Средна', short: 'M', color: '#fbbf24', bgColor: '#422006', crunchBonus: 1, minutes: 30 },
+  large: { label: 'Голяма', short: 'L', color: '#ef4444', bgColor: '#450a0a', crunchBonus: 0, minutes: 60 }
+};
+
+// Smart Scheduling: Crunch Mode Thresholds
+export const CRUNCH_MODE_THRESHOLDS = {
+  workloadPerDayHigh: 5,       // Activate when > 5 topics/day needed
+  daysUntilExamCritical: 7,    // Within 7 days of exam
+  workloadPerDayCritical: 3    // And > 3 topics/day in that period
 };
 
 export const DECAY_RULES = {

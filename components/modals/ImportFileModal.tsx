@@ -249,7 +249,13 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         currentBloomLevel: 1 as const, // Start at Remember level
         quizHistory: [],
         readCount: 0,
-        lastRead: null
+        lastRead: null,
+        // Smart Scheduling fields
+        size: null,
+        sizeSetBy: null,
+        relatedTopics: [],
+        cluster: null,
+        prerequisites: []
       }));
 
     addTopics(subjectId, topicsToAdd);

@@ -183,7 +183,17 @@ export function loadData(): AppData {
         quizHistory: (topic.quizHistory || []).map((qr: any) => ({
           ...qr,
           weight: qr.weight ?? 1.0 // Default to standard weight for existing results
-        }))
+        })),
+        // Reading tracking
+        readCount: topic.readCount ?? 0,
+        lastRead: topic.lastRead ?? null,
+        // Smart Scheduling: Size classification
+        size: topic.size ?? null,
+        sizeSetBy: topic.sizeSetBy ?? null,
+        // Smart Scheduling: Topic relations
+        relatedTopics: topic.relatedTopics ?? [],
+        cluster: topic.cluster ?? null,
+        prerequisites: topic.prerequisites ?? []
       }))
     }));
 

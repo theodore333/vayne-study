@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -27,6 +27,10 @@ interface AppContextType {
   addGrade: (subjectId: string, topicId: string, grade: number) => void;
   updateTopicMaterial: (subjectId: string, topicId: string, material: string) => void;
   trackTopicRead: (subjectId: string, topicId: string) => void;
+  // Smart Scheduling operations
+  updateTopicSize: (subjectId: string, topicId: string, size: TopicSize | null, setBy: 'ai' | 'user') => void;
+  updateTopicRelations: (subjectId: string, topicId: string, updates: { relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }) => void;
+  batchUpdateTopicRelations: (subjectId: string, updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }>) => void;
 
   // Schedule operations
   addClass: (scheduleClass: Omit<ScheduleClass, 'id'>) => void;
@@ -451,6 +455,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // Smart Scheduling: Update topic size
+  const updateTopicSize = useCallback((subjectId: string, topicId: string, size: TopicSize | null, setBy: 'ai' | 'user') => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => {
+        if (s.id !== subjectId) return s;
+        return {
+          ...s,
+          topics: s.topics.map(t => t.id === topicId ? { ...t, size, sizeSetBy: setBy } : t)
+        };
+      })
+    }));
+  }, [updateData]);
+
+  // Smart Scheduling: Update topic relations
+  const updateTopicRelations = useCallback((
+    subjectId: string,
+    topicId: string,
+    updates: { relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }
+  ) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => {
+        if (s.id !== subjectId) return s;
+        return {
+          ...s,
+          topics: s.topics.map(t => t.id === topicId ? { ...t, ...updates } : t)
+        };
+      })
+    }));
+  }, [updateData]);
+
+  // Smart Scheduling: Batch update topic relations (for analyze-relations API)
+  const batchUpdateTopicRelations = useCallback((
+    subjectId: string,
+    updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }>
+  ) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => {
+        if (s.id !== subjectId) return s;
+        return {
+          ...s,
+          topics: s.topics.map(t => {
+            const update = updates.find(u => u.topicId === t.id);
+            return update ? { ...t, ...update } : t;
+          })
+        };
+      })
+    }));
+  }, [updateData]);
+
   // Schedule operations
   const addClass = useCallback((scheduleClass: Omit<ScheduleClass, 'id'>) => {
     updateData(prev => ({
@@ -808,6 +864,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addGrade,
       updateTopicMaterial,
       trackTopicRead,
+      updateTopicSize,
+      updateTopicRelations,
+      batchUpdateTopicRelations,
       addClass,
       updateClass,
       deleteClass,

@@ -1,5 +1,5 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights, QuestionBank } from './types';
-import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES } from './constants';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, getQuestionTypeWeights, QuestionBank, CrunchModeStatus } from './types';
+import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG } from './constants';
 
 /**
  * Monte Carlo simulation for exam outcome
@@ -226,8 +226,9 @@ export function getWeightedMasteryScore(topic: Topic): number {
 /**
  * Get topic priority score (lower = needs more attention)
  * Combines: mastery score, bloom level, time since last review, quiz weight
+ * In crunch mode, adds size bonus for gray topics (small topics get higher priority)
  */
-export function getTopicPriority(topic: Topic): number {
+export function getTopicPriority(topic: Topic, inCrunchMode: boolean = false): number {
   const masteryScore = getWeightedMasteryScore(topic);
   const bloomLevel = topic.currentBloomLevel || 1;
   const daysSinceReview = getDaysSince(topic.lastReview);
@@ -246,6 +247,13 @@ export function getTopicPriority(topic: Topic): number {
   // Status penalty
   const statusPenalty = { gray: 30, orange: 20, yellow: 10, green: 0 };
   priority -= statusPenalty[topic.status];
+
+  // Crunch mode: size bonus for gray topics (smaller topics get higher priority)
+  // Lower priority score = needs more attention, so we SUBTRACT the bonus
+  if (inCrunchMode && topic.status === 'gray' && topic.size) {
+    const sizeBonus = TOPIC_SIZE_CONFIG[topic.size].crunchBonus;
+    priority -= sizeBonus * 5; // small: -15, medium: -5, large: 0
+  }
 
   return Math.max(0, priority);
 }
@@ -332,6 +340,80 @@ export function calculateDailyTopics(
   }
 
   return { total, bySubject };
+}
+
+/**
+ * Detect if Crunch Mode should be active based on workload and exam proximity
+ * Crunch Mode prioritizes covering more small topics over fewer large topics
+ */
+export function detectCrunchMode(subjects: Subject[]): CrunchModeStatus {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const urgentSubjects: CrunchModeStatus['urgentSubjects'] = [];
+  let maxWorkloadPerDay = 0;
+  let hasCriticalExam = false;
+
+  for (const subject of subjects) {
+    if (!subject.examDate) continue;
+
+    const examDate = new Date(subject.examDate);
+    examDate.setHours(0, 0, 0, 0);
+    const daysLeft = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Skip past exams
+    if (daysLeft <= 0) continue;
+
+    const remainingTopics = subject.topics.filter(t => t.status !== 'green').length;
+    if (remainingTopics === 0) continue;
+
+    const workloadPerDay = Math.round((remainingTopics / daysLeft) * 10) / 10;
+    maxWorkloadPerDay = Math.max(maxWorkloadPerDay, workloadPerDay);
+
+    if (daysLeft <= CRUNCH_MODE_THRESHOLDS.daysUntilExamCritical) {
+      hasCriticalExam = true;
+    }
+
+    if (workloadPerDay >= 3) {
+      urgentSubjects.push({
+        name: subject.name,
+        daysLeft,
+        workloadPerDay
+      });
+    }
+  }
+
+  // Crunch mode conditions
+  const isActive = maxWorkloadPerDay > CRUNCH_MODE_THRESHOLDS.workloadPerDayHigh ||
+    (hasCriticalExam && maxWorkloadPerDay > CRUNCH_MODE_THRESHOLDS.workloadPerDayCritical);
+
+  let reason = '';
+  const tips: string[] = [];
+
+  if (isActive) {
+    if (maxWorkloadPerDay > 10) {
+      reason = 'КРИТИЧНО натоварване!';
+      tips.push('Фокусирай се на МАЛКИ (S) сиви теми за бързо покритие');
+      tips.push('Прегледай само ключовите точки от големите теми');
+      tips.push('Използвай Quiz за затвърждаване, не за учене');
+    } else if (hasCriticalExam) {
+      reason = 'Изпит скоро + високо натоварване';
+      tips.push('Приоритизирай теми с prerequisites');
+      tips.push('Малките теми дават бързи победи');
+      tips.push('Групирай свързани теми за ефективност');
+    } else {
+      reason = 'Високо натоварване';
+      tips.push('Планирай по размер: първо S, после M');
+      tips.push('Големите (L) теми раздели на 2-3 сесии');
+    }
+  }
+
+  return {
+    isActive,
+    reason,
+    urgentSubjects: urgentSubjects.sort((a, b) => a.daysLeft - b.daysLeft),
+    tips
+  };
 }
 
 export function calculatePredictedGrade(
@@ -742,7 +824,13 @@ export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
       currentBloomLevel: 1 as const,
       quizHistory: [],
       readCount: 0,
-      lastRead: null
+      lastRead: null,
+      // Smart Scheduling fields
+      size: null,
+      sizeSetBy: null,
+      relatedTopics: [],
+      cluster: null,
+      prerequisites: []
     };
   });
 }

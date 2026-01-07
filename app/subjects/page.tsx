@@ -1,10 +1,10 @@
 'use client';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
-import { STATUS_CONFIG, PRESET_COLORS } from '@/lib/constants';
+import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { TopicStatus, Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
@@ -30,7 +30,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject } = useApp();
+  const { data, isLoading, deleteSubject, updateSubject, batchUpdateTopicRelations, incrementApiCalls } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -47,6 +47,16 @@ function SubjectsContent() {
   const [quizSelectMode, setQuizSelectMode] = useState(false);
   const [selectedTopicsForQuiz, setSelectedTopicsForQuiz] = useState<Array<{ subjectId: string; topicId: string }>>([]);
 
+  // Analyze relations state
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Load API key
+  useEffect(() => {
+    const stored = localStorage.getItem('claude-api-key');
+    setApiKey(stored);
+  }, []);
+
   const toggleTopicForQuiz = (subjectId: string, topicId: string) => {
     setSelectedTopicsForQuiz(prev => {
       const exists = prev.some(t => t.subjectId === subjectId && t.topicId === topicId);
@@ -61,6 +71,100 @@ function SubjectsContent() {
     if (selectedTopicsForQuiz.length === 0) return;
     const topicsParam = selectedTopicsForQuiz.map(t => `${t.subjectId}:${t.topicId}`).join(',');
     router.push(`/quiz?multi=true&topics=${topicsParam}`);
+  };
+
+  // Analyze topic relations with AI
+  const handleAnalyzeRelations = async () => {
+    if (!selectedSubject || !apiKey || selectedSubject.topics.length < 3) return;
+
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('/api/analyze-relations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          topics: selectedSubject.topics.map(t => ({ id: t.id, name: t.name, number: t.number })),
+          subjectName: selectedSubject.name,
+          apiKey
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        alert(result.error || 'Грешка при анализа');
+        return;
+      }
+
+      // Build updates array mapping topic numbers to IDs
+      const updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }> = [];
+
+      // Apply clusters
+      for (const [clusterName, topicNumbers] of Object.entries(result.clusters)) {
+        for (const num of topicNumbers as number[]) {
+          const topic = selectedSubject.topics.find(t => t.number === num);
+          if (topic) {
+            const existing = updates.find(u => u.topicId === topic.id);
+            if (existing) {
+              existing.cluster = clusterName;
+            } else {
+              updates.push({ topicId: topic.id, cluster: clusterName });
+            }
+          }
+        }
+      }
+
+      // Apply relations
+      for (const rel of result.relations) {
+        const topic = selectedSubject.topics.find(t => t.number === rel.topic);
+        if (topic) {
+          const relatedIds = (rel.related as number[])
+            .map(num => selectedSubject.topics.find(t => t.number === num)?.id)
+            .filter(Boolean) as string[];
+
+          const existing = updates.find(u => u.topicId === topic.id);
+          if (existing) {
+            existing.relatedTopics = relatedIds;
+          } else {
+            updates.push({ topicId: topic.id, relatedTopics: relatedIds });
+          }
+        }
+      }
+
+      // Apply prerequisites
+      for (const prereq of result.prerequisites) {
+        const topic = selectedSubject.topics.find(t => t.number === prereq.topic);
+        if (topic) {
+          const prereqIds = (prereq.requires as number[])
+            .map(num => selectedSubject.topics.find(t => t.number === num)?.id)
+            .filter(Boolean) as string[];
+
+          const existing = updates.find(u => u.topicId === topic.id);
+          if (existing) {
+            existing.prerequisites = prereqIds;
+          } else {
+            updates.push({ topicId: topic.id, prerequisites: prereqIds });
+          }
+        }
+      }
+
+      // Apply all updates
+      if (updates.length > 0) {
+        batchUpdateTopicRelations(selectedSubject.id, updates);
+      }
+
+      // Track API cost
+      if (result.usage?.cost) {
+        incrementApiCalls(result.usage.cost);
+      }
+
+      alert(`Анализът е готов! Намерени: ${Object.keys(result.clusters).length} клъстера, ${result.relations.length} връзки, ${result.prerequisites.length} prerequisites`);
+
+    } catch (error) {
+      console.error('Analysis failed:', error);
+      alert('Грешка при анализа на връзките');
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   useEffect(() => {
@@ -251,6 +355,25 @@ function SubjectsContent() {
                     >
                       <Upload size={16} /> Ръчен
                     </button>
+                    {/* Analyze Relations Button */}
+                    <button
+                      onClick={handleAnalyzeRelations}
+                      disabled={isAnalyzing || !apiKey || selectedSubject.topics.length < 3}
+                      className="flex items-center gap-2 px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 rounded-lg transition-colors font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      title={!apiKey ? 'Добави API ключ в Settings' : selectedSubject.topics.length < 3 ? 'Нужни са поне 3 теми' : 'Анализирай връзките между темите'}
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Анализирам...
+                        </>
+                      ) : (
+                        <>
+                          <Link2 size={16} />
+                          Връзки
+                        </>
+                      )}
+                    </button>
                     <button
                       onClick={() => { if (confirm("Изтрий предмета?")) { deleteSubject(selectedSubject.id); setSelectedSubjectId(null); } }}
                       className="flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors font-mono text-sm"
@@ -369,6 +492,28 @@ function SubjectsContent() {
                               </div>
                               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-mono flex-wrap">
                                 <span>{config.label}</span>
+                                {/* Topic Size Badge */}
+                                {topic.size && (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                    style={{
+                                      color: TOPIC_SIZE_CONFIG[topic.size].color,
+                                      backgroundColor: TOPIC_SIZE_CONFIG[topic.size].bgColor
+                                    }}
+                                    title={`${TOPIC_SIZE_CONFIG[topic.size].label} (~${TOPIC_SIZE_CONFIG[topic.size].minutes} мин)`}
+                                  >
+                                    {TOPIC_SIZE_CONFIG[topic.size].short}
+                                  </span>
+                                )}
+                                {/* Cluster Badge */}
+                                {topic.cluster && (
+                                  <span
+                                    className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                                    title={`Клъстер: ${topic.cluster}`}
+                                  >
+                                    {topic.cluster}
+                                  </span>
+                                )}
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
                                 {(topic.readCount || 0) > 0 && (

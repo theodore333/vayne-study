@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2 } from 'lucide-react';
-import { TopicStatus } from '@/lib/types';
-import { STATUS_CONFIG } from '@/lib/constants';
+import { TopicStatus, TopicSize } from '@/lib/types';
+import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
@@ -12,7 +12,7 @@ import Link from 'next/link';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -31,6 +31,7 @@ export default function TopicDetailPage() {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
+  const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
 
   // Load API key
   useEffect(() => {
@@ -103,6 +104,11 @@ export default function TopicDetailPage() {
       }
       setMaterialSaved(false);
       setPastedImages([]); // Clear after processing
+
+      // Save AI-detected size if not already set by user
+      if (result.size && (!topic.size || topic.sizeSetBy === 'ai')) {
+        updateTopicSize(subjectId, topic.id, result.size, 'ai');
+      }
 
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : 'Грешка');
@@ -208,6 +214,11 @@ export default function TopicDetailPage() {
       }
       setMaterialSaved(false);
 
+      // Save AI-detected size if not already set by user
+      if (result.size && (!topic.size || topic.sizeSetBy === 'ai')) {
+        updateTopicSize(subjectId, topic.id, result.size, 'ai');
+      }
+
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : 'Грешка');
     } finally {
@@ -216,6 +227,40 @@ export default function TopicDetailPage() {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  // Analyze size of existing material
+  const handleAnalyzeSize = async () => {
+    if (!apiKey || !topic || !subject || !material.trim()) return;
+
+    setIsAnalyzingSize(true);
+
+    try {
+      const response = await fetch('/api/analyze-size', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          material,
+          topicName: topic.name,
+          apiKey
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setExtractError(result.error || 'Грешка при анализ');
+        return;
+      }
+
+      if (result.size) {
+        updateTopicSize(subjectId, topic.id, result.size, 'ai');
+      }
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : 'Грешка');
+    } finally {
+      setIsAnalyzingSize(false);
     }
   };
 
@@ -269,6 +314,52 @@ export default function TopicDetailPage() {
             <h1 className="text-2xl font-bold text-slate-100 font-mono">
               {topic.name}
             </h1>
+
+            {/* Topic Size Selector */}
+            <div className="flex items-center gap-2 mt-3">
+              <span className="text-xs text-slate-500 font-mono">Размер:</span>
+              <div className="flex gap-1">
+                {(['small', 'medium', 'large'] as TopicSize[]).map(s => {
+                  const cfg = TOPIC_SIZE_CONFIG[s];
+                  const isActive = topic.size === s;
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => updateTopicSize(subjectId, topic.id, s, 'user')}
+                      className={`px-2.5 py-1 rounded text-xs font-mono border transition-all ${
+                        isActive
+                          ? 'border-current font-semibold'
+                          : 'border-transparent opacity-50 hover:opacity-80'
+                      }`}
+                      style={{
+                        color: cfg.color,
+                        backgroundColor: isActive ? cfg.bgColor : 'transparent'
+                      }}
+                      title={`${cfg.label} (~${cfg.minutes} мин)`}
+                    >
+                      {cfg.short}
+                    </button>
+                  );
+                })}
+              </div>
+              {topic.sizeSetBy === 'ai' && topic.size && (
+                <span className="text-[10px] text-purple-400 font-mono">(AI)</span>
+              )}
+              {!topic.size && hasMaterial && (
+                <span className="text-xs text-slate-600 font-mono italic">Не е определен</span>
+              )}
+              {/* Analyze Size Button */}
+              {hasMaterial && apiKey && (
+                <button
+                  onClick={handleAnalyzeSize}
+                  disabled={isAnalyzingSize}
+                  className="ml-2 px-2 py-0.5 text-[10px] font-mono bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 rounded border border-purple-600/30 transition-all disabled:opacity-50"
+                  title="Анализирай размера на материала с AI"
+                >
+                  {isAnalyzingSize ? '...' : '🔍 Анализ'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

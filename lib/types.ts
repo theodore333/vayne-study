@@ -164,9 +164,31 @@ export interface Topic {
   // Reading tracking
   readCount: number; // How many times the topic material was read
   lastRead: string | null; // When the material was last read
+  // Smart Scheduling: Size classification
+  size: TopicSize | null; // S/M/L classification
+  sizeSetBy: 'ai' | 'user' | null; // Who set the size
+  // Smart Scheduling: Topic relations
+  relatedTopics: string[]; // IDs of related topics
+  cluster: string | null; // Group name (e.g., "Пулмология")
+  prerequisites: string[]; // IDs of prerequisite topics
 }
 
 export type TopicStatus = 'gray' | 'orange' | 'yellow' | 'green';
+
+// Topic size classification for Smart Scheduling
+export type TopicSize = 'small' | 'medium' | 'large';
+
+// Crunch Mode status for high-pressure scheduling
+export interface CrunchModeStatus {
+  isActive: boolean;
+  reason: string;
+  urgentSubjects: Array<{
+    name: string;
+    daysLeft: number;
+    workloadPerDay: number;
+  }>;
+  tips: string[];
+}
 
 export interface ScheduleClass {
   id: string;

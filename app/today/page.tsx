@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, calculateDailyTopics } from '@/lib/algorithms';
+import { generateDailyPlan, calculateDailyTopics, detectCrunchMode } from '@/lib/algorithms';
 import { getLevelInfo, getXpForNextLevel, getComboMultiplier, ACHIEVEMENT_DEFINITIONS } from '@/lib/gamification';
 import { LEVEL_THRESHOLDS } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -61,6 +61,12 @@ export default function TodayPage() {
   const workload = useMemo(
     () => calculateDailyTopics(data.subjects, data.dailyStatus),
     [data.subjects, data.dailyStatus]
+  );
+
+  // Detect crunch mode
+  const crunchStatus = useMemo(
+    () => detectCrunchMode(data.subjects),
+    [data.subjects]
   );
 
   const dailyPlan = useMemo(
@@ -280,6 +286,49 @@ export default function TodayPage() {
           </div>
         </div>
       </div>
+
+      {/* Crunch Mode Indicator */}
+      {crunchStatus.isActive && (
+        <div className="bg-gradient-to-r from-red-900/40 to-orange-900/40 border border-red-500/30 rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="text-3xl animate-pulse">🔥</div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-bold text-red-400 font-mono">CRUNCH MODE</span>
+                  <span className="text-xs bg-red-500/20 text-red-300 px-2 py-0.5 rounded font-mono">
+                    {crunchStatus.reason}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-400 font-mono mt-1">
+                  Стратегия за максимално покритие
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Urgent Subjects */}
+          {crunchStatus.urgentSubjects.length > 0 && (
+            <div className="mb-3 flex gap-2 flex-wrap">
+              {crunchStatus.urgentSubjects.map(s => (
+                <span key={s.name} className="text-xs px-2 py-1 bg-red-500/20 text-red-300 rounded font-mono">
+                  {s.name}: {s.daysLeft}д / {s.workloadPerDay} теми/ден
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Tips */}
+          <div className="space-y-1">
+            {crunchStatus.tips.map((tip, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm text-slate-300 font-mono">
+                <span className="text-yellow-400">→</span>
+                {tip}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Today's Workload (Topic-Based) */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">

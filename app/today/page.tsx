@@ -249,16 +249,20 @@ export default function TodayPage() {
                                 </button>
                                 <Link
                                   href={subject ? `/subjects/${subject.id}/topics/${topic.id}` : '#'}
-                                  className={`flex-1 text-xs font-mono truncate ${
+                                  className={`flex-1 min-w-0 text-xs font-mono ${
                                     isTopicDone ? 'line-through text-slate-500' : 'text-slate-300 hover:text-white'
                                   }`}
                                   title={`#${topic.number} ${topic.name}`}
                                 >
-                                  <span
-                                    className="inline-block w-2 h-2 rounded-full mr-1.5"
-                                    style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
-                                  />
-                                  #{topic.number} {topic.name}
+                                  <div className="flex items-center gap-1.5">
+                                    <span
+                                      className="shrink-0 w-2 h-2 rounded-full"
+                                      style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
+                                    />
+                                    <span className="truncate">
+                                      #{topic.number} {topic.name}
+                                    </span>
+                                  </div>
                                 </Link>
                                 {isTopicDone && topic.lastReview?.startsWith(today) && (
                                   <span className="text-[10px] text-green-400 font-mono shrink-0">

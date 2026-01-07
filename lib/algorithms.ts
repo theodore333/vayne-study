@@ -636,12 +636,71 @@ export function calculatePredictedGrade(
   };
 }
 
+/**
+ * Select topics while keeping related topics together
+ * Returns topics sorted/grouped by relations
+ */
+function selectTopicsWithRelations(
+  allTopics: Topic[],
+  maxCount: number,
+  inCrunchMode: boolean = false
+): Topic[] {
+  if (allTopics.length === 0 || maxCount <= 0) return [];
+
+  // Sort by priority first
+  const sorted = [...allTopics].sort((a, b) => getTopicPriority(a, inCrunchMode) - getTopicPriority(b, inCrunchMode));
+
+  const selected: Topic[] = [];
+  const selectedIds = new Set<string>();
+
+  for (const topic of sorted) {
+    if (selected.length >= maxCount) break;
+    if (selectedIds.has(topic.id)) continue;
+
+    // Add this topic
+    selected.push(topic);
+    selectedIds.add(topic.id);
+
+    // Try to add related topics if we have room
+    if (topic.relatedTopics && topic.relatedTopics.length > 0 && selected.length < maxCount) {
+      for (const relatedId of topic.relatedTopics) {
+        if (selected.length >= maxCount) break;
+        if (selectedIds.has(relatedId)) continue;
+
+        const relatedTopic = allTopics.find(t => t.id === relatedId);
+        if (relatedTopic && relatedTopic.status !== 'green') {
+          selected.push(relatedTopic);
+          selectedIds.add(relatedId);
+        }
+      }
+    }
+  }
+
+  // Sort final selection to group related topics together
+  return selected.sort((a, b) => {
+    // Group by cluster first
+    if (a.cluster && b.cluster && a.cluster !== b.cluster) {
+      return a.cluster.localeCompare(b.cluster);
+    }
+    // Then by relation (if a is related to b, keep them together)
+    if (a.relatedTopics?.includes(b.id) || b.relatedTopics?.includes(a.id)) {
+      return 0;
+    }
+    // Finally by number
+    return a.number - b.number;
+  });
+}
+
 export function generateDailyPlan(
   subjects: Subject[],
   schedule: ScheduleClass[],
   dailyStatus: DailyStatus
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
+
+  // Detect crunch mode for priority calculation
+  const crunchStatus = detectCrunchMode(subjects);
+  const inCrunchMode = crunchStatus.isActive;
 
   // Get topic-based workload from calculateDailyTopics
   const workload = calculateDailyTopics(subjects, dailyStatus);
@@ -669,11 +728,9 @@ export function generateDailyPlan(
     const subjectWork = subjectWorkload.get(subject.id);
     const topicsToTake = subjectWork ? Math.min(subjectWork.topics, remainingTopics) : Math.min(5, remainingTopics);
 
-    // Sort by weighted priority (lower = needs more attention)
-    const weakTopics = subject.topics
-      .filter(t => t.status !== 'green')
-      .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
-      .slice(0, topicsToTake);
+    // Select topics with related grouping
+    const candidates = subject.topics.filter(t => t.status !== 'green');
+    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode);
 
     if (weakTopics.length > 0) {
       tasks.push({
@@ -708,11 +765,9 @@ export function generateDailyPlan(
     const examFormat = parseExamFormat(subject.examFormat);
     const formatGaps = analyzeFormatGaps(subject);
 
-    // Sort by weighted priority (lower = needs more attention)
-    const weakTopics = subject.topics
-      .filter(t => t.status !== 'green')
-      .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
-      .slice(0, topicsToTake);
+    // Select topics with related grouping
+    const candidates = subject.topics.filter(t => t.status !== 'green');
+    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode);
 
     if (weakTopics.length > 0) {
       // Format-aware description
@@ -756,6 +811,7 @@ export function generateDailyPlan(
 
       if (decayingTopics.length > 0) {
         const topicsToTake = Math.min(Math.ceil(remainingTopics * 0.3), decayingTopics.length, 5);
+        const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
         tasks.push({
           id: generateId(),
           subjectId: subject.id,
@@ -764,11 +820,11 @@ export function generateDailyPlan(
           type: 'medium',
           typeLabel: '⚠️ Риск от забравяне',
           description: 'Преговор на теми без review 7+ дни',
-          topics: decayingTopics.slice(0, topicsToTake),
-          estimatedMinutes: topicsToTake * 20,
+          topics: selectedTopics,
+          estimatedMinutes: selectedTopics.length * 20,
           completed: false
         });
-        remainingTopics -= topicsToTake;
+        remainingTopics -= selectedTopics.length;
       }
     }
   }
@@ -785,6 +841,7 @@ export function generateDailyPlan(
         const priority = newTopics.length / Math.max(1, daysUntilExam);
         if (priority > 0.5) {
           const topicsToTake = Math.min(remainingTopics, 3);
+          const selectedTopics = selectTopicsWithRelations(newTopics, topicsToTake, inCrunchMode);
           tasks.push({
             id: generateId(),
             subjectId: subject.id,
@@ -793,11 +850,11 @@ export function generateDailyPlan(
             type: 'normal',
             typeLabel: '📚 Нов материал',
             description: 'Започни нови теми',
-            topics: newTopics.slice(0, topicsToTake),
-            estimatedMinutes: topicsToTake * 20,
+            topics: selectedTopics,
+            estimatedMinutes: selectedTopics.length * 20,
             completed: false
           });
-          remainingTopics -= topicsToTake;
+          remainingTopics -= selectedTopics.length;
         }
       }
     }

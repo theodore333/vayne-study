@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Play, Square, Clock, Minimize2, Maximize2, Brain, Coffee, Pause } from 'lucide-react';
+import { Play, Square, Clock, Minimize2, Maximize2, Brain, Coffee, Pause, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -20,6 +20,7 @@ export default function FloatingTimer() {
   const [elapsed, setElapsed] = useState(0);
   const [showRating, setShowRating] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
 
   // Pomodoro state from localStorage
   const [pomodoroState, setPomodoroState] = useState<PomodoroState | null>(null);
@@ -128,7 +129,14 @@ export default function FloatingTimer() {
   const hasPomodoro = pomodoroState !== null;
   const hasNormalTimer = activeSession !== null;
 
-  if (isTimerPage || (!hasPomodoro && !hasNormalTimer)) return null;
+  // Reset hidden state when timer stops
+  useEffect(() => {
+    if (!hasPomodoro && !hasNormalTimer) {
+      setIsHidden(false);
+    }
+  }, [hasPomodoro, hasNormalTimer]);
+
+  if (isTimerPage || isHidden || (!hasPomodoro && !hasNormalTimer)) return null;
 
   const subject = activeSession ? data.subjects.find(s => s.id === activeSession.subjectId) : null;
   const topic = subject?.topics.find(t => t.id === activeSession?.topicId);
@@ -188,7 +196,7 @@ export default function FloatingTimer() {
   if (isMinimized) {
     const PhaseIcon = isPomodoro ? phaseInfo!.icon : null;
     return (
-      <div className="fixed bottom-6 right-6 z-50">
+      <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
         <button
           onClick={() => setIsMinimized(false)}
           className={`flex items-center gap-2 px-4 py-2 backdrop-blur border rounded-full shadow-lg transition-all group ${
@@ -203,6 +211,14 @@ export default function FloatingTimer() {
           {PhaseIcon && <PhaseIcon size={14} className="text-white/80" />}
           <span className="text-white font-mono font-bold">{formatTime(displayTime)}</span>
           <Maximize2 size={14} className="text-white/50 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+        {/* Hide button */}
+        <button
+          onClick={() => setIsHidden(true)}
+          className="p-2 bg-slate-800/90 hover:bg-red-600/80 border border-slate-600/50 hover:border-red-500/50 rounded-full shadow-lg transition-all text-slate-400 hover:text-white"
+          title="Скрий (таймерът продължава)"
+        >
+          <X size={14} />
         </button>
       </div>
     );

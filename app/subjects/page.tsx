@@ -3,7 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil } from '@/lib/algorithms';
+import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS } from '@/lib/constants';
 import { TopicStatus, Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
@@ -367,11 +367,21 @@ function SubjectsContent() {
                                   {topic.name}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-4 mt-1 text-xs text-slate-500 font-mono">
+                              <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-mono flex-wrap">
                                 <span>{config.label}</span>
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
-                                {(topic.readCount || 0) > 0 && <span className="text-cyan-500">{topic.readCount}x прочетено</span>}
+                                {(topic.readCount || 0) > 0 && (
+                                  <span className="text-cyan-500">
+                                    {topic.readCount}x • {topic.lastRead
+                                      ? getDaysSince(topic.lastRead) === 0
+                                        ? 'днес'
+                                        : getDaysSince(topic.lastRead) === 1
+                                          ? 'вчера'
+                                          : `${getDaysSince(topic.lastRead)}д`
+                                      : ''}
+                                  </span>
+                                )}
                                 {!hasMaterial && <span className="text-amber-500">Няма материал</span>}
                               </div>
                             </div>

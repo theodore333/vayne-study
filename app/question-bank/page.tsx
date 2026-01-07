@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { useApp } from '@/lib/context';
-import { Book, Upload, Play, Trash2, FileQuestion, CheckCircle, XCircle, BarChart3 } from 'lucide-react';
+import { Book, Upload, Play, Trash2, FileQuestion, CheckCircle, XCircle, BarChart3, PenLine } from 'lucide-react';
 import Link from 'next/link';
 import ImportQuestionsModal from '@/components/modals/ImportQuestionsModal';
+import AddQuestionModal from '@/components/modals/AddQuestionModal';
 
 export default function QuestionBankPage() {
   const { data, deleteQuestionBank } = useApp();
@@ -12,6 +13,7 @@ export default function QuestionBankPage() {
     data.subjects.length > 0 ? data.subjects[0].id : null
   );
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
   const subjectBanks = (data.questionBanks || []).filter(b => b.subjectId === selectedSubjectId);
@@ -100,11 +102,19 @@ export default function QuestionBankPage() {
                   </h2>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => setShowAddModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-mono text-sm"
+                      title="Добави въпрос ръчно"
+                    >
+                      <PenLine size={16} />
+                      Ръчно
+                    </button>
+                    <button
                       onClick={() => setShowImportModal(true)}
                       className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono text-sm"
                     >
                       <Upload size={16} />
-                      Качи сборник
+                      Качи PDF
                     </button>
                     {totalQuestions > 0 && (
                       <Link
@@ -260,6 +270,16 @@ export default function QuestionBankPage() {
           subjectName={selectedSubject.name}
           topics={selectedSubject.topics}
           onClose={() => setShowImportModal(false)}
+        />
+      )}
+
+      {/* Add Question Modal */}
+      {showAddModal && selectedSubjectId && selectedSubject && (
+        <AddQuestionModal
+          subjectId={selectedSubjectId}
+          subjectName={selectedSubject.name}
+          existingBanks={subjectBanks.map(b => ({ id: b.id, name: b.name }))}
+          onClose={() => setShowAddModal(false)}
         />
       )}
     </div>

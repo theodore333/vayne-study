@@ -376,7 +376,19 @@ export default function ImportQuestionsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+        onClick={() => {
+          // Don't close if there are extracted questions (prevent accidental data loss)
+          if (extractedQuestions && extractedQuestions.length > 0) {
+            if (confirm('Имаш неимпортнати въпроси. Сигурен ли си, че искаш да затвориш?')) {
+              onClose();
+            }
+          } else {
+            onClose();
+          }
+        }}
+      />
 
       <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
@@ -385,7 +397,18 @@ export default function ImportQuestionsModal({
             <Sparkles size={20} className="text-purple-400" />
             Импорт на въпроси от PDF
           </h2>
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+          <button
+            onClick={() => {
+              if (extractedQuestions && extractedQuestions.length > 0) {
+                if (confirm('Имаш неимпортнати въпроси. Сигурен ли си, че искаш да затвориш?')) {
+                  onClose();
+                }
+              } else {
+                onClose();
+              }
+            }}
+            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+          >
             <X size={20} className="text-slate-400" />
           </button>
         </div>

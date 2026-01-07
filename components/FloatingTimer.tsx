@@ -19,8 +19,9 @@ export default function FloatingTimer() {
   const pathname = usePathname();
   const [elapsed, setElapsed] = useState(0);
   const [showRating, setShowRating] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
+  // User preferences - these reset when component unmounts (timer stops)
+  const [userWantsMinimized, setUserWantsMinimized] = useState(false);
+  const [userWantsHidden, setUserWantsHidden] = useState(false);
 
   // Pomodoro state from localStorage
   const [pomodoroState, setPomodoroState] = useState<PomodoroState | null>(null);
@@ -131,13 +132,10 @@ export default function FloatingTimer() {
   // Normal timer: must have active session AND have been running for at least 1 second
   const hasNormalTimer = activeSession !== null && elapsed > 0;
 
-  // Reset hidden/minimized state when all timers stop
-  useEffect(() => {
-    if (!hasPomodoro && !hasNormalTimer) {
-      setIsHidden(false);
-      setIsMinimized(false);
-    }
-  }, [hasPomodoro, hasNormalTimer]);
+  // Derive actual visibility from user preference AND timer state
+  // When timers stop, these naturally become false (no need for useEffect reset)
+  const isMinimized = userWantsMinimized && (hasPomodoro || hasNormalTimer);
+  const isHidden = userWantsHidden && (hasPomodoro || hasNormalTimer);
 
   // Don't show if nothing is actually running
   if (isTimerPage || isHidden || (!hasPomodoro && !hasNormalTimer)) return null;
@@ -202,7 +200,7 @@ export default function FloatingTimer() {
     return (
       <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2">
         <button
-          onClick={() => setIsMinimized(false)}
+          onClick={() => setUserWantsMinimized(false)}
           className={`flex items-center gap-2 px-4 py-2 backdrop-blur border rounded-full shadow-lg transition-all group ${
             isPomodoro
               ? phaseInfo!.color === 'cyan' ? 'bg-cyan-600/90 border-cyan-500/50 shadow-cyan-500/20'
@@ -218,7 +216,7 @@ export default function FloatingTimer() {
         </button>
         {/* Hide button */}
         <button
-          onClick={() => setIsHidden(true)}
+          onClick={() => setUserWantsHidden(true)}
           className="p-2 bg-slate-800/90 hover:bg-red-600/80 border border-slate-600/50 hover:border-red-500/50 rounded-full shadow-lg transition-all text-slate-400 hover:text-white"
           title="Скрий (таймерът продължава)"
         >
@@ -270,7 +268,7 @@ export default function FloatingTimer() {
             )}
           </div>
           <button
-            onClick={() => setIsMinimized(true)}
+            onClick={() => setUserWantsMinimized(true)}
             className="p-1.5 hover:bg-slate-700/50 rounded transition-colors text-slate-400 hover:text-slate-200"
           >
             <Minimize2 size={14} />

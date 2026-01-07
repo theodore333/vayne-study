@@ -126,13 +126,20 @@ interface Topic {
 
 ---
 
-## Model IDs (See CLAUDE_MODELS.md)
+## Model IDs
 
-| Model | ID |
-|-------|-----|
-| Opus 4.5 | `claude-opus-4-5-20251101` |
-| Sonnet 4.5 | `claude-sonnet-4-5-20250929` |
-| Haiku 4.5 | `claude-haiku-4-5-20251001` |
+| Model | ID | Use Case |
+|-------|-----|----------|
+| **Opus 4.5** | `claude-opus-4-5-20251101` | Complex reasoning, quiz generation |
+| **Sonnet 4.5** | `claude-sonnet-4-5-20250929` | PDF extraction, balanced tasks |
+| **Haiku 4.5** | `claude-haiku-4-5-20251001` | Fast/cheap tasks, hints |
+
+**Usage in project:**
+- `/api/extract` - Sonnet 4.5 (PDF extraction)
+- `/api/quiz` - Opus 4.5 (quiz generation), Haiku 4.5 (hints)
+- `/api/test-key` - Haiku 4.5 (API key validation)
+
+**Deprecated (do not use):** `claude-3-5-sonnet-20241022`, `claude-3-5-haiku-20241022`, `claude-opus-4-20250514`, `claude-sonnet-4-20250514`
 
 ---
 

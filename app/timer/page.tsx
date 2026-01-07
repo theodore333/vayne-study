@@ -127,29 +127,6 @@ export default function TimerPage() {
     return () => clearInterval(interval);
   }, [isRunning, timerMode, activeSession]);
 
-  // Pomodoro timer tick - uses actual time to survive background throttling
-  useEffect(() => {
-    if (!isRunning || timerMode !== 'pomodoro' || !pomodoroEndTime) return;
-
-    const updateTimer = () => {
-      const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((pomodoroEndTime - now) / 1000));
-      setPomodoroTimeLeft(remaining);
-
-      if (remaining <= 0) {
-        handlePomodoroComplete();
-      }
-    };
-
-    // Update immediately
-    updateTimer();
-
-    // Then update every 100ms for smoother display (catches up when tab becomes active)
-    const interval = setInterval(updateTimer, 100);
-
-    return () => clearInterval(interval);
-  }, [isRunning, timerMode, pomodoroEndTime]);
-
   const playSound = useCallback(() => {
     if (!settings.soundEnabled) return;
     try {
@@ -208,6 +185,29 @@ export default function TimerPage() {
       }
     }
   }, [pomodoroPhase, pomodoroCount, settings, playSound, addPomodoroSession, selectedSubject, selectedTopic]);
+
+  // Pomodoro timer tick - uses actual time to survive background throttling
+  useEffect(() => {
+    if (!isRunning || timerMode !== 'pomodoro' || !pomodoroEndTime) return;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const remaining = Math.max(0, Math.ceil((pomodoroEndTime - now) / 1000));
+      setPomodoroTimeLeft(remaining);
+
+      if (remaining <= 0) {
+        handlePomodoroComplete();
+      }
+    };
+
+    // Update immediately
+    updateTimer();
+
+    // Then update every 100ms for smoother display (catches up when tab becomes active)
+    const interval = setInterval(updateTimer, 100);
+
+    return () => clearInterval(interval);
+  }, [isRunning, timerMode, pomodoroEndTime, handlePomodoroComplete]);
 
   const handleStart = () => {
     if (timerMode === 'normal') {

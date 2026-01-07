@@ -3,12 +3,22 @@
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
-import { BankQuestion, ClinicalCase } from '@/lib/types';
-import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Target, Clock, Timer, Shuffle, AlertTriangle, Calendar, FileText } from 'lucide-react';
+import { BankQuestion } from '@/lib/types';
+import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Timer, Shuffle, AlertTriangle, Calendar, FileText } from 'lucide-react';
 import Link from 'next/link';
 
 // Practice modes
 type PracticeMode = 'all' | 'weak' | 'spaced' | 'custom';
+
+// Shuffle helper - defined outside component to avoid impure function warning
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 const PRACTICE_MODES: { mode: PracticeMode; icon: React.ReactNode; title: string; description: string }[] = [
   { mode: 'all', icon: <Shuffle size={24} />, title: 'Всички въпроси', description: 'Случаен ред' },
@@ -51,7 +61,6 @@ function PracticeContent() {
     banks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id }))),
     [banks]
   );
-  const allCases = banks.flatMap(b => b.cases);
 
   // Mode selection state
   const [mode, setMode] = useState<PracticeMode | null>(null);
@@ -59,13 +68,16 @@ function PracticeContent() {
   const [customQuestionCount, setCustomQuestionCount] = useState(20);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
 
+  // Stable timestamp for stats calculation (set once on mount via lazy init)
+  const [mountTime] = useState(() => Date.now());
+
   // Calculate stats for mode selection
   const stats = useMemo(() => {
     const weakQuestions = allQuestions.filter(q =>
       q.stats.attempts > 0 && (q.stats.correct / q.stats.attempts) < 0.5
     );
 
-    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const sevenDaysAgo = mountTime - 7 * 24 * 60 * 60 * 1000;
     const oldQuestions = allQuestions.filter(q => {
       if (!q.stats.lastAttempt) return true;
       return new Date(q.stats.lastAttempt).getTime() < sevenDaysAgo;
@@ -76,17 +88,7 @@ function PracticeContent() {
       weak: weakQuestions.length,
       old: oldQuestions.length
     };
-  }, [allQuestions]);
-
-  // Shuffle helper
-  const shuffleArray = <T,>(arr: T[]): T[] => {
-    const shuffled = [...arr];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  };
+  }, [allQuestions, mountTime]);
 
   // Get filtered questions based on mode
   const getFilteredQuestions = (selectedMode: PracticeMode) => {
@@ -119,7 +121,7 @@ function PracticeContent() {
   const [showResult, setShowResult] = useState(false);
   const [answers, setAnswers] = useState<{ correct: boolean; questionId: string }[]>([]);
   const [sessionComplete, setSessionComplete] = useState(false);
-  const [openAnswer, setOpenAnswer] = useState('');
+  const [, setOpenAnswer] = useState(''); // For future open-ended questions
 
   // Timer state
   const [startTime, setStartTime] = useState<number | null>(null);

@@ -1,8 +1,16 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { GraduationCap, Plus, Trash2, Target, TrendingUp, Award, BookOpen } from 'lucide-react';
+import { GraduationCap, Plus, Trash2, Target, Award, BookOpen } from 'lucide-react';
 import { useApp } from '@/lib/context';
+
+// МУ София формула: Семестър = средна аритметична от всички оценки
+type SemesterGrade = { grade: number };
+function getSemesterAverage(semGrades: SemesterGrade[]) {
+  if (semGrades.length === 0) return 0;
+  const sum = semGrades.reduce((acc, g) => acc + g.grade, 0);
+  return sum / semGrades.length;
+}
 
 export default function GPAPage() {
   const { data, addSemesterGrade, deleteSemesterGrade, setTargetGPA } = useApp();
@@ -30,49 +38,7 @@ export default function GPAPage() {
     return result;
   }, [grades]);
 
-  // МУ София формула:
-  // 1. Семестър = средна аритметична от всички оценки в семестъра
-  const getSemesterAverage = (semGrades: typeof grades) => {
-    if (semGrades.length === 0) return 0;
-    const sum = semGrades.reduce((acc, g) => acc + g.grade, 0);
-    return sum / semGrades.length;
-  };
-
-  // 2. Учебна година = средна от двата семестъра в годината
-  const getYearAverages = useMemo(() => {
-    const years: Record<string, { sem1: number; sem2: number; avg: number }> = {};
-
-    Object.entries(semesters).forEach(([key, semGrades]) => {
-      const [year, sem] = key.split('-');
-      const semAvg = getSemesterAverage(semGrades);
-
-      if (!years[year]) {
-        years[year] = { sem1: 0, sem2: 0, avg: 0 };
-      }
-
-      if (parseInt(sem) % 2 === 1) {
-        years[year].sem1 = semAvg;
-      } else {
-        years[year].sem2 = semAvg;
-      }
-    });
-
-    // Calculate year averages
-    Object.keys(years).forEach(year => {
-      const { sem1, sem2 } = years[year];
-      if (sem1 > 0 && sem2 > 0) {
-        years[year].avg = (sem1 + sem2) / 2;
-      } else if (sem1 > 0) {
-        years[year].avg = sem1;
-      } else if (sem2 > 0) {
-        years[year].avg = sem2;
-      }
-    });
-
-    return years;
-  }, [semesters]);
-
-  // 3. Среден успех от ВСИЧКИ семестри (аритметична средна от семестрите)
+  // Среден успех от ВСИЧКИ семестри (аритметична средна от семестрите)
   const semesterAverages = useMemo(() => {
     return Object.values(semesters).map(getSemesterAverage).filter(avg => avg > 0);
   }, [semesters]);

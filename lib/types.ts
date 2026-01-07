@@ -187,6 +187,8 @@ export interface Topic {
   wrongAnswers: WrongAnswer[]; // Recent wrong answers for drill weakness mode
   // Reader Mode: Highlights
   highlights: TextHighlight[]; // Highlighted text passages
+  // Encoding Coach: One-time study strategy
+  encodingCoach?: string; // AI-generated study strategy (one per topic)
 }
 
 // Text highlight for reader mode

@@ -289,6 +289,11 @@ export default function TopicDetailPage() {
     updateTopic(subjectId, topicId, { highlights });
   };
 
+  // Handle saving encoding coach from ReaderMode
+  const handleSaveEncodingCoach = (encodingCoach: string) => {
+    updateTopic(subjectId, topicId, { encodingCoach });
+  };
+
   // ReaderMode needs the full topic with current material
   const topicForReader = { ...topic, material };
 
@@ -298,8 +303,10 @@ export default function TopicDetailPage() {
       {readerFromUrl && (
         <ReaderMode
           topic={topicForReader}
+          subjectName={subject.name}
           onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
+          onSaveEncodingCoach={handleSaveEncodingCoach}
         />
       )}
 

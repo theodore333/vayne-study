@@ -6,8 +6,10 @@ import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
   topic: Topic;
+  subjectName?: string;
   onClose: () => void;
   onSaveHighlights: (highlights: TextHighlight[]) => void;
+  onSaveEncodingCoach: (coach: string) => void;
 }
 
 type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
@@ -92,7 +94,7 @@ function parseMarkdown(text: string): string {
   return html;
 }
 
-export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderModeProps) {
+export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveEncodingCoach }: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
   const [highlights, setHighlights] = useState<TextHighlight[]>(topic.highlights || []);
   const [selectedColor, setSelectedColor] = useState<HighlightColor>('yellow');
@@ -102,6 +104,9 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [loadingTipId, setLoadingTipId] = useState<string | null>(null);
+  const [encodingCoach, setEncodingCoach] = useState<string | null>(topic.encodingCoach || null);
+  const [loadingCoach, setLoadingCoach] = useState(false);
+  const [showCoach, setShowCoach] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -250,6 +255,50 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     }
   };
 
+  // Fetch encoding coach (one-time per topic)
+  const fetchEncodingCoach = async () => {
+    if (encodingCoach) {
+      setShowCoach(true);
+      return;
+    }
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      alert('Добави API ключ в Settings');
+      return;
+    }
+
+    setLoadingCoach(true);
+
+    try {
+      const response = await fetch('/api/encoding-coach', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          material: topic.material,
+          topicName: topic.name,
+          subjectName,
+          apiKey
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Грешка');
+      }
+
+      setEncodingCoach(data.strategy);
+      onSaveEncodingCoach(data.strategy);
+      setShowCoach(true);
+    } catch (error) {
+      console.error('Error fetching encoding coach:', error);
+      alert(error instanceof Error ? error.message : 'Грешка при генериране');
+    } finally {
+      setLoadingCoach(false);
+    }
+  };
+
   // Render content with highlights
   const renderContent = () => {
     const cleanedMaterial = cleanMarkdown(topic.material);
@@ -317,6 +366,27 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Encoding Coach Button */}
+            <button
+              onClick={fetchEncodingCoach}
+              disabled={loadingCoach}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium text-sm transition-all ${
+                encodingCoach
+                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
+                  : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+              } disabled:opacity-50`}
+              title={encodingCoach ? 'Виж стратегията' : 'Получи стратегия за учене (1 път)'}
+            >
+              {loadingCoach ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Lightbulb size={16} />
+              )}
+              <span className="hidden sm:inline">
+                {loadingCoach ? 'Мисля...' : encodingCoach ? 'Стратегия' : 'Как да уча?'}
+              </span>
+            </button>
+
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
@@ -606,6 +676,42 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
         >
           <ChevronUp size={24} />
         </button>
+      )}
+
+      {/* Encoding Coach Modal */}
+      {showCoach && encodingCoach && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={() => setShowCoach(false)}>
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-lg w-full mx-4 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-purple-600 to-emerald-600 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-white">
+                  <Lightbulb size={24} />
+                  <h2 className="text-lg font-bold">Как да уча тази тема?</h2>
+                </div>
+                <button
+                  onClick={() => setShowCoach(false)}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <p className="text-white/80 text-sm mt-1">{topic.name}</p>
+            </div>
+            <div className="p-6">
+              <div className="prose prose-sm max-w-none text-stone-700 whitespace-pre-wrap">
+                {encodingCoach}
+              </div>
+              <div className="mt-4 pt-4 border-t border-stone-200">
+                <p className="text-xs text-stone-400 text-center">
+                  💡 Този съвет е генериран веднъж за темата
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

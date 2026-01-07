@@ -295,10 +295,10 @@ Return ONLY a valid JSON object:
   ],
   "questions": [
     {
-      "type": "multiple_choice",
+      "type": "multiple_choice" | "open" | "case_study",
       "question": "Question in Bulgarian",
-      "options": ["A", "B", "C", "D"],
-      "correctAnswer": "correct option text",
+      "options": ["A", "B", "C", "D"], // only for multiple_choice/case_study
+      "correctAnswer": "correct answer (за open: примерен пълен отговор 3-5 изречения)",
       "explanation": "explanation in Bulgarian",
       "bloomLevel": 1-6,
       "targetConcept": "which concept this tests",
@@ -310,6 +310,11 @@ Return ONLY a valid JSON object:
   ],
   "studyRecommendation": "personalized study recommendation in Bulgarian"
 }
+
+QUESTION TYPE DISTRIBUTION:
+- ПРЕДПОЧИТАЙ "open" (60%) - изискват писане, показват истинско разбиране
+- "case_study" (25%) - клинични сценарии
+- "multiple_choice" (15%) - само за бързи фактологични проверки
 
 Generate 8-12 strategically chosen questions that efficiently probe for gaps.
 Mix Bloom levels but focus on levels ${Math.max(1, currentBloomLevel - 1)} to ${Math.min(6, currentBloomLevel + 1)}.`
@@ -431,8 +436,14 @@ ${material}
 
 Generate ${targetQuestionCount} high-quality quiz questions. Intelligently select:
 - The most important concepts to test
-- Mix of question types (multiple choice, open-ended, case studies)
-- Questions that efficiently assess understanding
+- Questions that efficiently assess deep understanding
+
+QUESTION TYPE DISTRIBUTION (ВАЖНО!):
+- ПРЕДПОЧИТАЙ "open" въпроси (60-70%) - изискват писане и показват истинско разбиране
+- Използвай "case_study" за клинични сценарии (20-30%) - пациентски случаи с решения
+- ИЗБЯГВАЙ "multiple_choice" (макс 10-20%) - само за фактологични въпроси на ниски Bloom нива
+
+Причина: Студентът има Question Bank за MCQ практика. Този Quiz трябва да тества ДЪЛБОКО разбиране!
 
 Return ONLY a valid JSON array:
 [
@@ -440,7 +451,7 @@ Return ONLY a valid JSON array:
     "type": "multiple_choice" | "open" | "case_study",
     "question": "Question in Bulgarian",
     "options": ["A", "B", "C", "D"], // only for multiple_choice/case_study
-    "correctAnswer": "correct answer",
+    "correctAnswer": "correct answer (за open: примерен пълен отговор)",
     "explanation": "detailed explanation in Bulgarian",
     "bloomLevel": 1-6,
     "concept": "main concept being tested"
@@ -450,6 +461,7 @@ Return ONLY a valid JSON array:
 IMPORTANT:
 - Questions must be in Bulgarian
 - Focus on clinically relevant concepts
+- For "open" questions: correctAnswer should be a complete MODEL ANSWER (3-5 sentences)
 - Explanations should be educational
 - Return ONLY the JSON array`
     }]

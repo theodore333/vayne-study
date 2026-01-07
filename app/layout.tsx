@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppProvider } from "@/lib/context";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import FloatingTimer from "@/components/FloatingTimer";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -33,6 +34,7 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          <FloatingTimer />
         </AppProvider>
       </body>
     </html>

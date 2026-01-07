@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock } from 'lucide-react';
 import Link from 'next/link';
@@ -43,8 +43,22 @@ function QuizContent() {
   const searchParams = useSearchParams();
   const subjectId = searchParams.get('subject');
   const topicId = searchParams.get('topic');
+  const isMultiMode = searchParams.get('multi') === 'true';
+  const topicsParam = searchParams.get('topics');
 
   const { data, addGrade, incrementApiCalls, updateTopic } = useApp();
+
+  // Parse multi-topic params
+  const multiTopics = useMemo(() => {
+    if (!isMultiMode || !topicsParam) return [];
+    return topicsParam.split(',').map(pair => {
+      const [subjId, topId] = pair.split(':');
+      const subj = data.subjects.find(s => s.id === subjId);
+      const top = subj?.topics.find(t => t.id === topId);
+      if (!subj || !top || !top.material) return null;
+      return { subject: subj, topic: top };
+    }).filter(Boolean) as Array<{ subject: typeof data.subjects[0]; topic: typeof data.subjects[0]['topics'][0] }>;
+  }, [isMultiMode, topicsParam, data.subjects]);
 
   // Quiz settings
   const [mode, setMode] = useState<QuizMode | null>(null); // null = no selection yet
@@ -70,6 +84,10 @@ function QuizContent() {
   // Preview screen state
   const [showPreview, setShowPreview] = useState(false);
   const [previewQuestionCount, setPreviewQuestionCount] = useState(12);
+
+  // Multi-topic mode
+  const [multiTopicMode, setMultiTopicMode] = useState(false);
+  const [selectedTopics, setSelectedTopics] = useState<Array<{ subjectId: string; topicId: string }>>([]);
 
   // Free recall state
   const [freeRecallText, setFreeRecallText] = useState('');
@@ -246,8 +264,13 @@ function QuizContent() {
   };
 
   const generateQuiz = async () => {
-    if (!topic?.material && mode !== 'free_recall') {
-      setQuizState(prev => ({ ...prev, error: 'Няма добавен материал към тази тема.' }));
+    // Check if we have material (single topic or multi-topic)
+    const hasValidMaterial = isMultiMode
+      ? multiTopics.length > 0
+      : topic?.material;
+
+    if (!hasValidMaterial && mode !== 'free_recall') {
+      setQuizState(prev => ({ ...prev, error: 'Няма добавен материал.' }));
       return;
     }
 
@@ -263,10 +286,38 @@ function QuizContent() {
       // Use preview question count (user may have adjusted it)
       const questionCount = previewQuestionCount;
 
-      const response = await fetch('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Build request body based on mode
+      let requestBody;
+
+      if (isMultiMode && multiTopics.length > 0) {
+        // Multi-topic mode: combine materials
+        const combinedMaterial = multiTopics.map(({ subject: s, topic: t }) =>
+          `=== ТЕМА: ${t.name} (${s.name}) ===\n${t.material}`
+        ).join('\n\n---\n\n');
+
+        const topicNames = multiTopics.map(({ topic: t }) => t.name).join(', ');
+        const avgBloom = Math.round(
+          multiTopics.reduce((sum, { topic: t }) => sum + (t.currentBloomLevel || 1), 0) / multiTopics.length
+        );
+
+        requestBody = {
+          apiKey,
+          material: combinedMaterial,
+          topicName: `Mix: ${multiTopics.length} теми`,
+          subjectName: multiTopics.map(({ subject: s }) => s.name).filter((v, i, a) => a.indexOf(v) === i).join(', '),
+          subjectType: multiTopics[0]?.subject.subjectType || 'preclinical',
+          examFormat: multiTopics[0]?.subject.examFormat,
+          matchExamFormat,
+          mode,
+          questionCount,
+          bloomLevel: mode === 'custom' ? customBloomLevel : null,
+          currentBloomLevel: avgBloom,
+          isMultiTopic: true,
+          topicsList: topicNames
+        };
+      } else {
+        // Single topic mode
+        requestBody = {
           apiKey,
           material: topic?.material,
           topicName: topic?.name,
@@ -279,7 +330,13 @@ function QuizContent() {
           bloomLevel: mode === 'custom' ? customBloomLevel : null,
           currentBloomLevel: topic?.currentBloomLevel || 1,
           quizHistory: topic?.quizHistory
-        })
+        };
+      }
+
+      const response = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
       });
 
       const result = await response.json();
@@ -533,60 +590,340 @@ function QuizContent() {
     setQuizStartTime(null);
     setElapsedTime(0);
     setShowPreview(false);
+    setSelectedTopics([]);
   };
 
-  // No topic selected
+  // Toggle topic selection for multi-topic mode
+  const toggleTopicSelection = (subjectId: string, topicId: string) => {
+    setSelectedTopics(prev => {
+      const exists = prev.some(t => t.subjectId === subjectId && t.topicId === topicId);
+      if (exists) {
+        return prev.filter(t => !(t.subjectId === subjectId && t.topicId === topicId));
+      } else {
+        return [...prev, { subjectId, topicId }];
+      }
+    });
+  };
+
+  // Get combined material for multi-topic quiz
+  const getMultiTopicMaterial = () => {
+    return selectedTopics.map(({ subjectId, topicId }) => {
+      const subj = data.subjects.find(s => s.id === subjectId);
+      const top = subj?.topics.find(t => t.id === topicId);
+      if (!subj || !top) return null;
+      return {
+        subjectName: subj.name,
+        topicName: top.name,
+        topicNumber: top.number,
+        material: top.material || ''
+      };
+    }).filter(Boolean);
+  };
+
+  // Multi-topic mode setup screen
+  if (isMultiMode && multiTopics.length > 0 && !showPreview && quizState.questions.length === 0) {
+    return (
+      <div className="min-h-screen p-6 space-y-6">
+        <Link href="/quiz" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm">
+          <ArrowLeft size={16} /> Назад
+        </Link>
+
+        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-2xl">
+          <div className="flex items-center gap-3 mb-6">
+            <Brain size={24} className="text-purple-400" />
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100 font-mono">Mix Quiz: {multiTopics.length} теми</h2>
+              <p className="text-sm text-slate-400 font-mono">Въпросите ще бъдат смесени от всички теми</p>
+            </div>
+          </div>
+
+          {/* Selected topics */}
+          <div className="mb-6 p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+            <div className="space-y-2">
+              {multiTopics.map(({ topic: t, subject: s }) => (
+                <div key={t.id} className="flex items-center gap-2 text-sm font-mono">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                  <span className="text-slate-300">#{t.number}</span>
+                  <span className="text-slate-200 truncate" title={t.name}>
+                    {t.name.length > 40 ? t.name.slice(0, 40) + '...' : t.name}
+                  </span>
+                  <span className="text-slate-500 text-xs ml-auto">Bloom {t.currentBloomLevel || 1}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {quizState.error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              {quizState.error === 'API_KEY_MISSING' ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={18} className="text-amber-400" />
+                    <span className="text-amber-400 font-mono text-sm">Нужен е API ключ</span>
+                  </div>
+                  <Link href="/settings" className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg font-mono text-sm">
+                    <Settings size={14} /> Настройки
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
+                  <AlertCircle size={18} /> {quizState.error}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Mode Selection - simplified for multi-topic */}
+          <div className="mb-6">
+            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider">Избери режим</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setMode('assessment')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'assessment' ? 'bg-amber-500/20 border-amber-500 ring-2 ring-amber-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <TrendingUp size={20} className={mode === 'assessment' ? 'text-amber-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'assessment' ? 'text-amber-400' : 'text-slate-300'}`}>
+                  Assessment
+                </span>
+                <span className="text-xs text-slate-500 font-mono">Всички Bloom нива</span>
+              </button>
+
+              <button
+                onClick={() => setMode('mid_order')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'mid_order' ? 'bg-blue-500/20 border-blue-500 ring-2 ring-blue-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <Zap size={20} className={mode === 'mid_order' ? 'text-blue-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'mid_order' ? 'text-blue-400' : 'text-slate-300'}`}>
+                  Mid-Order
+                </span>
+                <span className="text-xs text-slate-500 font-mono">Apply, Analyze</span>
+              </button>
+
+              <button
+                onClick={() => setMode('higher_order')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'higher_order' ? 'bg-pink-500/20 border-pink-500 ring-2 ring-pink-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <Brain size={20} className={mode === 'higher_order' ? 'text-pink-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'higher_order' ? 'text-pink-400' : 'text-slate-300'}`}>
+                  Higher-Order
+                </span>
+                <span className="text-xs text-slate-500 font-mono">Evaluate, Create</span>
+              </button>
+
+              <button
+                onClick={() => setMode('gap_analysis')}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'gap_analysis' ? 'bg-red-500/20 border-red-500 ring-2 ring-red-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <Target size={20} className={mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-300'}`}>
+                  Gap Analysis
+                </span>
+                <span className="text-xs text-slate-500 font-mono">Слаби места</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quiz Length */}
+          {mode && (
+            <div className="mb-6">
+              <label className="block text-xs text-slate-500 mb-2 font-mono uppercase tracking-wider">
+                Дължина
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {(Object.keys(QUIZ_LENGTH_PRESETS) as QuizLengthPreset[]).map(preset => {
+                  const config = QUIZ_LENGTH_PRESETS[preset];
+                  return (
+                    <button
+                      key={preset}
+                      onClick={() => setQuizLength(preset)}
+                      className={`p-2 rounded-lg border text-center transition-all ${
+                        quizLength === preset
+                          ? 'bg-purple-500/20 border-purple-500'
+                          : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className={`block font-mono text-sm ${quizLength === preset ? 'text-purple-300' : 'text-slate-300'}`}>
+                        {config.label}
+                      </span>
+                      <span className="text-xs text-slate-500 font-mono">{config.questions}q</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Start Button */}
+          <button
+            onClick={openPreview}
+            disabled={!mode}
+            className="w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-500 hover:to-pink-500 transition-all"
+          >
+            <Settings size={20} /> Преглед и редакция
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No topic selected - show topic selection with multi-topic option
   if (!subject || !topic) {
     return (
       <div className="min-h-screen p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-100 font-mono flex items-center gap-3">
-            <Brain className="text-pink-400" />
-            AI Тест
-          </h1>
-          <p className="text-slate-400 mt-1 font-mono text-sm">
-            Интелигентно тестване с адаптивна сложност
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-100 font-mono flex items-center gap-3">
+              <Brain className="text-pink-400" />
+              AI Тест
+            </h1>
+            <p className="text-slate-400 mt-1 font-mono text-sm">
+              Интелигентно тестване с адаптивна сложност
+            </p>
+          </div>
+
+          {/* Multi-topic toggle */}
+          <button
+            onClick={() => {
+              setMultiTopicMode(!multiTopicMode);
+              if (multiTopicMode) setSelectedTopics([]);
+            }}
+            className={`px-4 py-2 rounded-lg font-mono text-sm transition-all flex items-center gap-2 ${
+              multiTopicMode
+                ? 'bg-purple-500/20 border border-purple-500 text-purple-300'
+                : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+            }`}
+          >
+            <span className="text-lg">{multiTopicMode ? '✓' : '⊞'}</span>
+            Multi-Topic
+          </button>
         </div>
+
+        {/* Multi-topic selected count */}
+        {multiTopicMode && selectedTopics.length > 0 && (
+          <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <span className="text-purple-300 font-mono">
+                {selectedTopics.length} {selectedTopics.length === 1 ? 'тема избрана' : 'теми избрани'}
+              </span>
+              <p className="text-xs text-purple-400/70 font-mono mt-1">
+                Въпросите ще бъдат смесени от всички теми
+              </p>
+            </div>
+            <Link
+              href={`/quiz?multi=true&topics=${selectedTopics.map(t => `${t.subjectId}:${t.topicId}`).join(',')}`}
+              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg font-mono flex items-center gap-2 hover:from-purple-500 hover:to-pink-500 transition-all"
+            >
+              <Play size={18} /> Започни Mix Quiz
+            </Link>
+          </div>
+        )}
 
         <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 font-mono">
-            Избери тема за тест
+            {multiTopicMode ? 'Избери теми за смесен тест' : 'Избери тема за тест'}
           </h2>
 
           <div className="space-y-4">
-            {data.subjects.map(subj => (
-              <div key={subj.id}>
-                <h3 className="text-sm text-slate-400 font-mono mb-2" style={{ color: subj.color }}>
-                  {subj.name}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {subj.topics.filter(t => t.material).map(t => (
-                    <Link
-                      key={t.id}
-                      href={`/quiz?subject=${subj.id}&topic=${t.id}`}
-                      className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 transition-all"
-                    >
-                      <div className="flex items-start gap-2">
-                        <span className="shrink-0">{STATUS_CONFIG[t.status].emoji}</span>
-                        <span className="text-slate-200 font-mono text-sm line-clamp-2" title={`#${t.number} ${t.name}`}>
-                          #{t.number} {t.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-mono">
-                        <span>Bloom: {t.currentBloomLevel || 1}</span>
-                        {t.quizCount > 0 && <span>• {t.quizCount} теста</span>}
-                      </div>
-                    </Link>
-                  ))}
+            {data.subjects.map(subj => {
+              const topicsWithMaterial = subj.topics.filter(t => t.material);
+              const allSelected = topicsWithMaterial.length > 0 &&
+                topicsWithMaterial.every(t => selectedTopics.some(st => st.topicId === t.id));
+
+              return (
+                <div key={subj.id}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm text-slate-400 font-mono" style={{ color: subj.color }}>
+                      {subj.name}
+                    </h3>
+                    {multiTopicMode && topicsWithMaterial.length > 0 && (
+                      <button
+                        onClick={() => {
+                          if (allSelected) {
+                            setSelectedTopics(prev => prev.filter(t => t.subjectId !== subj.id));
+                          } else {
+                            const newSelections = topicsWithMaterial
+                              .filter(t => !selectedTopics.some(st => st.topicId === t.id))
+                              .map(t => ({ subjectId: subj.id, topicId: t.id }));
+                            setSelectedTopics(prev => [...prev, ...newSelections]);
+                          }
+                        }}
+                        className="text-xs font-mono text-slate-500 hover:text-slate-300"
+                      >
+                        {allSelected ? 'Махни всички' : 'Избери всички'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {topicsWithMaterial.map(t => {
+                      const isSelected = selectedTopics.some(st => st.subjectId === subj.id && st.topicId === t.id);
+
+                      if (multiTopicMode) {
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => toggleTopicSelection(subj.id, t.id)}
+                            className={`p-3 rounded-lg border text-left transition-all ${
+                              isSelected
+                                ? 'bg-purple-500/20 border-purple-500 ring-1 ring-purple-500/30'
+                                : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center text-xs ${
+                                isSelected
+                                  ? 'bg-purple-500 border-purple-500 text-white'
+                                  : 'border-slate-600 text-transparent'
+                              }`}>
+                                ✓
+                              </span>
+                              <span className={`font-mono text-sm line-clamp-2 ${isSelected ? 'text-purple-200' : 'text-slate-200'}`} title={`#${t.number} ${t.name}`}>
+                                #{t.number} {t.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 ml-7 text-xs text-slate-500 font-mono">
+                              <span>Bloom: {t.currentBloomLevel || 1}</span>
+                              {t.quizCount > 0 && <span>• {t.quizCount} теста</span>}
+                            </div>
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <Link
+                          key={t.id}
+                          href={`/quiz?subject=${subj.id}&topic=${t.id}`}
+                          className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 transition-all"
+                        >
+                          <div className="flex items-start gap-2">
+                            <span className="shrink-0">{STATUS_CONFIG[t.status].emoji}</span>
+                            <span className="text-slate-200 font-mono text-sm line-clamp-2" title={`#${t.number} ${t.name}`}>
+                              #{t.number} {t.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-mono">
+                            <span>Bloom: {t.currentBloomLevel || 1}</span>
+                            {t.quizCount > 0 && <span>• {t.quizCount} теста</span>}
+                          </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                  {topicsWithMaterial.length === 0 && (
+                    <p className="text-sm text-slate-600 font-mono">
+                      Няма теми с добавен материал
+                    </p>
+                  )}
                 </div>
-                {subj.topics.filter(t => t.material).length === 0 && (
-                  <p className="text-sm text-slate-600 font-mono">
-                    Няма теми с добавен материал
-                  </p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -984,22 +1321,51 @@ function QuizContent() {
 
           {/* Summary */}
           <div className="space-y-3 mb-6">
-            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
-              <span className="text-slate-400 font-mono text-sm">Тема</span>
-              <span className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={topic.name}>
-                {topic.name}
-              </span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
-              <span className="text-slate-400 font-mono text-sm">Режим</span>
-              <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
-              <span className="text-slate-400 font-mono text-sm">Текущо Bloom ниво</span>
-              <span className="text-purple-400 font-mono text-sm">
-                {topic.currentBloomLevel || 1} - {BLOOM_LEVELS.find(b => b.level === (topic.currentBloomLevel || 1))?.name}
-              </span>
-            </div>
+            {isMultiMode && multiTopics.length > 0 ? (
+              <>
+                <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <span className="text-purple-300 font-mono text-sm font-semibold">
+                    🔀 Mix Quiz: {multiTopics.length} теми
+                  </span>
+                  <div className="mt-2 space-y-1">
+                    {multiTopics.slice(0, 5).map(({ topic: t, subject: s }) => (
+                      <div key={t.id} className="text-xs text-slate-400 font-mono flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                        #{t.number} {t.name.length > 30 ? t.name.slice(0, 30) + '...' : t.name}
+                      </div>
+                    ))}
+                    {multiTopics.length > 5 && (
+                      <div className="text-xs text-slate-500 font-mono">
+                        +{multiTopics.length - 5} още...
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-400 font-mono text-sm">Режим</span>
+                  <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-400 font-mono text-sm">Тема</span>
+                  <span className="text-slate-200 font-mono text-sm truncate max-w-[200px]" title={topic?.name}>
+                    {topic?.name}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-400 font-mono text-sm">Режим</span>
+                  <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
+                </div>
+                <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-400 font-mono text-sm">Текущо Bloom ниво</span>
+                  <span className="text-purple-400 font-mono text-sm">
+                    {topic?.currentBloomLevel || 1} - {BLOOM_LEVELS.find(b => b.level === (topic?.currentBloomLevel || 1))?.name}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Question Count Adjuster */}

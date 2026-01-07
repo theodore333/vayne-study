@@ -254,16 +254,13 @@ export default function TodayPage() {
                                   }`}
                                   title={`Отвори: #${topic.number} ${topic.name}`}
                                 >
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span
-                                      className="shrink-0 w-2 h-2 rounded-full"
-                                      style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
-                                    />
-                                    <span className="truncate block group-hover:underline">
-                                      #{topic.number} {topic.name}
-                                    </span>
-                                    <span className="opacity-0 group-hover:opacity-100 text-blue-400 transition-opacity shrink-0">→</span>
-                                  </div>
+                                  <span
+                                    className="shrink-0 w-2 h-2 rounded-full inline-block mr-1.5"
+                                    style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
+                                  />
+                                  <span className="group-hover:underline">
+                                    #{topic.number} {topic.name.length > 50 ? topic.name.slice(0, 50) + '...' : topic.name}
+                                  </span>
                                 </Link>
                                 {isTopicDone && topic.lastReview?.startsWith(today) && (
                                   <span className="text-[10px] text-green-400 font-mono shrink-0">

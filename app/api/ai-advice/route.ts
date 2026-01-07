@@ -32,7 +32,14 @@ export async function POST(request: NextRequest) {
     );
     const todayMinutes = todaySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
 
-    // Subject summaries with workload calculation
+    // Subject summaries with WEIGHTED workload calculation
+    // Status weights (effort needed):
+    // - Gray: 1.0 (не съм пипал - пълно учене)
+    // - Orange: 0.75 (минимални основи - нужна работа)
+    // - Yellow: 0.35 (знам добре - само преговор/детайли)
+    // - Green: 0 (готово)
+    const STATUS_WEIGHTS = { gray: 1.0, orange: 0.75, yellow: 0.35, green: 0 };
+
     const subjectSummaries = subjects.map((s: any) => {
       const totalTopics = s.topics.length;
       const greenTopics = s.topics.filter((t: any) => t.status === 'green').length;
@@ -40,7 +47,14 @@ export async function POST(request: NextRequest) {
       const orangeTopics = s.topics.filter((t: any) => t.status === 'orange').length;
       const grayTopics = s.topics.filter((t: any) => t.status === 'gray').length;
 
-      // Remaining topics (not green)
+      // WEIGHTED workload calculation
+      const weightedWorkload =
+        grayTopics * STATUS_WEIGHTS.gray +
+        orangeTopics * STATUS_WEIGHTS.orange +
+        yellowTopics * STATUS_WEIGHTS.yellow;
+      const weightedWorkloadRounded = Math.round(weightedWorkload * 10) / 10;
+
+      // Simple remaining (not green) for reference
       const remainingTopics = totalTopics - greenTopics;
 
       // Weak topics (low quiz scores)
@@ -52,21 +66,25 @@ export async function POST(request: NextRequest) {
         })
         .map((t: any) => t.name);
 
-      // Days until exam & topics per day
+      // Days until exam & weighted workload per day
       let daysUntilExam = null;
-      let topicsPerDay = 0;
+      let workloadPerDay = 0;
+      let rawTopicsPerDay = 0;
       let workloadWarning = '';
       if (s.examDate) {
         const examDate = new Date(s.examDate);
         daysUntilExam = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        if (daysUntilExam > 0 && remainingTopics > 0) {
-          topicsPerDay = Math.ceil(remainingTopics / daysUntilExam);
-          if (topicsPerDay > 20) {
-            workloadWarning = `НЕВЪЗМОЖНО: ${remainingTopics} теми за ${daysUntilExam} дни = ${topicsPerDay}/ден!`;
-          } else if (topicsPerDay > 10) {
-            workloadWarning = `МНОГО ТЕЖКО: ${topicsPerDay} теми/ден`;
-          } else if (topicsPerDay > 5) {
-            workloadWarning = `Интензивно: ${topicsPerDay} теми/ден`;
+        if (daysUntilExam > 0) {
+          workloadPerDay = Math.round((weightedWorkload / daysUntilExam) * 10) / 10;
+          rawTopicsPerDay = Math.ceil(remainingTopics / daysUntilExam);
+
+          // Warnings based on weighted workload
+          if (workloadPerDay > 15) {
+            workloadWarning = `НЕВЪЗМОЖНО: ${weightedWorkloadRounded} units за ${daysUntilExam} дни = ${workloadPerDay}/ден!`;
+          } else if (workloadPerDay > 8) {
+            workloadWarning = `МНОГО ТЕЖКО: ${workloadPerDay} units/ден`;
+          } else if (workloadPerDay > 5) {
+            workloadWarning = `Интензивно: ${workloadPerDay} units/ден`;
           }
         }
       }
@@ -97,7 +115,9 @@ export async function POST(request: NextRequest) {
         daysUntilExam,
         totalTopics,
         remainingTopics,
-        topicsPerDay,
+        weightedWorkload: weightedWorkloadRounded,
+        workloadPerDay,
+        rawTopicsPerDay,
         workloadWarning,
         greenTopics,
         yellowTopics,
@@ -156,21 +176,18 @@ export async function POST(request: NextRequest) {
     const isLate = currentHour >= 15 && todayHours < (dailyTarget * 0.25);
     const isCriticallyLate = currentHour >= 18 && todayHours < (dailyTarget * 0.4);
 
-    // Build detailed subject info for prompt
+    // Build detailed subject info for prompt with weighted workload
     const subjectDetails = subjectSummaries.map((s: any) => {
       let info = `${s.name}:`;
-      info += ` ${s.remainingTopics}/${s.totalTopics} оставащи`;
+      info += `\n  Теми: ${s.grayTopics} нови + ${s.orangeTopics} с основи + ${s.yellowTopics} за преговор + ${s.greenTopics} готови = ${s.totalTopics} общо`;
+      info += `\n  Натоварване: ${s.weightedWorkload} units (${s.grayTopics}×1.0 + ${s.orangeTopics}×0.75 + ${s.yellowTopics}×0.35)`;
       if (s.daysUntilExam !== null) {
-        info += ` | ${s.daysUntilExam}д до изпит`;
-        if (s.topicsPerDay > 0) {
-          info += ` | Нужни ${s.topicsPerDay} теми/ден`;
-        }
+        info += `\n  Изпит: след ${s.daysUntilExam} дни | ${s.workloadPerDay} units/ден нужни`;
       }
-      if (s.workloadWarning) info += ` | ${s.workloadWarning}`;
+      if (s.workloadWarning) info += `\n  ⚠️ ${s.workloadWarning}`;
       if (s.examFormat) info += `\n  Формат: ${s.examFormat}`;
       if (s.formatStrategy) info += `\n  Стратегия: ${s.formatStrategy}`;
       if (s.weakTopics.length > 0) info += `\n  Слаби теми: ${s.weakTopics.join(', ')}`;
-      info += `\n  Статус: ${s.greenTopics} зелени, ${s.yellowTopics} жълти, ${s.orangeTopics} оранжеви, ${s.grayTopics} сиви`;
       return info;
     }).join('\n\n');
 
@@ -196,22 +213,29 @@ ${subjectDetails}
 ${hasCriticalExam ? `
 КРИТИЧЕН ИЗПИТ: ${mostUrgent.name}
 - След ${mostUrgent.daysUntilExam} дни!
-- Оставащи теми: ${mostUrgent.remainingTopics}
-- Нужни на ден: ${mostUrgent.topicsPerDay} теми
+- Натоварване: ${mostUrgent.weightedWorkload} units (${mostUrgent.grayTopics} нови, ${mostUrgent.orangeTopics} с основи, ${mostUrgent.yellowTopics} за преговор)
+- Нужни: ${mostUrgent.workloadPerDay} units/ден
 ${mostUrgent.workloadWarning ? '- ' + mostUrgent.workloadWarning : ''}
 ${mostUrgent.formatStrategy ? '- ' + mostUrgent.formatStrategy : ''}
 ` : ''}
 
+СИСТЕМА ЗА СТАТУС (важно!):
+- СИВИ (×1.0): Не съм пипал - нужно ПЪЛНО учене
+- ОРАНЖЕВИ (×0.75): Минимални основи - нужна сериозна работа
+- ЖЪЛТИ (×0.35): Знам добре за потенциален отличен - само преговор и детайли
+- ЗЕЛЕНИ (×0): Готови - не се броят
+
+1 unit ≈ 1 тема с пълно учене. Жълта тема = 0.35 units (бърз преговор).
+
 ИНСТРУКЦИИ ЗА ОТГОВОР:
 - Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
-- Кажи КОНКРЕТНО колко теми трябва да мине ДНЕС за всеки предмет с изпит
-- Ако има случаен избор на изпита (теглят се теми) - препоръчай широко покритие вместо дълбочина
-- Ако натоварването е нереалистично (>15 теми/ден) - кажи го директно и предложи приоритизация
-- Кои теми да ПРОПУСНЕ ако няма време за всички? (най-малко вероятни, най-лесни за научаване набързо)
-- Кои теми са ЗАДЪЛЖИТЕЛНИ? (high-yield, чести на изпит)
+- Използвай WEIGHTED workload (units), не брой теми! Жълтите НЕ са като сивите!
+- Кажи колко НОВИ (сиви) теми да мине днес + колко ЖЪЛТИ да прегледа
+- Ако има случаен избор на изпита - препоръчай широко покритие на сивите
+- Ако натоварването е нереалистично (>10 units/ден) - предложи да фокусира само сивите
 - ${dailyStatus?.sick ? 'БОЛЕН - бъди разбиращ, ' + dailyTarget + 'ч цел' : dailyStatus?.holiday ? 'ПОЧИВКА - ' + dailyTarget + 'ч цел' : 'Бъди строг'}
 - Максимум 5-6 изречения, директно и конкретно
-- Говори като треньор който знае медицина`;
+- Говори като треньор`;
     } else {
       // Weekly review
       prompt = `Ти си СТРОГ учебен coach за медицински студент. Прави седмичен преглед.
@@ -225,15 +249,17 @@ ${subjectDetails}
 
 ПРЕДСТОЯЩИ ИЗПИТИ:
 ${subjectSummaries.filter((s: any) => s.daysUntilExam !== null && s.daysUntilExam <= 14).map((s: any) =>
-  `- ${s.name}: ${s.daysUntilExam}д | ${s.remainingTopics} оставащи | ${s.topicsPerDay} теми/ден нужни`
+  `- ${s.name}: ${s.daysUntilExam}д | ${s.weightedWorkload} units (${s.grayTopics} нови, ${s.yellowTopics} за преговор) | ${s.workloadPerDay} units/ден`
 ).join('\n') || 'Няма изпити в следващите 2 седмици'}
+
+СИСТЕМА ЗА СТАТУС:
+- СИВИ (×1.0): Не съм пипал - ЖЪЛТИ (×0.35): Знам, само преговор - ЗЕЛЕНИ: Готови
 
 ИНСТРУКЦИИ:
 - Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
-- Оцени седмицата: достатъчно ли е времето спрямо предстоящите изпити?
-- Конкретни приоритети за следващата седмица базирани на теми/ден нужни
-- Ако темпото е недостатъчно за изпитите - кажи го директно с числа
-- Препоръчай стратегия: широко покритие vs дълбочина, базирано на формата
+- Използвай weighted workload (units) - жълтите теми са МНОГО по-леки от сивите!
+- Оцени седмицата спрямо units/ден нужни, не брой теми
+- Ако има много сиви теми и малко време - предложи приоритизация
 - Максимум 5-6 изречения`;
     }
 

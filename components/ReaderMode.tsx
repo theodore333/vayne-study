@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type } from 'lucide-react';
+import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, Bold, Italic, List, AlignLeft } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -19,7 +19,6 @@ const HIGHLIGHT_COLORS: { color: HighlightColor; bg: string; bgClass: string; na
   { color: 'pink', bg: '#fbcfe8', bgClass: 'bg-pink-200', name: 'Розово' },
 ];
 
-// Clean markdown artifacts from text
 function cleanMarkdown(text: string): string {
   return text
     .replace(/(?<!\*)\*(?!\*)/g, '')
@@ -29,7 +28,6 @@ function cleanMarkdown(text: string): string {
     .trim();
 }
 
-// Parse markdown to HTML-like structure for rendering
 function parseMarkdown(text: string): string {
   let html = cleanMarkdown(text);
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
@@ -53,7 +51,6 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showSidebar, setShowSidebar] = useState(true);
-  const [activeTab, setActiveTab] = useState<'highlights' | 'notes'>('highlights');
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -74,8 +71,8 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Handle text selection - show floating toolbar
-  const handleMouseUp = useCallback((e: React.MouseEvent) => {
+  // Handle text selection
+  const handleMouseUp = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
       setSelectionInfo(null);
@@ -88,7 +85,6 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
       return;
     }
 
-    // Get position for floating toolbar
     const range = selection.getRangeAt(0);
     const rect = range.getBoundingClientRect();
 
@@ -99,7 +95,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     });
   }, []);
 
-  // Add highlight
+  // Add highlight with current selected color
   const addHighlight = useCallback((color: HighlightColor) => {
     if (!selectionInfo) return;
 
@@ -125,6 +121,12 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     window.getSelection()?.removeAllRanges();
   }, [selectionInfo, highlights, topic.material, onSaveHighlights]);
 
+  // Quick highlight with selected color from toolbar
+  const quickHighlight = useCallback(() => {
+    if (!selectionInfo) return;
+    addHighlight(selectedColor);
+  }, [selectionInfo, selectedColor, addHighlight]);
+
   // Remove highlight
   const removeHighlight = (id: string) => {
     const updatedHighlights = highlights.filter(h => h.id !== id);
@@ -135,11 +137,8 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
   // Render content with highlights
   const renderContent = () => {
     let content = cleanMarkdown(topic.material);
-
-    // Sort highlights by startOffset descending to apply from end to start
     const sortedHighlights = [...highlights].sort((a, b) => b.startOffset - a.startOffset);
 
-    // Apply highlights
     for (const hl of sortedHighlights) {
       const before = content.slice(0, hl.startOffset);
       const highlighted = content.slice(hl.startOffset, hl.endOffset);
@@ -170,7 +169,6 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, selectionInfo]);
 
-  // Close selection toolbar when clicking outside
   const handleContentClick = () => {
     if (selectionInfo && window.getSelection()?.isCollapsed) {
       setSelectionInfo(null);
@@ -181,54 +179,25 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     <div className="fixed inset-0 z-50 bg-stone-100 flex flex-col">
       {/* Progress bar */}
       <div className="fixed top-0 left-0 right-0 h-1 bg-stone-300 z-50">
-        <div
-          className="h-full bg-amber-500 transition-all duration-150"
-          style={{ width: `${scrollProgress}%` }}
-        />
+        <div className="h-full bg-amber-500 transition-all duration-150" style={{ width: `${scrollProgress}%` }} />
       </div>
 
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-stone-200 shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors"
-            >
+            <button onClick={onClose} className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors">
               <ChevronLeft size={20} />
               <span className="font-medium hidden sm:inline">Назад</span>
             </button>
             <div className="h-6 w-px bg-stone-300 hidden sm:block" />
             <div className="flex items-center gap-2">
               <BookOpen size={18} className="text-stone-500" />
-              <h1 className="font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-[400px]">
-                {topic.name}
-              </h1>
+              <h1 className="font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-[400px]">{topic.name}</h1>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Font size controls */}
-            <div className="flex items-center gap-1 bg-stone-100 rounded-lg px-2 py-1">
-              <Type size={14} className="text-stone-500" />
-              <button
-                onClick={() => setFontSize(Math.max(14, fontSize - 2))}
-                className="w-7 h-7 flex items-center justify-center text-stone-600 hover:text-stone-900 hover:bg-stone-200 rounded transition-colors"
-              >
-                <Minus size={14} />
-              </button>
-              <span className="text-sm text-stone-600 min-w-[32px] text-center font-mono">
-                {fontSize}
-              </span>
-              <button
-                onClick={() => setFontSize(Math.min(28, fontSize + 2))}
-                className="w-7 h-7 flex items-center justify-center text-stone-600 hover:text-stone-900 hover:bg-stone-200 rounded transition-colors"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-
-            {/* Sidebar toggle */}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
@@ -236,22 +205,75 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
             >
               {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
             </button>
-
-            {/* Close button */}
-            <button
-              onClick={onClose}
-              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
-              title="Затвори (Esc)"
-            >
+            <button onClick={onClose} className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors" title="Затвори (Esc)">
               <X size={20} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main content area */}
+      {/* Main layout: Left toolbar + Content + Right sidebar */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Content area */}
+
+        {/* LEFT TOOLBAR - Formatting & Highlighting */}
+        <aside className="w-16 flex-shrink-0 bg-white border-r border-stone-200 flex flex-col items-center py-4 gap-2">
+          {/* Font size */}
+          <div className="flex flex-col items-center gap-1 pb-3 border-b border-stone-200 w-full">
+            <Type size={16} className="text-stone-400 mb-1" />
+            <button
+              onClick={() => setFontSize(Math.max(14, fontSize - 2))}
+              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
+            >
+              <Minus size={14} />
+            </button>
+            <span className="text-xs text-stone-500 font-mono">{fontSize}</span>
+            <button
+              onClick={() => setFontSize(Math.min(28, fontSize + 2))}
+              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+
+          {/* Highlight colors */}
+          <div className="flex flex-col items-center gap-2 py-3 border-b border-stone-200 w-full">
+            <Highlighter size={16} className="text-stone-400 mb-1" />
+            {HIGHLIGHT_COLORS.map(({ color, bgClass }) => (
+              <button
+                key={color}
+                onClick={() => {
+                  setSelectedColor(color);
+                  if (selectionInfo) addHighlight(color);
+                }}
+                className={`w-8 h-8 rounded-lg ${bgClass} border-2 transition-all hover:scale-110 ${
+                  selectedColor === color ? 'border-stone-600 ring-2 ring-stone-400' : 'border-stone-300'
+                }`}
+                title={`Маркирай ${color}`}
+              />
+            ))}
+          </div>
+
+          {/* Highlight count */}
+          {highlights.length > 0 && (
+            <div className="flex flex-col items-center gap-1 py-2">
+              <span className="text-xs text-stone-400">{highlights.length}</span>
+              <button
+                onClick={() => {
+                  if (confirm('Изтрий всички маркирания?')) {
+                    setHighlights([]);
+                    onSaveHighlights([]);
+                  }
+                }}
+                className="p-2 text-stone-400 hover:text-red-500 transition-colors"
+                title="Изчисти всички"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          )}
+        </aside>
+
+        {/* CENTER - Content area */}
         <div
           ref={containerRef}
           className="flex-1 overflow-y-auto"
@@ -259,25 +281,18 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
         >
           <article
             ref={contentRef}
-            className={`mx-auto px-6 sm:px-12 py-8 ${showSidebar ? 'max-w-4xl' : 'max-w-5xl'}`}
+            className="max-w-4xl mx-auto px-8 sm:px-16 py-8"
             onMouseUp={handleMouseUp}
             onClick={handleContentClick}
           >
-            {/* Images at top if any */}
             {topic.materialImages && topic.materialImages.length > 0 && (
               <div className="mb-8 space-y-4">
                 {topic.materialImages.map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img}
-                    alt={`Изображение ${idx + 1}`}
-                    className="max-w-full rounded-lg shadow-md"
-                  />
+                  <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
                 ))}
               </div>
             )}
 
-            {/* Main content */}
             <div
               className="max-w-none text-stone-800 selection:bg-amber-200
                 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-6 [&_h1]:mt-8
@@ -295,150 +310,97 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
           </article>
         </div>
 
-        {/* Sidebar */}
+        {/* RIGHT SIDEBAR - Highlights list & Notes */}
         {showSidebar && (
           <aside className="w-80 flex-shrink-0 bg-white border-l border-stone-200 flex flex-col overflow-hidden">
-            {/* Sidebar tabs */}
-            <div className="flex border-b border-stone-200">
-              <button
-                onClick={() => setActiveTab('highlights')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'highlights'
-                    ? 'text-amber-600 border-b-2 border-amber-500 bg-amber-50'
-                    : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
-                }`}
-              >
-                <Highlighter size={16} className="inline mr-2" />
-                Маркирани ({highlights.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('notes')}
-                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
-                  activeTab === 'notes'
-                    ? 'text-amber-600 border-b-2 border-amber-500 bg-amber-50'
-                    : 'text-stone-500 hover:text-stone-700 hover:bg-stone-50'
-                }`}
-              >
-                📝 Бележки
-              </button>
-            </div>
-
-            {/* Sidebar content */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {activeTab === 'highlights' && (
-                <div className="space-y-3">
-                  {/* Color selector */}
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-xs text-stone-500">Цвят:</span>
-                    {HIGHLIGHT_COLORS.map(({ color, bgClass }) => (
-                      <button
-                        key={color}
-                        onClick={() => setSelectedColor(color)}
-                        className={`w-6 h-6 rounded ${bgClass} border-2 transition-all ${
-                          selectedColor === color ? 'border-stone-600 scale-110' : 'border-stone-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  {highlights.length === 0 ? (
-                    <div className="text-center py-8 text-stone-400">
-                      <Highlighter size={32} className="mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Селектирай текст за маркиране</p>
-                    </div>
-                  ) : (
-                    highlights.map(hl => {
+            {/* Highlights Section */}
+            <div className="border-b border-stone-200">
+              <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
+                <h3 className="text-sm font-medium text-stone-700 flex items-center gap-2">
+                  <Highlighter size={14} />
+                  Маркирани ({highlights.length})
+                </h3>
+              </div>
+              <div className="max-h-[40vh] overflow-y-auto p-3">
+                {highlights.length === 0 ? (
+                  <p className="text-sm text-stone-400 text-center py-4">
+                    Селектирай текст и избери цвят отляво
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {highlights.map(hl => {
                       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
                       return (
                         <div
                           key={hl.id}
-                          className="group p-3 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors"
-                          style={{ backgroundColor: colorConfig?.bg + '40' }}
+                          className="group p-2 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors relative"
+                          style={{ backgroundColor: colorConfig?.bg + '30' }}
                         >
-                          <p className="text-sm text-stone-700 line-clamp-3 mb-2">
-                            "{hl.text}"
-                          </p>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-stone-400">
-                              {new Date(hl.createdAt).toLocaleDateString('bg-BG')}
-                            </span>
-                            <button
-                              onClick={() => removeHighlight(hl.id)}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-500 transition-all"
-                              title="Изтрий"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
+                          <p className="text-sm text-stone-700 line-clamp-2 pr-6">"{hl.text}"</p>
+                          <button
+                            onClick={() => removeHighlight(hl.id)}
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-500 transition-all"
+                          >
+                            <X size={12} />
+                          </button>
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
 
-                  {highlights.length > 0 && (
-                    <button
-                      onClick={() => {
-                        if (confirm('Изтрий всички маркирания?')) {
-                          setHighlights([]);
-                          onSaveHighlights([]);
-                        }
-                      }}
-                      className="w-full mt-4 py-2 text-sm text-stone-400 hover:text-red-500 transition-colors"
-                    >
-                      Изчисти всички
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {activeTab === 'notes' && (
+            {/* Notes Section */}
+            <div className="flex-1 flex flex-col">
+              <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
+                <h3 className="text-sm font-medium text-stone-700">📝 Бележки</h3>
+              </div>
+              <div className="flex-1 p-3">
                 <div className="text-center py-8 text-stone-400">
-                  <p className="text-sm">🚧 Бележки - скоро</p>
+                  <p className="text-sm">🚧 Скоро...</p>
                 </div>
-              )}
+              </div>
             </div>
           </aside>
         )}
       </div>
 
-      {/* Floating selection toolbar */}
+      {/* Floating toolbar on selection */}
       {selectionInfo && (
         <div
-          className="fixed z-50 bg-white rounded-lg shadow-xl border border-stone-200 p-2 flex items-center gap-1"
+          className="fixed z-50 bg-white rounded-lg shadow-xl border border-stone-200 px-3 py-2 flex items-center gap-2"
           style={{
-            left: `${Math.max(100, Math.min(selectionInfo.x - 80, window.innerWidth - 180))}px`,
+            left: `${Math.max(100, Math.min(selectionInfo.x, window.innerWidth - 200))}px`,
             top: `${Math.max(60, selectionInfo.y - 50)}px`,
             transform: 'translateX(-50%)'
           }}
         >
+          <span className="text-xs text-stone-500 mr-1">Маркирай:</span>
           {HIGHLIGHT_COLORS.map(({ color, bgClass, name }) => (
             <button
               key={color}
               onClick={() => addHighlight(color)}
-              className={`w-8 h-8 rounded ${bgClass} hover:scale-110 transition-transform border border-stone-300`}
-              title={`Маркирай ${name}`}
+              className={`w-7 h-7 rounded ${bgClass} hover:scale-110 transition-transform border ${
+                selectedColor === color ? 'border-stone-600' : 'border-stone-300'
+              }`}
+              title={name}
             />
           ))}
-          <div className="w-px h-6 bg-stone-200 mx-1" />
           <button
-            onClick={() => {
-              setSelectionInfo(null);
-              window.getSelection()?.removeAllRanges();
-            }}
-            className="w-8 h-8 rounded bg-stone-100 hover:bg-stone-200 flex items-center justify-center transition-colors"
-            title="Откажи"
+            onClick={() => { setSelectionInfo(null); window.getSelection()?.removeAllRanges(); }}
+            className="ml-1 p-1 text-stone-400 hover:text-stone-600"
           >
-            <X size={16} className="text-stone-500" />
+            <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Scroll to top button */}
+      {/* Scroll to top */}
       {scrollProgress > 20 && (
         <button
           onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
           className="fixed bottom-6 right-6 p-3 bg-white rounded-full shadow-lg border border-stone-200 text-stone-600 hover:text-stone-900 hover:scale-110 transition-all z-40"
-          title="Към началото"
         >
           <ChevronUp size={24} />
         </button>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 import { TextHighlight } from '@/lib/types';
@@ -14,10 +14,14 @@ import Link from 'next/link';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
+
+  // Reader mode from URL
+  const readerFromUrl = searchParams.get('reader') === 'true';
 
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
@@ -35,7 +39,14 @@ export default function TopicDetailPage() {
   const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
-  const [showReaderMode, setShowReaderMode] = useState(false);
+
+  // Open/close reader mode via URL
+  const openReaderMode = () => {
+    router.push(`/subjects/${subjectId}/topics/${topicId}?reader=true`);
+  };
+  const closeReaderMode = () => {
+    router.push(`/subjects/${subjectId}/topics/${topicId}`);
+  };
 
   // Load API key
   useEffect(() => {
@@ -284,10 +295,10 @@ export default function TopicDetailPage() {
   return (
     <>
       {/* Reader Mode Overlay */}
-      {showReaderMode && (
+      {readerFromUrl && (
         <ReaderMode
           topic={topicForReader}
-          onClose={() => setShowReaderMode(false)}
+          onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
         />
       )}
@@ -452,7 +463,7 @@ export default function TopicDetailPage() {
                 {/* Reader Mode Button */}
                 {material.trim().length > 0 && (
                   <button
-                    onClick={() => setShowReaderMode(true)}
+                    onClick={openReaderMode}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-mono text-xs transition-all"
                     title="Режим за четене - светъл фон, голям текст, маркиране"
                   >

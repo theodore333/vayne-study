@@ -184,20 +184,23 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
 
   // Render content with highlights
   const renderContent = () => {
-    let content = cleanMarkdown(topic.material);
-    const sortedHighlights = [...highlights].sort((a, b) => b.startOffset - a.startOffset);
+    const cleanedMaterial = cleanMarkdown(topic.material);
+    let html = parseMarkdown(cleanedMaterial);
 
-    for (const hl of sortedHighlights) {
-      const before = content.slice(0, hl.startOffset);
-      const highlighted = content.slice(hl.startOffset, hl.endOffset);
-      const after = content.slice(hl.endOffset);
-
+    // Apply highlights by simple string replacement
+    for (const hl of highlights) {
       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
       const bgColor = colorConfig?.bg || '#fef08a';
-      content = `${before}<span class="highlight-text" style="background: ${bgColor}; padding: 2px 4px; border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;">${highlighted}</span>${after}`;
+
+      // Simple replacement - find the text and wrap it
+      // Use split/join to handle it safely
+      const parts = html.split(hl.text);
+      if (parts.length > 1) {
+        html = parts[0] + `<span style="background-color: ${bgColor}; padding: 1px 4px; border-radius: 4px; box-decoration-break: clone;">${hl.text}</span>` + parts.slice(1).join(hl.text);
+      }
     }
 
-    return parseMarkdown(content);
+    return html;
   };
 
   // Handle escape key

@@ -39,6 +39,7 @@ interface AppContextType {
   // Timer operations
   startTimer: (subjectId: string, topicId: string | null) => void;
   stopTimer: (rating: number | null) => void;
+  addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null) => void;
 
   // GPA operations
   addSemesterGrade: (grade: Omit<SemesterGrade, 'id'>) => void;
@@ -538,6 +539,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
+  // Add completed Pomodoro session directly
+  const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null) => {
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - durationMinutes * 60 * 1000);
+
+    const session: TimerSession = {
+      id: generateId(),
+      subjectId: subjectId || 'pomodoro', // Use 'pomodoro' as fallback
+      topicId: topicId || null,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      duration: durationMinutes,
+      rating: null
+    };
+
+    updateData(prev => ({
+      ...prev,
+      timerSessions: [...prev.timerSessions, session]
+    }));
+  }, [updateData]);
+
   // GPA operations
   const addSemesterGrade = useCallback((grade: Omit<SemesterGrade, 'id'>) => {
     updateData(prev => ({
@@ -790,6 +812,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateDailyStatus,
       startTimer,
       stopTimer,
+      addPomodoroSession,
       addSemesterGrade,
       updateSemesterGrade,
       deleteSemesterGrade,

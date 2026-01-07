@@ -9,7 +9,7 @@ type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak';
 type TabType = 'timer' | 'stats';
 
 export default function TimerPage() {
-  const { data, startTimer, stopTimerWithNote, updatePomodoroSettings, updateStudyGoals, updateAcademicPeriod } = useApp();
+  const { data, startTimer, stopTimerWithNote, addPomodoroSession, updatePomodoroSettings, updateStudyGoals, updateAcademicPeriod } = useApp();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<TabType>('timer');
@@ -183,6 +183,9 @@ export default function TimerPage() {
     setIsRunning(false);
 
     if (pomodoroPhase === 'work') {
+      // Record completed work session
+      addPomodoroSession(settings.workDuration, selectedSubject || undefined, selectedTopic);
+
       const newCount = pomodoroCount + 1;
       setPomodoroCount(newCount);
       const isLongBreak = newCount % settings.longBreakAfter === 0;
@@ -204,7 +207,7 @@ export default function TimerPage() {
         setIsRunning(true);
       }
     }
-  }, [pomodoroPhase, pomodoroCount, settings, playSound]);
+  }, [pomodoroPhase, pomodoroCount, settings, playSound, addPomodoroSession, selectedSubject, selectedTopic]);
 
   const handleStart = () => {
     if (timerMode === 'normal') {

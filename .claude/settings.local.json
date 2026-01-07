@@ -5,7 +5,14 @@
       "Bash(npm run lint:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(git push)",
+      "Bash(railway up:*)",
+      "Bash(npx @railway/cli up)",
+      "Bash(dir:*)",
+      "Bash(wc:*)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(timeout /t 5)"
     ]
   }
 }

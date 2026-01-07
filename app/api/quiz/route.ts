@@ -58,6 +58,7 @@ export async function POST(request: Request) {
       mode, // 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom'
       questionCount, // Only used in custom mode
       matchExamFormat, // boolean - whether to match exam format
+      model, // 'opus' | 'sonnet' | 'haiku' - user-selected model for cost control
       // Free recall specific
       userRecall,
       requestHint,
@@ -114,7 +115,8 @@ export async function POST(request: Request) {
       mode,
       questionCount,
       currentBloomLevel,
-      matchExamFormat
+      matchExamFormat,
+      model
     });
 
   } catch (error: unknown) {
@@ -494,6 +496,13 @@ Questions must be in Bulgarian.`
   });
 }
 
+// Model mapping for user selection
+const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
+  opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
+  sonnet: { id: 'claude-sonnet-4-5-20250929', inputCost: 3, outputCost: 15 },
+  haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 0.8, outputCost: 4 }
+};
+
 async function handleStandardQuiz(
   anthropic: Anthropic,
   params: {
@@ -507,9 +516,13 @@ async function handleStandardQuiz(
     questionCount: number | null;
     currentBloomLevel: number;
     matchExamFormat?: boolean;
+    model?: 'opus' | 'sonnet' | 'haiku';
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet' } = params;
+
+  // Get selected model config
+  const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
 
   // Get subject type specific instructions
   const subjectTypeInstructions = subjectType && SUBJECT_TYPE_PROMPTS[subjectType]
@@ -569,7 +582,7 @@ CRITICAL REQUIREMENT FOR HIGHER-ORDER QUESTIONS:
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101',
+    model: modelConfig.id,
     max_tokens: 8192,
     messages: [{
       role: 'user',
@@ -650,7 +663,8 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
     return NextResponse.json({ error: 'Failed to generate quiz', raw: responseText.substring(0, 500) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * 0.015 + response.usage.output_tokens * 0.075) / 1000;
+  // Cost calculation using selected model's pricing (per MTok)
+  const cost = (response.usage.input_tokens * modelConfig.inputCost + response.usage.output_tokens * modelConfig.outputCost) / 1000000;
 
   // Validate question count and generate warning if mismatch
   let countWarning: string | null = null;

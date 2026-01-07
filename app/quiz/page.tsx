@@ -67,6 +67,7 @@ function QuizContent() {
   const [showCustomOptions, setShowCustomOptions] = useState(false);
   const [customQuestionCount, setCustomQuestionCount] = useState(5);
   const [customBloomLevel, setCustomBloomLevel] = useState<BloomLevel>(1);
+  const [selectedModel, setSelectedModel] = useState<'opus' | 'sonnet' | 'haiku'>('sonnet'); // Default to Sonnet for balance
 
   // Quiz state
   const [quizState, setQuizState] = useState<QuizState>({
@@ -329,7 +330,8 @@ function QuizContent() {
           bloomLevel: mode === 'custom' ? customBloomLevel : null,
           currentBloomLevel: avgBloom,
           isMultiTopic: true,
-          topicsList: topicNames
+          topicsList: topicNames,
+          model: selectedModel
         };
       } else {
         // Single topic mode
@@ -347,7 +349,8 @@ function QuizContent() {
           currentBloomLevel: topic?.currentBloomLevel || 1,
           quizHistory: topic?.quizHistory,
           // For drill_weakness and gap_analysis modes - pass wrong answers
-          wrongAnswers: (mode === 'drill_weakness' || mode === 'gap_analysis') ? topic?.wrongAnswers : undefined
+          wrongAnswers: (mode === 'drill_weakness' || mode === 'gap_analysis') ? topic?.wrongAnswers : undefined,
+          model: selectedModel
         };
       }
 
@@ -1411,6 +1414,51 @@ function QuizContent() {
                 {n}
               </button>
             ))}
+          </div>
+
+          {/* Model Selector */}
+          <div className="mb-6">
+            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider text-center">
+              AI Модел (цена/качество)
+            </label>
+            <div className="flex justify-center gap-2">
+              <button
+                onClick={() => setSelectedModel('haiku')}
+                className={`flex-1 max-w-[140px] px-3 py-2 rounded-lg font-mono text-xs transition-all ${
+                  selectedModel === 'haiku'
+                    ? 'bg-green-500/20 border-2 border-green-500 text-green-300'
+                    : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="font-semibold">Haiku</div>
+                <div className="text-[10px] opacity-70">~$0.01/quiz</div>
+                <div className="text-[10px] opacity-50">бърз, базов</div>
+              </button>
+              <button
+                onClick={() => setSelectedModel('sonnet')}
+                className={`flex-1 max-w-[140px] px-3 py-2 rounded-lg font-mono text-xs transition-all ${
+                  selectedModel === 'sonnet'
+                    ? 'bg-blue-500/20 border-2 border-blue-500 text-blue-300'
+                    : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="font-semibold">Sonnet</div>
+                <div className="text-[10px] opacity-70">~$0.06/quiz</div>
+                <div className="text-[10px] opacity-50">баланс</div>
+              </button>
+              <button
+                onClick={() => setSelectedModel('opus')}
+                className={`flex-1 max-w-[140px] px-3 py-2 rounded-lg font-mono text-xs transition-all ${
+                  selectedModel === 'opus'
+                    ? 'bg-purple-500/20 border-2 border-purple-500 text-purple-300'
+                    : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+                }`}
+              >
+                <div className="font-semibold">Opus</div>
+                <div className="text-[10px] opacity-70">~$0.30/quiz</div>
+                <div className="text-[10px] opacity-50">най-добър</div>
+              </button>
+            </div>
           </div>
 
           {quizState.error && (

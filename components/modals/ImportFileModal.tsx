@@ -255,7 +255,9 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         sizeSetBy: null,
         relatedTopics: [],
         cluster: null,
-        prerequisites: []
+        prerequisites: [],
+        // Gap Analysis
+        wrongAnswers: []
       }));
 
     addTopics(subjectId, topicsToAdd);

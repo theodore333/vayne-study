@@ -133,6 +133,18 @@ export interface QuizResult {
   weight: number; // Quiz length weight: 0.5 (quick), 1.0 (standard), 1.5 (deep), 2.0 (marathon)
 }
 
+// Track wrong answers for gap analysis and drill weakness
+export interface WrongAnswer {
+  question: string;
+  userAnswer: string | null;
+  correctAnswer: string;
+  concept: string;
+  bloomLevel: number;
+  date: string;
+  drillCount: number; // How many times this was drilled
+  timeSpent?: number; // Seconds spent on this question
+}
+
 export type QuizLengthPreset = 'quick' | 'standard' | 'deep' | 'marathon';
 
 export const QUIZ_LENGTH_PRESETS: Record<QuizLengthPreset, {
@@ -171,6 +183,8 @@ export interface Topic {
   relatedTopics: string[]; // IDs of related topics
   cluster: string | null; // Group name (e.g., "Пулмология")
   prerequisites: string[]; // IDs of prerequisite topics
+  // Gap Analysis: Track wrong answers for drilling
+  wrongAnswers: WrongAnswer[]; // Recent wrong answers for drill weakness mode
 }
 
 export type TopicStatus = 'gray' | 'orange' | 'yellow' | 'green';

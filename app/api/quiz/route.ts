@@ -88,8 +88,15 @@ export async function POST(request: Request) {
     }
 
     if (mode === 'gap_analysis') {
-      // Gap Analysis mode
-      return handleGapAnalysis(anthropic, material, topicName, subjectName, examFormat, quizHistory, currentBloomLevel);
+      // Gap Analysis mode - now includes wrongAnswers for smarter analysis
+      const { wrongAnswers } = body;
+      return handleGapAnalysis(anthropic, material, topicName, subjectName, examFormat, quizHistory, currentBloomLevel, wrongAnswers);
+    }
+
+    if (mode === 'drill_weakness') {
+      // Drill Weakness mode - rephrase wrong answers
+      const { wrongAnswers } = body;
+      return handleDrillWeakness(anthropic, material, topicName, subjectName, wrongAnswers, questionCount);
     }
 
     if (!material) {
@@ -258,12 +265,38 @@ async function handleGapAnalysis(
   subjectName: string,
   examFormat: string | null,
   quizHistory: Array<{ bloomLevel: number; score: number }> | null,
-  currentBloomLevel: number
+  currentBloomLevel: number,
+  wrongAnswers?: WrongAnswerInput[] | null
 ) {
   // Analyze quiz history to find weak areas
   const historyAnalysis = quizHistory?.length
     ? `Previous quiz performance: ${quizHistory.map(q => `Level ${q.bloomLevel}: ${q.score}%`).join(', ')}`
     : 'No previous quiz history.';
+
+  // Analyze wrong answers to identify weak concepts
+  let wrongAnswersAnalysis = '';
+  if (wrongAnswers && wrongAnswers.length > 0) {
+    // Group by concept and count
+    const conceptCounts: Record<string, { count: number; drillCount: number }> = {};
+    wrongAnswers.forEach(wa => {
+      if (!conceptCounts[wa.concept]) {
+        conceptCounts[wa.concept] = { count: 0, drillCount: 0 };
+      }
+      conceptCounts[wa.concept].count++;
+      conceptCounts[wa.concept].drillCount += (wa as WrongAnswerInput & { drillCount?: number }).drillCount || 0;
+    });
+
+    const weakConcepts = Object.entries(conceptCounts)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([concept, data]) => `${concept}: ${data.count} грешки${data.drillCount > 0 ? ` (drilled ${data.drillCount}x)` : ''}`);
+
+    wrongAnswersAnalysis = `
+KNOWN WEAK AREAS (from previous quiz mistakes):
+${weakConcepts.join('\n')}
+
+PRIORITY: Focus questions heavily on these weak concepts! The student has demonstrably struggled with them.`;
+  }
 
   const response = await anthropic.messages.create({
     model: 'claude-opus-4-5-20251101',
@@ -277,6 +310,7 @@ Topic: ${topicName}
 Current Bloom Level: ${currentBloomLevel}
 ${examFormat ? `Exam Format: ${examFormat}` : ''}
 ${historyAnalysis}
+${wrongAnswersAnalysis}
 
 Study Material:
 """
@@ -286,7 +320,7 @@ ${material}
 Perform a comprehensive gap analysis:
 1. Identify the most critical concepts that would be tested in an exam
 2. Generate targeted questions to probe potential knowledge gaps
-3. Focus on areas where students typically struggle
+3. ${wrongAnswers?.length ? 'PRIORITIZE weak concepts from the wrong answers list above!' : 'Focus on areas where students typically struggle'}
 
 Return ONLY a valid JSON object:
 {
@@ -350,6 +384,116 @@ Mix Bloom levels but focus on levels ${Math.max(1, currentBloomLevel - 1)} to ${
   });
 }
 
+interface WrongAnswerInput {
+  question: string;
+  userAnswer: string | null;
+  correctAnswer: string;
+  concept: string;
+  bloomLevel: number;
+}
+
+async function handleDrillWeakness(
+  anthropic: Anthropic,
+  material: string,
+  topicName: string,
+  subjectName: string,
+  wrongAnswers: WrongAnswerInput[] | null,
+  questionCount: number | null
+) {
+  if (!wrongAnswers || wrongAnswers.length === 0) {
+    return NextResponse.json({ error: 'Няма грешни въпроси за drill' }, { status: 400 });
+  }
+
+  const targetCount = questionCount || Math.min(wrongAnswers.length, 10);
+
+  // Format wrong answers for the prompt
+  const wrongAnswersText = wrongAnswers.slice(0, 15).map((wa, i) => `
+${i + 1}. Оригинален въпрос: "${wa.question}"
+   Грешен отговор на студента: "${wa.userAnswer || 'Без отговор'}"
+   Верен отговор: "${wa.correctAnswer}"
+   Концепция: ${wa.concept}
+   Bloom ниво: ${wa.bloomLevel}
+`).join('\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-20250514', // Use Sonnet for faster drill questions
+    max_tokens: 6144,
+    messages: [{
+      role: 'user',
+      content: `You are an expert medical educator creating REPHRASED questions for a Bulgarian medical student.
+
+The student previously answered these questions INCORRECTLY. Your task is to create NEW questions that test the SAME concepts but are phrased DIFFERENTLY.
+
+Subject: ${subjectName}
+Topic: ${topicName}
+
+Study Material (for reference):
+"""
+${material?.substring(0, 3000) || 'No material provided'}
+"""
+
+WRONG ANSWERS TO DRILL:
+${wrongAnswersText}
+
+Generate EXACTLY ${targetCount} NEW questions that:
+1. Test the SAME concepts as the wrong answers above
+2. Are phrased COMPLETELY DIFFERENTLY (different wording, different angle)
+3. Help the student understand WHY they got it wrong
+4. Mix question types: prefer "open" (60%) and "case_study" (30%), few "multiple_choice" (10%)
+5. Include helpful explanations that address common misconceptions
+
+IMPORTANT:
+- Do NOT copy the original questions - REPHRASE them completely
+- Ask from a different angle or perspective
+- Make the student THINK about the concept, not just memorize
+
+Return ONLY a valid JSON array:
+[
+  {
+    "type": "multiple_choice" | "open" | "case_study",
+    "question": "Rephrased question in Bulgarian",
+    "options": ["A", "B", "C", "D"], // only for multiple_choice/case_study
+    "correctAnswer": "correct answer",
+    "explanation": "explanation addressing WHY students often get this wrong",
+    "bloomLevel": 1-6,
+    "concept": "the concept being tested",
+    "originalQuestion": "brief reference to what original question this drills"
+  }
+]
+
+Questions must be in Bulgarian.`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let questions;
+  try {
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    questions = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+    if (!Array.isArray(questions)) throw new Error('Not an array');
+  } catch {
+    return NextResponse.json({ error: 'Failed to generate drill questions', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const cost = (response.usage.input_tokens * 0.003 + response.usage.output_tokens * 0.015) / 1000;
+
+  return NextResponse.json({
+    questions,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 10000) / 10000
+    }
+  });
+}
+
 async function handleStandardQuiz(
   anthropic: Anthropic,
   params: {
@@ -372,11 +516,12 @@ async function handleStandardQuiz(
     ? `\n${SUBJECT_TYPE_PROMPTS[subjectType]}`
     : '';
 
-  // AI ALWAYS determines question count based on material complexity
-  // Only custom mode with explicit count overrides this
+  // ALWAYS use the user-specified question count if provided
+  // This ensures the preview screen's count is respected
   let targetQuestionCount: string;
-  if (mode === 'custom' && questionCount) {
-    targetQuestionCount = `exactly ${questionCount}`;
+  if (questionCount && questionCount > 0) {
+    // User specified exact count - MUST generate this many
+    targetQuestionCount = `EXACTLY ${questionCount} questions. This is a STRICT requirement - generate precisely ${questionCount} questions, no more, no less. The user explicitly requested this count.`;
   } else {
     // AI decides based on material - NO FIXED LIMITS
     targetQuestionCount = `an appropriate number based on the material's complexity, depth, and how many distinct concepts need testing.
@@ -411,7 +556,14 @@ ${BLOOM_PROMPTS[5]}
 ${BLOOM_PROMPTS[6]}
 Generate challenging questions that require EVALUATING and CREATING.
 These are the hardest types - clinical judgment, treatment planning, critiquing approaches.
-Mark each question with its bloomLevel (5 or 6).`;
+Mark each question with its bloomLevel (5 or 6).
+
+CRITICAL REQUIREMENT FOR HIGHER-ORDER QUESTIONS:
+- Use ONLY "open" type questions (90%+) - NO multiple choice for evaluation/creation!
+- For correctAnswer: Provide DETAILED model answers of 5-8 sentences minimum
+- Questions should require: critical analysis, comparing approaches, designing protocols, justifying decisions
+- Include questions like: "Защо би избрал X вместо Y?", "Критикувай този подход", "Предложи алтернативен план"
+- Each answer should demonstrate synthesis of multiple concepts`;
   } else if (bloomLevel && BLOOM_PROMPTS[bloomLevel]) {
     bloomInstructions = `\nBLOOM'S TAXONOMY LEVEL:\n${BLOOM_PROMPTS[bloomLevel]}`;
   }
@@ -434,7 +586,12 @@ Study Material:
 ${material}
 """
 
-Generate ${targetQuestionCount} high-quality quiz questions. Intelligently select:
+Generate ${targetQuestionCount}.
+
+IMPORTANT QUESTION COUNT REQUIREMENT:
+${questionCount ? `You MUST generate EXACTLY ${questionCount} questions. Count them carefully before responding. If you generate fewer or more, you have FAILED the task.` : 'Intelligently select the number based on material complexity.'}
+
+Intelligently select:
 - The most important concepts to test
 - Questions that efficiently assess deep understanding
 
@@ -461,7 +618,10 @@ Return ONLY a valid JSON array:
 IMPORTANT:
 - Questions must be in Bulgarian
 - Focus on clinically relevant concepts
-- For "open" questions: correctAnswer should be a complete MODEL ANSWER (3-5 sentences)
+- For "open" questions correctAnswer length depends on Bloom level:
+  * Bloom 1-2: 2-3 sentences (basic recall/understanding)
+  * Bloom 3-4: 3-5 sentences (application/analysis)
+  * Bloom 5-6: 5-8 sentences (evaluation/creation) - MUST be detailed!
 - Explanations should be educational
 - Return ONLY the JSON array`
     }]

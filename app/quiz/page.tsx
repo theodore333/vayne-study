@@ -2,13 +2,13 @@
 
 import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock } from 'lucide-react';
+import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
-import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS } from '@/lib/types';
+import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 
-type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom';
+type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
 
 interface Question {
   type: 'multiple_choice' | 'open' | 'case_study';
@@ -100,6 +100,13 @@ function QuizContent() {
   // Timer state
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+
+  // Per-question time tracking
+  const [questionStartTime, setQuestionStartTime] = useState<number | null>(null);
+  const [questionTimes, setQuestionTimes] = useState<number[]>([]); // Seconds per question
+
+  // Early termination state
+  const [showEarlyStopConfirm, setShowEarlyStopConfirm] = useState(false);
 
   const MAX_HINTS = 3;
 
@@ -335,7 +342,9 @@ function QuizContent() {
           questionCount,
           bloomLevel: mode === 'custom' ? customBloomLevel : null,
           currentBloomLevel: topic?.currentBloomLevel || 1,
-          quizHistory: topic?.quizHistory
+          quizHistory: topic?.quizHistory,
+          // For drill_weakness and gap_analysis modes - pass wrong answers
+          wrongAnswers: (mode === 'drill_weakness' || mode === 'gap_analysis') ? topic?.wrongAnswers : undefined
         };
       }
 
@@ -368,6 +377,11 @@ function QuizContent() {
         isGenerating: false,
         error: null
       });
+      // Start timers
+      const now = Date.now();
+      setQuizStartTime(now);
+      setQuestionStartTime(now);
+      setQuestionTimes(new Array(result.questions.length).fill(0));
     } catch {
       setQuizState(prev => ({
         ...prev,
@@ -452,6 +466,16 @@ function QuizContent() {
     const newAnswers = [...quizState.answers];
     newAnswers[quizState.currentIndex] = answer;
 
+    // Record time spent on this question
+    if (questionStartTime) {
+      const timeSpent = Math.round((Date.now() - questionStartTime) / 1000);
+      setQuestionTimes(prev => {
+        const newTimes = [...prev];
+        newTimes[quizState.currentIndex] = timeSpent;
+        return newTimes;
+      });
+    }
+
     setShowExplanation(true);
   };
 
@@ -473,6 +497,8 @@ function QuizContent() {
       setSelectedAnswer(null);
       setOpenAnswer('');
       setShowExplanation(false);
+      // Start timer for next question
+      setQuestionStartTime(Date.now());
     } else {
       setQuizState(prev => ({
         ...prev,
@@ -480,6 +506,33 @@ function QuizContent() {
         showResult: true
       }));
     }
+  };
+
+  // Early quiz termination - finish with answered questions only
+  const handleEarlyStop = () => {
+    // Save current answer if any
+    const currentQuestion = quizState.questions[quizState.currentIndex];
+    const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
+      ? selectedAnswer
+      : openAnswer;
+
+    const newAnswers = [...quizState.answers];
+    if (answer) {
+      newAnswers[quizState.currentIndex] = answer;
+    }
+
+    // Trim questions and answers to only answered ones
+    const answeredCount = newAnswers.filter(a => a !== null).length;
+    const trimmedQuestions = quizState.questions.slice(0, answeredCount || quizState.currentIndex);
+    const trimmedAnswers = newAnswers.slice(0, answeredCount || quizState.currentIndex);
+
+    setQuizState(prev => ({
+      ...prev,
+      questions: trimmedQuestions.length > 0 ? trimmedQuestions : prev.questions.slice(0, 1),
+      answers: trimmedAnswers.length > 0 ? trimmedAnswers : [null],
+      showResult: true
+    }));
+    setShowEarlyStopConfirm(false);
   };
 
   const calculateScore = () => {
@@ -511,6 +564,60 @@ function QuizContent() {
 
     addGrade(subjectId, topicId, grade);
     trackTopicRead(subjectId, topicId); // Track as read when quiz is completed
+
+    // Collect wrong answers AND track correctly answered concepts
+    const newWrongAnswers: WrongAnswer[] = [];
+    const masteredConcepts: Set<string> = new Set(); // Concepts answered correctly this quiz
+
+    quizState.questions.forEach((q, i) => {
+      const userAnswer = quizState.answers[i];
+      const concept = q.concept || 'General';
+      const isCorrect = (q.type === 'multiple_choice' || q.type === 'case_study')
+        ? userAnswer === q.correctAnswer
+        : false; // Open questions are considered for review
+
+      if (isCorrect) {
+        masteredConcepts.add(concept);
+      } else if (userAnswer !== null) {
+        newWrongAnswers.push({
+          question: q.question,
+          userAnswer: userAnswer,
+          correctAnswer: q.correctAnswer,
+          concept: concept,
+          bloomLevel: q.bloomLevel || 1,
+          date: new Date().toISOString(),
+          drillCount: 0,
+          timeSpent: questionTimes[i] || 0
+        });
+      }
+    });
+
+    // Handle wrong answers based on mode
+    let mergedWrongAnswers: WrongAnswer[];
+    const existingWrongAnswers = topic.wrongAnswers || [];
+
+    if (mode === 'drill_weakness') {
+      // For drill_weakness mode: increment drillCount on all existing wrong answers
+      // (they were all used to generate the drill questions)
+      mergedWrongAnswers = existingWrongAnswers.map(wa => ({
+        ...wa,
+        drillCount: wa.drillCount + 1
+      }));
+      // Also add any NEW wrong answers from this drill session
+      if (newWrongAnswers.length > 0) {
+        mergedWrongAnswers = [...newWrongAnswers, ...mergedWrongAnswers].slice(0, 20);
+      }
+    } else {
+      // For other modes: just merge new wrong answers with existing
+      mergedWrongAnswers = [...newWrongAnswers, ...existingWrongAnswers].slice(0, 20);
+    }
+
+    // Remove "mastered" wrong answers: drillCount >= 3 AND concept answered correctly
+    // This cleans up old weaknesses that the student has now overcome
+    mergedWrongAnswers = mergedWrongAnswers.filter(wa => {
+      const isMastered = wa.drillCount >= 3 && masteredConcepts.has(wa.concept);
+      return !isMastered;
+    });
 
     // Determine new Bloom level
     let newBloomLevel: BloomLevel = topic.currentBloomLevel || 1;
@@ -553,7 +660,8 @@ function QuizContent() {
 
     updateTopic(subjectId, topicId, {
       currentBloomLevel: newBloomLevel,
-      quizHistory: [...(topic.quizHistory || []), quizResult]
+      quizHistory: [...(topic.quizHistory || []), quizResult],
+      wrongAnswers: mergedWrongAnswers
     });
   };
 
@@ -785,10 +893,24 @@ function QuizContent() {
           </h2>
           <p className="text-slate-400 font-mono mb-2">{percentage}% правилни</p>
           {elapsedTime > 0 && (
-            <p className="text-blue-400 font-mono text-sm mb-6 flex items-center justify-center gap-2">
-              <Clock size={14} />
-              Време: {formatTime(elapsedTime)}
-            </p>
+            <div className="text-sm mb-6 space-y-1">
+              <p className="text-blue-400 font-mono flex items-center justify-center gap-2">
+                <Clock size={14} />
+                Общо време: {formatTime(elapsedTime)}
+              </p>
+              {questionTimes.length > 0 && questionTimes.some(t => t > 0) && (() => {
+                const validTimes = questionTimes.filter(t => t > 0);
+                const avgTime = Math.round(validTimes.reduce((a, b) => a + b, 0) / validTimes.length);
+                const maxTime = Math.max(...validTimes);
+                const slowestIndex = questionTimes.indexOf(maxTime);
+                return (
+                  <div className="flex flex-wrap gap-4 justify-center text-xs text-slate-500 font-mono">
+                    <span>⏱️ Средно: {avgTime}s/въпрос</span>
+                    <span className="text-amber-400">🐢 Най-бавен: Q{slowestIndex + 1} ({maxTime}s)</span>
+                  </div>
+                );
+              })()}
+            </div>
           )}
 
           <div className={`inline-block px-8 py-4 rounded-xl border-2 font-mono text-4xl font-bold mb-6 ${
@@ -799,7 +921,14 @@ function QuizContent() {
             {grade.toFixed(2)}
           </div>
 
-          <div className="flex gap-4 justify-center">
+          {/* Wrong answers count */}
+          {quizState.questions.length - Math.round(score) > 0 && (
+            <p className="text-sm text-orange-400 font-mono mb-4">
+              {quizState.questions.length - Math.round(score)} грешни въпроса
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={handleSaveGrade}
               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg font-mono"
@@ -812,6 +941,28 @@ function QuizContent() {
             >
               <RefreshCw size={20} /> Нов тест
             </button>
+            {/* Drill Weakness button - only show if there were wrong answers */}
+            {quizState.questions.length - Math.round(score) > 0 && (
+              <button
+                onClick={() => {
+                  handleSaveGrade(); // Save first to record wrong answers
+                  setMode('drill_weakness');
+                  setShowPreview(true);
+                  setPreviewQuestionCount(Math.min(10, quizState.questions.length - Math.round(score)));
+                  setQuizState({
+                    questions: [],
+                    currentIndex: 0,
+                    answers: [],
+                    showResult: false,
+                    isGenerating: false,
+                    error: null
+                  });
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-orange-600 to-red-600 text-white font-semibold rounded-lg font-mono"
+              >
+                <Repeat size={20} /> Drill Weakness
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -827,10 +978,48 @@ function QuizContent() {
 
     return (
       <div className="min-h-screen p-6 space-y-6">
+        {/* Early stop confirmation modal */}
+        {showEarlyStopConfirm && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full">
+              <h3 className="text-lg font-semibold text-slate-100 font-mono mb-2">
+                Прекрати теста?
+              </h3>
+              <p className="text-sm text-slate-400 font-mono mb-4">
+                Отговорил си на {quizState.answers.filter(a => a !== null).length} от {quizState.questions.length} въпроса.
+                Резултатът ще се изчисли само от отговорените.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowEarlyStopConfirm(false)}
+                  className="flex-1 px-4 py-2 bg-slate-700 text-slate-200 rounded-lg font-mono text-sm hover:bg-slate-600"
+                >
+                  Продължи
+                </button>
+                <button
+                  onClick={handleEarlyStop}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-mono text-sm hover:bg-red-500"
+                >
+                  Прекрати
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center gap-4">
           <Link href="/quiz" className="text-slate-400 hover:text-slate-200 transition-colors">
             <ArrowLeft size={20} />
           </Link>
+          {/* Early stop button */}
+          <button
+            onClick={() => setShowEarlyStopConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all font-mono text-sm"
+            title="Прекрати теста преждевременно"
+          >
+            <StopCircle size={16} />
+            <span className="hidden sm:inline">Прекрати</span>
+          </button>
           <div className="flex-1">
             <div className="flex justify-between text-sm text-slate-400 font-mono mb-1">
               <span>Въпрос {quizState.currentIndex + 1} / {quizState.questions.length}</span>
@@ -915,6 +1104,7 @@ function QuizContent() {
             </div>
           ) : (
             <div>
+              {/* Dynamic textarea size based on Bloom level */}
               <textarea
                 value={openAnswer}
                 onChange={(e) => setOpenAnswer(e.target.value)}
@@ -924,11 +1114,22 @@ function QuizContent() {
                   }
                 }}
                 disabled={showExplanation}
-                placeholder="Напиши отговора тук... (Ctrl+Enter за проверка)"
-                className="w-full min-h-[160px] px-4 py-4 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-base font-mono resize-y focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-slate-500"
+                placeholder={
+                  (currentQuestion.bloomLevel || 1) >= 5
+                    ? "Напиши подробен отговор (5-8 изречения)... Включи анализ, обосновка и заключение. (Ctrl+Enter за проверка)"
+                    : "Напиши отговора тук... (Ctrl+Enter за проверка)"
+                }
+                className={`w-full px-4 py-4 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-base font-mono resize-y focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-slate-500 ${
+                  (currentQuestion.bloomLevel || 1) >= 5 ? 'min-h-[280px]' :
+                  (currentQuestion.bloomLevel || 1) >= 3 ? 'min-h-[200px]' : 'min-h-[160px]'
+                }`}
               />
               <p className="text-xs text-slate-500 font-mono mt-2">
-                💡 Препоръчително: 3-5 изречения за пълен отговор
+                {(currentQuestion.bloomLevel || 1) >= 5
+                  ? '🧠 Higher-Order: Препоръчително 5-8 изречения с анализ и обосновка'
+                  : (currentQuestion.bloomLevel || 1) >= 3
+                    ? '💡 Препоръчително: 3-5 изречения за пълен отговор'
+                    : '📝 Препоръчително: 2-3 изречения'}
               </p>
             </div>
           )}
@@ -1041,6 +1242,7 @@ function QuizContent() {
         case 'mid_order': return 'Mid-Order (Apply/Analyze)';
         case 'higher_order': return 'Higher-Order (Evaluate/Create)';
         case 'gap_analysis': return 'Gap Analysis';
+        case 'drill_weakness': return 'Drill Weakness';
         case 'custom': return `Custom (Bloom ${customBloomLevel})`;
         default: return 'Quiz';
       }
@@ -1052,6 +1254,7 @@ function QuizContent() {
         case 'mid_order': return 'blue';
         case 'higher_order': return 'pink';
         case 'gap_analysis': return 'red';
+        case 'drill_weakness': return 'orange';
         case 'custom': return 'purple';
         default: return 'slate';
       }
@@ -1199,17 +1402,21 @@ function QuizContent() {
             className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'gap_analysis'
                 ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
-                : mode === 'mid_order'
-                  ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'
-                  : mode === 'higher_order'
-                    ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500'
-                    : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500'
+                : mode === 'drill_weakness'
+                  ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white hover:from-orange-500 hover:to-amber-500'
+                  : mode === 'mid_order'
+                    ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'
+                    : mode === 'higher_order'
+                      ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500'
+                      : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500'
             }`}
           >
             {quizState.isGenerating ? (
               <><RefreshCw size={20} className="animate-spin" /> Генериране...</>
             ) : !mode ? (
               <>Избери режим първо</>
+            ) : mode === 'drill_weakness' ? (
+              <><Repeat size={20} /> Drill Weakness ({previewQuestionCount} въпроса)</>
             ) : (
               <><Play size={20} /> Старт Quiz ({previewQuestionCount} въпроса)</>
             )}
@@ -1357,10 +1564,10 @@ function QuizContent() {
               <span className="text-xs text-slate-500 font-mono">Bloom 5-6: Evaluate, Create</span>
             </button>
 
-            {/* Gap Analysis - full width */}
+            {/* Gap Analysis */}
             <button
               onClick={() => { setMode('gap_analysis'); setShowCustomOptions(false); }}
-              className={`col-span-2 p-4 rounded-xl border text-left transition-all ${
+              className={`p-4 rounded-xl border text-left transition-all ${
                 mode === 'gap_analysis' ? 'bg-red-500/20 border-red-500 ring-2 ring-red-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
               }`}
             >
@@ -1368,12 +1575,28 @@ function QuizContent() {
               <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-300'}`}>
                 Gap Analysis
               </span>
-              <span className="text-xs text-slate-500 font-mono">Открий слаби места на базата на quiz history</span>
+              <span className="text-xs text-slate-500 font-mono">Открий слаби места</span>
             </button>
+
+            {/* Drill Weakness - only show if there are wrong answers */}
+            {!isMultiMode && topic?.wrongAnswers && topic.wrongAnswers.length > 0 && (
+              <button
+                onClick={() => { setMode('drill_weakness'); setShowCustomOptions(false); }}
+                className={`p-4 rounded-xl border text-left transition-all ${
+                  mode === 'drill_weakness' ? 'bg-orange-500/20 border-orange-500 ring-2 ring-orange-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                <Repeat size={20} className={mode === 'drill_weakness' ? 'text-orange-400' : 'text-slate-400'} />
+                <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'drill_weakness' ? 'text-orange-400' : 'text-slate-300'}`}>
+                  Drill Weakness
+                </span>
+                <span className="text-xs text-slate-500 font-mono">{topic.wrongAnswers.length} грешки за преговор</span>
+              </button>
+            )}
           </div>
 
-          {/* Quiz Length Dropdown - only show for non-free-recall modes */}
-          {mode && mode !== 'free_recall' && mode !== 'custom' && (
+          {/* Quiz Length Dropdown - only show for standard quiz modes */}
+          {mode && mode !== 'free_recall' && mode !== 'custom' && mode !== 'drill_weakness' && (
             <div className="mt-4">
               <label className="block text-xs text-slate-500 mb-2 font-mono uppercase tracking-wider">
                 Дължина на теста

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2 } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp } from 'lucide-react';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
@@ -32,6 +32,7 @@ export default function TopicDetailPage() {
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
+  const [showWrongAnswers, setShowWrongAnswers] = useState(false);
 
   // Load API key
   useEffect(() => {
@@ -659,6 +660,90 @@ export default function TopicDetailPage() {
               Запиши оценка {gradeInput !== null && `(${gradeInput})`}
             </button>
           </div>
+
+          {/* Wrong Answers Section - Grouped by Concept */}
+          {topic.wrongAnswers && topic.wrongAnswers.length > 0 && (() => {
+            // Group wrong answers by concept
+            const conceptStats: Record<string, { count: number; drilled: number; totalDrillCount: number }> = {};
+            topic.wrongAnswers.forEach(wa => {
+              if (!conceptStats[wa.concept]) {
+                conceptStats[wa.concept] = { count: 0, drilled: 0, totalDrillCount: 0 };
+              }
+              conceptStats[wa.concept].count++;
+              conceptStats[wa.concept].totalDrillCount += wa.drillCount;
+              if (wa.drillCount > 0) conceptStats[wa.concept].drilled++;
+            });
+
+            const sortedConcepts = Object.entries(conceptStats)
+              .sort((a, b) => b[1].count - a[1].count);
+
+            return (
+              <div className="bg-gradient-to-br from-orange-900/20 to-red-900/20 border border-orange-700/30 rounded-xl p-5">
+                <button
+                  onClick={() => setShowWrongAnswers(!showWrongAnswers)}
+                  className="w-full flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} className="text-orange-400" />
+                    <span className="text-sm font-medium text-orange-400 font-mono">
+                      Слаби концепции ({sortedConcepts.length})
+                    </span>
+                  </div>
+                  {showWrongAnswers ? (
+                    <ChevronUp size={16} className="text-orange-400" />
+                  ) : (
+                    <ChevronDown size={16} className="text-orange-400" />
+                  )}
+                </button>
+
+                {showWrongAnswers && (
+                  <div className="mt-4 space-y-2">
+                    {sortedConcepts.slice(0, 8).map(([concept, stats]) => (
+                      <div key={concept} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-slate-200 font-mono font-medium">
+                            {concept}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-orange-400 font-mono">
+                              {stats.count} {stats.count === 1 ? 'грешка' : 'грешки'}
+                            </span>
+                            {stats.totalDrillCount > 0 && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-mono">
+                                {stats.totalDrillCount}x drilled
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Progress bar showing drill progress */}
+                        <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${
+                              stats.totalDrillCount >= 3 ? 'bg-green-500' :
+                              stats.totalDrillCount > 0 ? 'bg-yellow-500' : 'bg-orange-500'
+                            }`}
+                            style={{ width: `${Math.min(100, (stats.totalDrillCount / 3) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                    {sortedConcepts.length > 8 && (
+                      <p className="text-xs text-slate-500 font-mono text-center">
+                        +{sortedConcepts.length - 8} още концепции
+                      </p>
+                    )}
+                    <Link
+                      href={`/quiz?subject=${subjectId}&topic=${topicId}`}
+                      className="w-full mt-2 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-red-500 transition-all font-mono text-sm flex items-center justify-center gap-2"
+                    >
+                      <Repeat size={14} />
+                      Drill Weakness Quiz
+                    </Link>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Quick Quiz Prompt */}
           <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-700/30 rounded-xl p-5">

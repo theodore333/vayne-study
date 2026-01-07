@@ -887,7 +887,9 @@ export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
       sizeSetBy: null,
       relatedTopics: [],
       cluster: null,
-      prerequisites: []
+      prerequisites: [],
+      // Gap Analysis
+      wrongAnswers: []
     };
   });
 }

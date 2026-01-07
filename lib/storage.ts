@@ -27,6 +27,7 @@ interface LegacyTopic {
   relatedTopics?: string[];
   cluster?: string | null;
   prerequisites?: string[];
+  wrongAnswers?: Array<{ question: string; userAnswer: string | null; correctAnswer: string; concept: string; bloomLevel: number; date: string; drillCount: number }>;
 }
 
 interface LegacySubject {
@@ -227,7 +228,9 @@ export function loadData(): AppData {
         // Smart Scheduling: Topic relations
         relatedTopics: topic.relatedTopics ?? [],
         cluster: topic.cluster ?? null,
-        prerequisites: topic.prerequisites ?? []
+        prerequisites: topic.prerequisites ?? [],
+        // Gap Analysis: Track wrong answers
+        wrongAnswers: topic.wrongAnswers ?? []
       }))
     }));
 

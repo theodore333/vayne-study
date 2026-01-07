@@ -25,6 +25,7 @@ interface AppContextType {
   setTopicStatus: (subjectId: string, topicId: string, status: TopicStatus) => void;
   addGrade: (subjectId: string, topicId: string, grade: number) => void;
   updateTopicMaterial: (subjectId: string, topicId: string, material: string) => void;
+  trackTopicRead: (subjectId: string, topicId: string) => void;
 
   // Schedule operations
   addClass: (scheduleClass: Omit<ScheduleClass, 'id'>) => void;
@@ -276,6 +277,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const trackTopicRead = useCallback((subjectId: string, topicId: string) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => {
+        if (s.id !== subjectId) return s;
+        return {
+          ...s,
+          topics: s.topics.map(t => {
+            if (t.id !== topicId) return t;
+            return {
+              ...t,
+              readCount: (t.readCount || 0) + 1,
+              lastRead: new Date().toISOString()
+            };
+          })
+        };
+      })
+    }));
+  }, [updateData]);
+
   // Schedule operations
   const addClass = useCallback((scheduleClass: Omit<ScheduleClass, 'id'>) => {
     updateData(prev => ({
@@ -506,6 +527,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setTopicStatus,
       addGrade,
       updateTopicMaterial,
+      trackTopicRead,
       addClass,
       updateClass,
       deleteClass,

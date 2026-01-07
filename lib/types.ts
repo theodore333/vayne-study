@@ -161,6 +161,9 @@ export interface Topic {
   // Bloom's Taxonomy tracking
   currentBloomLevel: BloomLevel; // Current mastery level
   quizHistory: QuizResult[]; // History of quiz results by Bloom level
+  // Reading tracking
+  readCount: number; // How many times the topic material was read
+  lastRead: string | null; // When the material was last read
 }
 
 export type TopicStatus = 'gray' | 'orange' | 'yellow' | 'green';

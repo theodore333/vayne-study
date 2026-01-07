@@ -12,7 +12,7 @@ import Link from 'next/link';
 export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, trackTopicRead } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -43,6 +43,15 @@ export default function TopicDetailPage() {
       setMaterialSaved(true);
     }
   }, [topic?.id, topic?.material]);
+
+  // Track topic read when page is opened with material
+  const hasTrackedRead = useRef(false);
+  useEffect(() => {
+    if (topic && topic.material && topic.material.trim().length > 0 && !hasTrackedRead.current) {
+      trackTopicRead(subjectId, topic.id);
+      hasTrackedRead.current = true;
+    }
+  }, [topic?.id, topic?.material, subjectId, trackTopicRead]);
 
   if (isLoading) {
     return (
@@ -327,6 +336,37 @@ export default function TopicDetailPage() {
                 : 'Никога'
               }
               {reviewWarning && ' ⚠️'}
+            </div>
+          </div>
+
+          {/* Reading Stats */}
+          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen size={16} className="text-cyan-400" />
+              <span className="text-sm font-medium text-slate-400 font-mono">
+                Четене
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 bg-slate-800/30 rounded-lg">
+                <div className="text-xs text-slate-500 font-mono mb-1">Прочетено</div>
+                <div className="text-lg font-mono text-cyan-400">
+                  {topic.readCount || 0}x
+                </div>
+              </div>
+              <div className="p-3 bg-slate-800/30 rounded-lg">
+                <div className="text-xs text-slate-500 font-mono mb-1">Последно</div>
+                <div className="text-sm font-mono text-slate-300">
+                  {topic.lastRead
+                    ? getDaysSince(topic.lastRead) === 0
+                      ? 'Днес'
+                      : getDaysSince(topic.lastRead) === 1
+                        ? 'Вчера'
+                        : `${getDaysSince(topic.lastRead)}д`
+                    : '—'
+                  }
+                </div>
+              </div>
             </div>
           </div>
 

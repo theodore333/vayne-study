@@ -176,6 +176,35 @@ export default function TopicDetailSidebar({ topic, subjectId, subjectColor, onC
             </div>
           </div>
 
+          {/* Reading Stats */}
+          <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700">
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen size={16} className="text-cyan-400" />
+              <span className="text-sm font-medium text-slate-400 font-mono">
+                Четене
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-2 bg-slate-900/50 rounded-lg text-center">
+                <div className="text-xs text-slate-500 font-mono mb-1">Прочетено</div>
+                <div className="text-lg font-mono text-cyan-400">{topic.readCount || 0}x</div>
+              </div>
+              <div className="p-2 bg-slate-900/50 rounded-lg text-center">
+                <div className="text-xs text-slate-500 font-mono mb-1">Последно</div>
+                <div className="text-sm font-mono text-slate-300">
+                  {topic.lastRead
+                    ? getDaysSince(topic.lastRead) === 0
+                      ? 'Днес'
+                      : getDaysSince(topic.lastRead) === 1
+                        ? 'Вчера'
+                        : `${getDaysSince(topic.lastRead)}д`
+                    : '—'
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Grades Section */}
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-3 font-mono uppercase tracking-wider">

@@ -247,7 +247,9 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         material: '',
         materialImages: [],
         currentBloomLevel: 1 as const, // Start at Remember level
-        quizHistory: []
+        quizHistory: [],
+        readCount: 0,
+        lastRead: null
       }));
 
     addTopics(subjectId, topicsToAdd);

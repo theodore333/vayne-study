@@ -653,7 +653,9 @@ export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
       material: '',
       materialImages: [],
       currentBloomLevel: 1 as const,
-      quizHistory: []
+      quizHistory: [],
+      readCount: 0,
+      lastRead: null
     };
   });
 }

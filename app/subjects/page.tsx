@@ -371,6 +371,7 @@ function SubjectsContent() {
                                 <span>{config.label}</span>
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
+                                {(topic.readCount || 0) > 0 && <span className="text-cyan-500">{topic.readCount}x прочетено</span>}
                                 {!hasMaterial && <span className="text-amber-500">Няма материал</span>}
                               </div>
                             </div>

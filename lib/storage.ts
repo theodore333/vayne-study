@@ -34,9 +34,11 @@ const defaultPomodoroSettings: PomodoroSettings = {
 };
 
 const defaultStudyGoals: StudyGoals = {
-  dailyMinutes: 240,
-  weeklyMinutes: 1200,
-  monthlyMinutes: 4800
+  dailyMinutes: 480,
+  weeklyMinutes: 2880,
+  monthlyMinutes: 12480,
+  weekendDailyMinutes: 240,
+  useWeekendHours: true
 };
 
 const defaultAcademicPeriod: AcademicPeriod = {

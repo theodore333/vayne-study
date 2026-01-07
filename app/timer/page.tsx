@@ -538,26 +538,47 @@ export default function TimerPage() {
                 <h4 className="text-sm font-semibold text-slate-300 font-mono mb-3 flex items-center gap-2">
                   <Target size={16} /> Цели
                 </h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-xs text-slate-500 mb-2 font-mono">Дневна (часове)</label>
+                    <label className="block text-xs text-slate-500 mb-2 font-mono">Делничен ден (ч)</label>
                     <input type="number" value={Math.round(goals.dailyMinutes / 60)}
-                      onChange={(e) => updateStudyGoals({ dailyMinutes: (parseInt(e.target.value) || 4) * 60 })}
+                      onChange={(e) => {
+                        const daily = (parseInt(e.target.value) || 8) * 60;
+                        const weekend = goals.useWeekendHours ? (goals.weekendDailyMinutes || daily) : daily;
+                        const weekly = daily * 5 + weekend * 2;
+                        const monthly = Math.round(weekly * 4.33);
+                        updateStudyGoals({ dailyMinutes: daily, weeklyMinutes: weekly, monthlyMinutes: monthly });
+                      }}
                       className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="16" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-2 font-mono">Седмична (часове)</label>
-                    <input type="number" value={Math.round(goals.weeklyMinutes / 60)}
-                      onChange={(e) => updateStudyGoals({ weeklyMinutes: (parseInt(e.target.value) || 20) * 60 })}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="100" />
+                    <label className="block text-xs text-slate-500 mb-2 font-mono">Уикенд (ч)</label>
+                    <input type="number" value={Math.round((goals.weekendDailyMinutes || goals.dailyMinutes) / 60)}
+                      onChange={(e) => {
+                        const weekend = (parseInt(e.target.value) || 4) * 60;
+                        const daily = goals.dailyMinutes;
+                        const weekly = daily * 5 + weekend * 2;
+                        const monthly = Math.round(weekly * 4.33);
+                        updateStudyGoals({ weekendDailyMinutes: weekend, useWeekendHours: true, weeklyMinutes: weekly, monthlyMinutes: monthly });
+                      }}
+                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="0" max="16" />
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-500 mb-2 font-mono">Месечна (часове)</label>
-                    <input type="number" value={Math.round(goals.monthlyMinutes / 60)}
-                      onChange={(e) => updateStudyGoals({ monthlyMinutes: (parseInt(e.target.value) || 80) * 60 })}
-                      className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="300" />
+                    <label className="block text-xs text-slate-500 mb-2 font-mono">Седмица (авто)</label>
+                    <div className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-lg text-slate-400 font-mono text-center">
+                      {Math.round(goals.weeklyMinutes / 60)}ч
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-500 mb-2 font-mono">Месец (авто)</label>
+                    <div className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-lg text-slate-400 font-mono text-center">
+                      {Math.round(goals.monthlyMinutes / 60)}ч
+                    </div>
                   </div>
                 </div>
+                <p className="text-xs text-slate-500 font-mono mt-2">
+                  Седмица = {Math.round(goals.dailyMinutes / 60)}ч × 5 + {Math.round((goals.weekendDailyMinutes || goals.dailyMinutes) / 60)}ч × 2 = {Math.round(goals.weeklyMinutes / 60)}ч
+                </p>
               </div>
 
               {/* Academic Period Settings */}

@@ -209,9 +209,11 @@ export interface PomodoroSettings {
 }
 
 export interface StudyGoals {
-  dailyMinutes: number;       // Daily goal in minutes (default 240 = 4 hours)
-  weeklyMinutes: number;      // Weekly goal in minutes (default 1200 = 20 hours)
-  monthlyMinutes: number;     // Monthly goal in minutes (default 4800 = 80 hours)
+  dailyMinutes: number;       // Weekday goal in minutes (default 480 = 8 hours)
+  weeklyMinutes: number;      // Weekly goal in minutes (auto-calculated)
+  monthlyMinutes: number;     // Monthly goal in minutes (auto-calculated)
+  weekendDailyMinutes: number; // Weekend goal in minutes (default same as daily)
+  useWeekendHours: boolean;   // Use different hours for weekends
 }
 
 export interface AcademicPeriod {

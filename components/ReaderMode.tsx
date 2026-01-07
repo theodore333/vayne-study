@@ -371,11 +371,13 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
             top: `${Math.max(60, selectionInfo.y - 50)}px`,
             transform: 'translateX(-50%)'
           }}
+          onMouseDown={(e) => e.preventDefault()}
         >
           <span className="text-xs text-stone-500 mr-1">Маркирай:</span>
           {HIGHLIGHT_COLORS.map(({ color, bg, name }) => (
             <button
               key={color}
+              onMouseDown={(e) => e.preventDefault()}
               onClick={() => addHighlight(color)}
               style={{ backgroundColor: bg }}
               className={`w-7 h-7 rounded hover:scale-110 transition-transform border ${
@@ -385,6 +387,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
             />
           ))}
           <button
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setSelectionInfo(null); window.getSelection()?.removeAllRanges(); }}
             className="ml-1 p-1 text-stone-400 hover:text-stone-600"
           >

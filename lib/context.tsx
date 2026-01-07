@@ -108,10 +108,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     schedule: [],
     dailyStatus: {
       date: getTodayString(),
-      sleep: 3,
-      energy: 3,
       sick: false,
-      availableHours: 4
+      holiday: false
     },
     timerSessions: [],
     gpaData: defaultGPAData,

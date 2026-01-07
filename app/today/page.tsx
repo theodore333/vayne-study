@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Clock, Target, Zap, BookOpen, Check } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, calculateEffectiveHours } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -40,6 +40,37 @@ export default function TodayPage() {
     () => generateDailyPlan(data.subjects, data.schedule, effectiveHours),
     [data.subjects, data.schedule, effectiveHours]
   );
+
+  // Calculate study streak
+  const streak = useMemo(() => {
+    const dates = new Set(
+      data.timerSessions
+        .filter(s => s.endTime !== null)
+        .map(s => s.startTime.split('T')[0])
+    );
+    let count = 0;
+    const checkDate = new Date();
+
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (dates.has(dateStr)) {
+        count++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else if (count === 0) {
+        // Check yesterday if today has no sessions yet
+        checkDate.setDate(checkDate.getDate() - 1);
+        if (dates.has(checkDate.toISOString().split('T')[0])) {
+          count++;
+          checkDate.setDate(checkDate.getDate() - 1);
+          continue;
+        }
+        break;
+      } else {
+        break;
+      }
+    }
+    return count;
+  }, [data.timerSessions]);
 
   if (isLoading) {
     return (
@@ -117,19 +148,20 @@ export default function TodayPage() {
       </div>
 
       {/* Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        {/* Streak */}
         <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
           <div className="flex items-center gap-2 mb-2">
-            <Clock size={18} className="text-green-400" />
-            <span className="text-sm text-slate-400 font-mono">Ефективни часове</span>
+            <Flame size={18} className="text-orange-400" />
+            <span className="text-sm text-slate-400 font-mono">Streak</span>
           </div>
-          <div className="text-3xl font-bold text-green-400 font-mono">{effectiveHours}ч</div>
+          <div className="text-3xl font-bold text-orange-400 font-mono">{streak}</div>
           <div className="text-xs text-slate-500 font-mono mt-1">
-            Сън: {data.dailyStatus.sleep}/5 | Енергия: {data.dailyStatus.energy}/5
-            {data.dailyStatus.sick && " | Болен"}
+            {streak === 1 ? 'ден' : 'поредни дни'}
           </div>
         </div>
 
+        {/* Topics */}
         <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
           <div className="flex items-center gap-2 mb-2">
             <Target size={18} className="text-blue-400" />
@@ -143,6 +175,7 @@ export default function TodayPage() {
           </div>
         </div>
 
+        {/* Progress */}
         <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
           <div className="flex items-center gap-2 mb-2">
             <CheckCircle2 size={18} className="text-purple-400" />
@@ -154,6 +187,35 @@ export default function TodayPage() {
               className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all"
               style={{ width: topicProgressPercent + "%" }}
             />
+          </div>
+        </div>
+
+        {/* Mode Status */}
+        <div className={`p-5 rounded-xl border ${
+          data.dailyStatus.sick || data.dailyStatus.holiday
+            ? 'bg-yellow-500/10 border-yellow-500/30'
+            : 'bg-[rgba(20,20,35,0.8)] border-[#1e293b]'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            {data.dailyStatus.sick ? (
+              <Thermometer size={18} className="text-red-400" />
+            ) : data.dailyStatus.holiday ? (
+              <Palmtree size={18} className="text-green-400" />
+            ) : (
+              <Zap size={18} className="text-cyan-400" />
+            )}
+            <span className="text-sm text-slate-400 font-mono">Режим</span>
+          </div>
+          <div className={`text-xl font-bold font-mono ${
+            data.dailyStatus.sick ? 'text-red-400' :
+            data.dailyStatus.holiday ? 'text-green-400' : 'text-cyan-400'
+          }`}>
+            {data.dailyStatus.sick && data.dailyStatus.holiday ? '🤒🏖️' :
+             data.dailyStatus.sick ? 'Болен 🤒' :
+             data.dailyStatus.holiday ? 'Почивка 🏖️' : 'Нормален'}
+          </div>
+          <div className="text-xs text-slate-500 font-mono mt-1">
+            {effectiveHours}ч workload
           </div>
         </div>
       </div>

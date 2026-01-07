@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Moon, Zap, Thermometer, Clock } from 'lucide-react';
+import { X, Thermometer, Palmtree } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
 interface Props {
@@ -10,18 +10,13 @@ interface Props {
 
 export default function DailyCheckinModal({ onClose }: Props) {
   const { data, updateDailyStatus } = useApp();
-  const [sleep, setSleep] = useState(data.dailyStatus.sleep);
-  const [energy, setEnergy] = useState(data.dailyStatus.energy);
   const [sick, setSick] = useState(data.dailyStatus.sick);
-  const [availableHours, setAvailableHours] = useState(data.dailyStatus.availableHours);
+  const [holiday, setHoliday] = useState(data.dailyStatus.holiday);
 
   const handleSave = () => {
-    updateDailyStatus({ sleep, energy, sick, availableHours });
+    updateDailyStatus({ sick, holiday });
     onClose();
   };
-
-  const sleepEmojis = ['😵', '😴', '😐', '🙂', '😊'];
-  const energyEmojis = ['🪫', '😴', '⚡', '💪', '🔥'];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -29,11 +24,11 @@ export default function DailyCheckinModal({ onClose }: Props) {
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-sm shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b]">
           <h2 className="text-lg font-semibold text-slate-100 font-mono">
-            📊 Дневен Check-in
+            Режим на деня
           </h2>
           <button
             onClick={onClose}
@@ -44,89 +39,53 @@ export default function DailyCheckinModal({ onClose }: Props) {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Sleep Rating */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-3 font-mono">
-              <Moon size={16} className="text-blue-400" />
-              Качество на съня
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(value => (
-                <button
-                  key={value}
-                  onClick={() => setSleep(value)}
-                  className={`flex-1 py-3 rounded-lg border transition-all text-2xl ${
-                    sleep === value
-                      ? 'bg-blue-500/20 border-blue-500 scale-110'
-                      : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                  }`}
-                >
-                  {sleepEmojis[value - 1]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Energy Rating */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-3 font-mono">
-              <Zap size={16} className="text-yellow-400" />
-              Ниво на енергия
-            </label>
-            <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(value => (
-                <button
-                  key={value}
-                  onClick={() => setEnergy(value)}
-                  className={`flex-1 py-3 rounded-lg border transition-all text-2xl ${
-                    energy === value
-                      ? 'bg-yellow-500/20 border-yellow-500 scale-110'
-                      : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-                  }`}
-                >
-                  {energyEmojis[value - 1]}
-                </button>
-              ))}
-            </div>
-          </div>
-
+        <div className="p-6 space-y-4">
           {/* Sick Toggle */}
-          <div>
-            <button
-              onClick={() => setSick(!sick)}
-              className={`w-full flex items-center justify-center gap-3 py-3 rounded-lg border transition-all font-mono ${
-                sick
-                  ? 'bg-red-500/20 border-red-500 text-red-400'
-                  : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
-              }`}
-            >
-              <Thermometer size={18} />
-              <span>{sick ? 'Болен съм 🤒' : 'Здрав съм ✓'}</span>
-            </button>
-          </div>
-
-          {/* Available Hours */}
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-3 font-mono">
-              <Clock size={16} className="text-green-400" />
-              Налични часове за учене
-            </label>
-            <div className="flex items-center gap-4">
-              <input
-                type="range"
-                min="1"
-                max="12"
-                step="0.5"
-                value={availableHours}
-                onChange={(e) => setAvailableHours(parseFloat(e.target.value))}
-                className="flex-1 accent-green-500"
-              />
-              <span className="text-xl font-bold text-green-400 font-mono w-16 text-center">
-                {availableHours}ч
-              </span>
+          <button
+            onClick={() => setSick(!sick)}
+            className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all font-mono ${
+              sick
+                ? 'bg-red-500/20 border-red-500 text-red-400'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+            }`}
+          >
+            <div className={`p-3 rounded-lg ${sick ? 'bg-red-500/20' : 'bg-slate-700/50'}`}>
+              <Thermometer size={24} />
             </div>
-          </div>
+            <div className="flex-1 text-left">
+              <div className="font-semibold text-slate-200">Болен 🤒</div>
+              <div className="text-xs text-slate-500">Reduced workload: 2ч вместо 4ч</div>
+            </div>
+            <div className={`w-5 h-5 rounded-full border-2 ${sick ? 'bg-red-500 border-red-500' : 'border-slate-600'}`} />
+          </button>
+
+          {/* Holiday Toggle */}
+          <button
+            onClick={() => setHoliday(!holiday)}
+            className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-all font-mono ${
+              holiday
+                ? 'bg-green-500/20 border-green-500 text-green-400'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+            }`}
+          >
+            <div className={`p-3 rounded-lg ${holiday ? 'bg-green-500/20' : 'bg-slate-700/50'}`}>
+              <Palmtree size={24} />
+            </div>
+            <div className="flex-1 text-left">
+              <div className="font-semibold text-slate-200">Почивка 🏖️</div>
+              <div className="text-xs text-slate-500">Reduced workload: 2ч вместо 4ч</div>
+            </div>
+            <div className={`w-5 h-5 rounded-full border-2 ${holiday ? 'bg-green-500 border-green-500' : 'border-slate-600'}`} />
+          </button>
+
+          {/* Info */}
+          {(sick || holiday) && (
+            <div className="p-3 rounded-lg bg-slate-800/30 border border-slate-700/50">
+              <p className="text-xs text-slate-400 font-mono text-center">
+                {sick && holiday ? '⚡ Минимален режим: 1ч' : '⚡ Reduced workload активен'}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -135,7 +94,7 @@ export default function DailyCheckinModal({ onClose }: Props) {
             onClick={handleSave}
             className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all font-mono"
           >
-            Запази ✓
+            Запази
           </button>
         </div>
       </div>

@@ -181,10 +181,8 @@ export type ClassType = 'exercise';
 
 export interface DailyStatus {
   date: string;
-  sleep: number;
-  energy: number;
   sick: boolean;
-  availableHours: number;
+  holiday: boolean;
 }
 
 export interface TimerSession {

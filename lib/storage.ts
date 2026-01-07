@@ -6,10 +6,8 @@ import { getTodayString, applyDecayToSubjects } from './algorithms';
 
 const defaultDailyStatus: DailyStatus = {
   date: getTodayString(),
-  sleep: 3,
-  energy: 3,
   sick: false,
-  availableHours: 4
+  holiday: false
 };
 
 const defaultGPAData: GPAData = {
@@ -103,14 +101,19 @@ export function loadData(): AppData {
     // Apply decay to all topics
     data.subjects = applyDecayToSubjects(data.subjects);
 
-    // Reset daily status if it's a new day
+    // Migrate dailyStatus - remove old fields, add holiday
     const today = getTodayString();
-    if (data.dailyStatus.date !== today) {
+    if (data.dailyStatus.date !== today || data.dailyStatus.holiday === undefined) {
       data.dailyStatus = {
-        ...defaultDailyStatus,
-        date: today
+        date: today,
+        sick: data.dailyStatus.sick ?? false,
+        holiday: data.dailyStatus.holiday ?? false
       };
     }
+    // Remove deprecated fields
+    delete data.dailyStatus.sleep;
+    delete data.dailyStatus.energy;
+    delete data.dailyStatus.availableHours;
 
     // Reset usage data if new month
     const lastReset = new Date(data.usageData.lastReset);

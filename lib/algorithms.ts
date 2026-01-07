@@ -251,11 +251,17 @@ export function getTopicPriority(topic: Topic): number {
 }
 
 export function calculateEffectiveHours(status: DailyStatus): number {
-  let hours = status.availableHours;
-  if (status.sick) hours *= 0.5;
-  if (status.sleep < 3) hours *= 0.7;
-  if (status.energy < 3) hours *= 0.8;
-  return Math.max(1, Math.round(hours * 10) / 10);
+  // Base hours: 4 hours for normal day
+  let hours = 4;
+
+  // Reduced workload for special modes
+  if (status.sick) hours = 2;      // Болен: 2 часа
+  if (status.holiday) hours = 2;   // Почивка: 2 часа
+
+  // Both = minimal
+  if (status.sick && status.holiday) hours = 1;
+
+  return hours;
 }
 
 export function calculatePredictedGrade(

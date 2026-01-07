@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Battery, Moon, Thermometer, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { calculateEffectiveHours } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -39,30 +39,29 @@ export default function Header() {
           {/* Daily Status Button */}
           <button
             onClick={() => setShowCheckin(true)}
-            className="flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-800/50 border border-slate-700 hover:border-slate-600 transition-all group"
+            className={`flex items-center gap-3 px-4 py-2 rounded-lg border hover:border-slate-600 transition-all group ${
+              data.dailyStatus.sick || data.dailyStatus.holiday
+                ? 'bg-yellow-500/10 border-yellow-500/30'
+                : 'bg-slate-800/50 border-slate-700'
+            }`}
           >
-            <div className="flex items-center gap-2">
-              <Moon size={16} className="text-blue-400" />
-              <span className="text-sm font-mono text-slate-400">
-                Сън: {data.dailyStatus.sleep}/5
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Battery size={16} className="text-yellow-400" />
-              <span className="text-sm font-mono text-slate-400">
-                Енергия: {data.dailyStatus.energy}/5
-              </span>
-            </div>
-            {data.dailyStatus.sick && (
+            {data.dailyStatus.sick ? (
               <div className="flex items-center gap-2">
                 <Thermometer size={16} className="text-red-400" />
                 <span className="text-sm font-mono text-red-400">Болен</span>
               </div>
+            ) : data.dailyStatus.holiday ? (
+              <div className="flex items-center gap-2">
+                <Palmtree size={16} className="text-green-400" />
+                <span className="text-sm font-mono text-green-400">Почивка</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Zap size={16} className="text-cyan-400" />
+                <span className="text-sm font-mono text-slate-400">Нормален</span>
+              </div>
             )}
-            <div className="flex items-center gap-2 pl-4 border-l border-slate-700">
-              <span className="text-sm font-mono text-slate-400">
-                Ефективни часове:
-              </span>
+            <div className="flex items-center gap-2 pl-3 border-l border-slate-700">
               <span className={`text-lg font-bold font-mono ${
                 effectiveHours >= 4 ? 'text-green-400' :
                 effectiveHours >= 2 ? 'text-yellow-400' : 'text-red-400'

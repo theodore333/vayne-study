@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, Bold, Italic, List, AlignLeft } from 'lucide-react';
+import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -99,6 +99,8 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -180,6 +182,30 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
     const updatedHighlights = highlights.filter(h => h.id !== id);
     setHighlights(updatedHighlights);
     onSaveHighlights(updatedHighlights);
+  };
+
+  // Update highlight note
+  const updateHighlightNote = (id: string, note: string) => {
+    const updatedHighlights = highlights.map(h =>
+      h.id === id ? { ...h, note: note.trim() || undefined } : h
+    );
+    setHighlights(updatedHighlights);
+    onSaveHighlights(updatedHighlights);
+  };
+
+  // Start editing note
+  const startEditingNote = (hl: TextHighlight) => {
+    setEditingNoteId(hl.id);
+    setNoteText(hl.note || '');
+  };
+
+  // Save note
+  const saveNote = () => {
+    if (editingNoteId) {
+      updateHighlightNote(editingNoteId, noteText);
+      setEditingNoteId(null);
+      setNoteText('');
+    }
   };
 
   // Render content with highlights
@@ -369,27 +395,81 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                     Селектирай текст и избери цвят отляво
                   </p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {highlights.map(hl => {
                       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
                       const bgColor = colorConfig?.bg || '#fef08a';
+                      const isEditing = editingNoteId === hl.id;
+
                       return (
                         <div
                           key={hl.id}
-                          className="flex items-start gap-2 p-2 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors"
-                          style={{ backgroundColor: bgColor + '40' }}
+                          className="rounded-lg border border-stone-200 hover:border-stone-300 transition-colors overflow-hidden"
+                          style={{ backgroundColor: bgColor + '20' }}
                         >
-                          <div
-                            className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                            style={{ backgroundColor: bgColor }}
-                          />
-                          <p className="text-sm text-stone-700 line-clamp-2 flex-1">"{hl.text}"</p>
-                          <button
-                            onClick={() => removeHighlight(hl.id)}
-                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-stone-400 hover:text-red-500 transition-colors"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {/* Highlight text */}
+                          <div className="flex items-start gap-2 p-2">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
+                              style={{ backgroundColor: bgColor }}
+                            />
+                            <p className="text-sm text-stone-700 line-clamp-2 flex-1">"{hl.text}"</p>
+                            <button
+                              onClick={() => removeHighlight(hl.id)}
+                              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-stone-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+
+                          {/* Note section */}
+                          <div className="px-2 pb-2">
+                            {isEditing ? (
+                              <div className="flex gap-1">
+                                <input
+                                  type="text"
+                                  value={noteText}
+                                  onChange={(e) => setNoteText(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && saveNote()}
+                                  placeholder="Добави бележка..."
+                                  className="flex-1 px-2 py-1 text-sm bg-white border border-stone-300 rounded focus:outline-none focus:border-amber-500"
+                                  autoFocus
+                                />
+                                <button
+                                  onClick={saveNote}
+                                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded transition-colors"
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  onClick={() => { setEditingNoteId(null); setNoteText(''); }}
+                                  className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-600 rounded transition-colors"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            ) : hl.note ? (
+                              <button
+                                onClick={() => startEditingNote(hl)}
+                                className="w-full text-left px-2 py-1 text-xs text-stone-600 bg-white/50 rounded border border-stone-200 hover:border-stone-300 transition-colors"
+                              >
+                                <span className="flex items-center gap-1">
+                                  <MessageSquare size={10} />
+                                  {hl.note}
+                                </span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => startEditingNote(hl)}
+                                className="w-full text-left px-2 py-1 text-xs text-stone-400 hover:text-stone-600 bg-white/30 hover:bg-white/50 rounded border border-dashed border-stone-300 transition-colors"
+                              >
+                                <span className="flex items-center gap-1">
+                                  <MessageSquare size={10} />
+                                  Добави бележка...
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
@@ -398,17 +478,14 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
               </div>
             </div>
 
-            {/* Notes Section */}
-            <div className="flex-1 flex flex-col">
-              <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
-                <h3 className="text-sm font-medium text-stone-700">📝 Бележки</h3>
+            {/* Tip */}
+            {highlights.length > 0 && (
+              <div className="p-3 border-t border-stone-200">
+                <p className="text-xs text-stone-400 text-center">
+                  💡 Кликни на highlight за да добавиш бележка
+                </p>
               </div>
-              <div className="flex-1 p-3">
-                <div className="text-center py-8 text-stone-400">
-                  <p className="text-sm">🚧 Скоро...</p>
-                </div>
-              </div>
-            </div>
+            )}
           </aside>
         )}
       </div>

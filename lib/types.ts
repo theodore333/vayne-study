@@ -196,6 +196,7 @@ export interface TextHighlight {
   startOffset: number; // Character offset from start of material
   endOffset: number; // End character offset
   color: 'yellow' | 'green' | 'blue' | 'pink'; // Highlight color
+  note?: string; // Optional note attached to this highlight
   createdAt: string;
 }
 

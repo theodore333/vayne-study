@@ -1,10 +1,44 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, UserProgress } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, UserProgress, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
+
+// Migration types for loading potentially incomplete/old data from localStorage
+interface LegacyTopic {
+  id: string;
+  name: string;
+  number: number;
+  status: TopicStatus;
+  grades: number[];
+  avgGrade: number;
+  quizCount: number;
+  lastReview: string | null;
+  material?: string;
+  materialImages?: string[];
+  currentBloomLevel?: number;
+  quizHistory?: Array<QuizResult & { weight?: number }>;
+  readCount?: number;
+  lastRead?: string | null;
+  size?: TopicSize | null;
+  sizeSetBy?: 'ai' | 'user' | null;
+  relatedTopics?: string[];
+  cluster?: string | null;
+  prerequisites?: string[];
+}
+
+interface LegacySubject {
+  id: string;
+  name: string;
+  color: string;
+  subjectType?: SubjectType;
+  examDate: string | null;
+  examFormat?: string | null;
+  topics: LegacyTopic[];
+  createdAt: string;
+}
 
 // Separate storage keys for optimization
 const MATERIALS_KEY = 'vayne-materials';
@@ -143,8 +177,8 @@ export function loadData(): AppData {
       let greenTopics = 0;
       let quizzesTaken = 0;
 
-      data.subjects.forEach((subject: any) => {
-        subject.topics.forEach((topic: any) => {
+      (data.subjects as LegacySubject[]).forEach((subject) => {
+        subject.topics.forEach((topic) => {
           if (topic.status !== 'gray') topicsCompleted++;
           if (topic.status === 'green') greenTopics++;
           quizzesTaken += topic.quizCount || 0;
@@ -169,18 +203,18 @@ export function loadData(): AppData {
     delete data.focusSession;
 
     // Migrate subjects and topics - add missing fields
-    data.subjects = data.subjects.map((subject: any) => ({
+    data.subjects = (data.subjects as LegacySubject[]).map((subject): Subject => ({
       ...subject,
       subjectType: subject.subjectType ?? 'preclinical', // Default to preclinical
       examFormat: subject.examFormat ?? null, // Add exam format field
-      topics: subject.topics.map((topic: any) => ({
+      topics: subject.topics.map((topic): Topic => ({
         ...topic,
         material: topic.material || '',
         materialImages: topic.materialImages || [],
         // Bloom's Taxonomy tracking
-        currentBloomLevel: topic.currentBloomLevel || 1,
+        currentBloomLevel: (topic.currentBloomLevel || 1) as BloomLevel,
         // Migrate quiz history to include weight
-        quizHistory: (topic.quizHistory || []).map((qr: any) => ({
+        quizHistory: (topic.quizHistory || []).map((qr) => ({
           ...qr,
           weight: qr.weight ?? 1.0 // Default to standard weight for existing results
         })),
@@ -202,9 +236,9 @@ export function loadData(): AppData {
 
     // Load materials from separate storage and merge into topics
     const materials = loadMaterials();
-    data.subjects = data.subjects.map((subject: any) => ({
+    data.subjects = data.subjects.map((subject: Subject) => ({
       ...subject,
-      topics: subject.topics.map((topic: any) => ({
+      topics: subject.topics.map((topic: Topic) => ({
         ...topic,
         // Load material from separate storage if available, fallback to topic.material (for migration)
         material: materials[topic.id] || topic.material || ''

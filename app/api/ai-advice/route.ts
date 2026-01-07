@@ -1,9 +1,67 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
+// Types for request data
+interface QuizHistoryItem {
+  score: number;
+  date: string;
+}
+
+interface RequestTopic {
+  id: string;
+  name: string;
+  status: 'gray' | 'orange' | 'yellow' | 'green';
+  quizHistory?: QuizHistoryItem[];
+  quizCount: number;
+}
+
+interface RequestSubject {
+  id: string;
+  name: string;
+  subjectType: string;
+  examDate: string | null;
+  examFormat: string | null;
+  topics: RequestTopic[];
+}
+
+interface RequestTimerSession {
+  startTime: string;
+  endTime: string | null;
+  duration: number;
+}
+
+interface SubjectSummary {
+  name: string;
+  type: string;
+  examFormat: string;
+  formatStrategy: string;
+  daysUntilExam: number | null;
+  totalTopics: number;
+  remainingTopics: number;
+  weightedWorkload: number;
+  workloadPerDay: number;
+  rawTopicsPerDay: number;
+  workloadWarning: string;
+  greenTopics: number;
+  yellowTopics: number;
+  orangeTopics: number;
+  grayTopics: number;
+  weakTopics: string[];
+  percentComplete: number;
+  progressPercent: number;
+  touchedTopics: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, userProgress, timerSessions, dailyStatus, type, apiKey, studyGoals } = await request.json();
+    const { subjects, timerSessions, dailyStatus, type, apiKey, studyGoals } = await request.json() as {
+      subjects: RequestSubject[];
+      timerSessions: RequestTimerSession[];
+      dailyStatus: { sick?: boolean; holiday?: boolean };
+      type: 'daily' | 'weekly';
+      apiKey: string;
+      studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number };
+    };
 
     if (!apiKey) {
       return NextResponse.json(
@@ -20,17 +78,17 @@ export async function POST(request: NextRequest) {
     weekAgo.setDate(weekAgo.getDate() - 7);
 
     // Weekly sessions
-    const weeklySessions = timerSessions.filter((s: any) =>
+    const weeklySessions = timerSessions.filter((s) =>
       s.endTime && new Date(s.startTime) >= weekAgo
     );
-    const weeklyMinutes = weeklySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
+    const weeklyMinutes = weeklySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
     // Today's sessions
     const todayStr = today.toISOString().split('T')[0];
-    const todaySessions = timerSessions.filter((s: any) =>
+    const todaySessions = timerSessions.filter((s) =>
       s.endTime && s.startTime.startsWith(todayStr)
     );
-    const todayMinutes = todaySessions.reduce((sum: number, s: any) => sum + (s.duration || 0), 0);
+    const todayMinutes = todaySessions.reduce((sum, s) => sum + (s.duration || 0), 0);
 
     // Subject summaries with WEIGHTED workload calculation
     // Status weights (effort needed):
@@ -40,12 +98,12 @@ export async function POST(request: NextRequest) {
     // - Green: 0 (готово)
     const STATUS_WEIGHTS = { gray: 1.0, orange: 0.75, yellow: 0.35, green: 0 };
 
-    const subjectSummaries = subjects.map((s: any) => {
+    const subjectSummaries: SubjectSummary[] = subjects.map((s) => {
       const totalTopics = s.topics.length;
-      const greenTopics = s.topics.filter((t: any) => t.status === 'green').length;
-      const yellowTopics = s.topics.filter((t: any) => t.status === 'yellow').length;
-      const orangeTopics = s.topics.filter((t: any) => t.status === 'orange').length;
-      const grayTopics = s.topics.filter((t: any) => t.status === 'gray').length;
+      const greenTopics = s.topics.filter((t) => t.status === 'green').length;
+      const yellowTopics = s.topics.filter((t) => t.status === 'yellow').length;
+      const orangeTopics = s.topics.filter((t) => t.status === 'orange').length;
+      const grayTopics = s.topics.filter((t) => t.status === 'gray').length;
 
       // WEIGHTED workload calculation
       const weightedWorkload =
@@ -59,12 +117,13 @@ export async function POST(request: NextRequest) {
 
       // Weak topics (low quiz scores)
       const weakTopics = s.topics
-        .filter((t: any) => t.quizHistory && t.quizHistory.length > 0)
-        .filter((t: any) => {
-          const avgScore = t.quizHistory.reduce((sum: number, q: any) => sum + q.score, 0) / t.quizHistory.length;
+        .filter((t): t is RequestTopic & { quizHistory: QuizHistoryItem[] } =>
+          Boolean(t.quizHistory && t.quizHistory.length > 0))
+        .filter((t) => {
+          const avgScore = t.quizHistory.reduce((sum, q) => sum + q.score, 0) / t.quizHistory.length;
           return avgScore < 60;
         })
-        .map((t: any) => t.name);
+        .map((t) => t.name);
 
       // Days until exam & weighted workload per day
       let daysUntilExam = null;
@@ -128,15 +187,15 @@ export async function POST(request: NextRequest) {
         progressPercent,
         touchedTopics
       };
-    }).filter((s: any) => s.totalTopics > 0);
+    }).filter((s) => s.totalTopics > 0);
 
     // Build prompt based on type
     let prompt = '';
 
     // Check for critical exams
-    const criticalExams = subjectSummaries.filter((s: any) => s.daysUntilExam !== null && s.daysUntilExam <= 7);
+    const criticalExams = subjectSummaries.filter((s) => s.daysUntilExam !== null && s.daysUntilExam <= 7);
     const hasCriticalExam = criticalExams.length > 0;
-    const mostUrgent = criticalExams.sort((a: any, b: any) => a.daysUntilExam - b.daysUntilExam)[0];
+    const mostUrgent = criticalExams.sort((a, b) => (a.daysUntilExam ?? 999) - (b.daysUntilExam ?? 999))[0];
 
     // Current time analysis
     const currentHour = today.getHours();
@@ -154,12 +213,13 @@ export async function POST(request: NextRequest) {
     // Dynamic daily target based on exam urgency
     let dailyTarget = baseGoalHours;
     let urgencyBoost = '';
-    if (hasCriticalExam && mostUrgent?.daysUntilExam <= 2) {
+    const urgentExamDays = mostUrgent?.daysUntilExam ?? Infinity;
+    if (hasCriticalExam && urgentExamDays <= 2) {
       dailyTarget = Math.max(baseGoalHours, Math.round(baseGoalHours * 1.5)); // +50% for 2 days or less
-      urgencyBoost = `ИЗПИТ СЛЕД ${mostUrgent.daysUntilExam} ДНИ! Цел увеличена с 50%: ${dailyTarget}ч`;
-    } else if (hasCriticalExam && mostUrgent?.daysUntilExam <= 5) {
+      urgencyBoost = `ИЗПИТ СЛЕД ${urgentExamDays} ДНИ! Цел увеличена с 50%: ${dailyTarget}ч`;
+    } else if (hasCriticalExam && urgentExamDays <= 5) {
       dailyTarget = Math.max(baseGoalHours, Math.round(baseGoalHours * 1.25)); // +25% for 5 days or less
-      urgencyBoost = `Изпит скоро (${mostUrgent.daysUntilExam} дни). Цел увеличена: ${dailyTarget}ч`;
+      urgencyBoost = `Изпит скоро (${urgentExamDays} дни). Цел увеличена: ${dailyTarget}ч`;
     }
 
     // Adjust for sick/holiday (50% reduction)
@@ -177,7 +237,7 @@ export async function POST(request: NextRequest) {
     const isCriticallyLate = currentHour >= 18 && todayHours < (dailyTarget * 0.4);
 
     // Build detailed subject info for prompt with weighted workload
-    const subjectDetails = subjectSummaries.map((s: any) => {
+    const subjectDetails = subjectSummaries.map((s) => {
       let info = `${s.name}:`;
       info += `\n  Теми: ${s.grayTopics} нови + ${s.orangeTopics} с основи + ${s.yellowTopics} за преговор + ${s.greenTopics} готови = ${s.totalTopics} общо`;
       info += `\n  Натоварване: ${s.weightedWorkload} units (${s.grayTopics}×1.0 + ${s.orangeTopics}×0.75 + ${s.yellowTopics}×0.35)`;
@@ -248,7 +308,7 @@ ${mostUrgent.formatStrategy ? '- ' + mostUrgent.formatStrategy : ''}
 ${subjectDetails}
 
 ПРЕДСТОЯЩИ ИЗПИТИ:
-${subjectSummaries.filter((s: any) => s.daysUntilExam !== null && s.daysUntilExam <= 14).map((s: any) =>
+${subjectSummaries.filter((s) => s.daysUntilExam !== null && s.daysUntilExam <= 14).map((s) =>
   `- ${s.name}: ${s.daysUntilExam}д | ${s.weightedWorkload} units (${s.grayTopics} нови, ${s.yellowTopics} за преговор) | ${s.workloadPerDay} units/ден`
 ).join('\n') || 'Няма изпити в следващите 2 седмици'}
 

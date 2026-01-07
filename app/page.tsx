@@ -1,12 +1,52 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, ReactNode } from 'react';
 import { Plus, TrendingUp, AlertTriangle, BookOpen, Target, Calendar } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, calculateEffectiveHours } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
+import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
+
+// Component prop types
+interface StatsGridProps {
+  subjects: Subject[];
+  totalTopics: number;
+  effectiveHours: number;
+  alertsCount: number;
+}
+
+interface StatCardProps {
+  icon: ReactNode;
+  bgColor: string;
+  label: string;
+  value: string | number;
+  valueClass?: string;
+}
+
+interface StatusOverviewProps {
+  statusCounts: Record<TopicStatus, number>;
+  totalTopics: number;
+}
+
+interface SubjectsSectionProps {
+  subjects: Subject[];
+  onAddClick: () => void;
+}
+
+interface SubjectCardProps {
+  subject: Subject;
+}
+
+interface Alert {
+  type: 'critical' | 'warning' | 'info';
+  message: string;
+}
+
+interface AlertsSectionProps {
+  alerts: Alert[];
+}
 
 export default function Dashboard() {
   const { data, isLoading } = useApp();
@@ -57,7 +97,7 @@ function PageHeader({ onAddClick }: { onAddClick: () => void }) {
   );
 }
 
-function StatsGrid({ subjects, totalTopics, effectiveHours, alertsCount }: any) {
+function StatsGrid({ subjects, totalTopics, effectiveHours, alertsCount }: StatsGridProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       <StatCard icon={<BookOpen size={20} className="text-blue-400" />} bgColor="bg-blue-500/20" label="Предмети" value={subjects.length} />
@@ -68,7 +108,7 @@ function StatsGrid({ subjects, totalTopics, effectiveHours, alertsCount }: any) 
   );
 }
 
-function StatCard({ icon, bgColor, label, value, valueClass = "text-slate-100" }: any) {
+function StatCard({ icon, bgColor, label, value, valueClass = "text-slate-100" }: StatCardProps) {
   return (
     <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
       <div className="flex items-center gap-3 mb-3">
@@ -80,7 +120,7 @@ function StatCard({ icon, bgColor, label, value, valueClass = "text-slate-100" }
   );
 }
 
-function StatusOverview({ statusCounts, totalTopics }: any) {
+function StatusOverview({ statusCounts, totalTopics }: StatusOverviewProps) {
   return (
     <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
       <h2 className="text-lg font-semibold text-slate-100 font-mono mb-4">Разпределение по статус</h2>
@@ -102,7 +142,7 @@ function StatusOverview({ statusCounts, totalTopics }: any) {
   );
 }
 
-function SubjectsSection({ subjects, onAddClick }: any) {
+function SubjectsSection({ subjects, onAddClick }: SubjectsSectionProps) {
   if (subjects.length === 0) {
     return (
       <div className="p-12 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b] text-center">
@@ -118,13 +158,13 @@ function SubjectsSection({ subjects, onAddClick }: any) {
     <div>
       <h2 className="text-lg font-semibold text-slate-100 font-mono mb-4">Предмети</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {subjects.map((s: any) => <SubjectCard key={s.id} subject={s} />)}
+        {subjects.map((s) => <SubjectCard key={s.id} subject={s} />)}
       </div>
     </div>
   );
 }
 
-function SubjectCard({ subject }: any) {
+function SubjectCard({ subject }: SubjectCardProps) {
   const { data } = useApp();
   const progress = getSubjectProgress(subject);
   const daysUntil = getDaysUntil(subject.examDate);
@@ -149,19 +189,19 @@ function SubjectCard({ subject }: any) {
         </div>
       </div>
       <div className="flex justify-between items-center">
-        <div className="flex gap-2">{Object.entries(progress.counts).map(([st, cnt]: [string, any]) => cnt > 0 && <span key={st} className="text-sm font-mono" style={{ color: STATUS_CONFIG[st as keyof typeof STATUS_CONFIG].text }}>{STATUS_CONFIG[st as keyof typeof STATUS_CONFIG].emoji}{cnt}</span>)}</div>
+        <div className="flex gap-2">{(Object.entries(progress.counts) as [TopicStatus, number][]).map(([st, cnt]) => cnt > 0 && <span key={st} className="text-sm font-mono" style={{ color: STATUS_CONFIG[st].text }}>{STATUS_CONFIG[st].emoji}{cnt}</span>)}</div>
         {subject.topics.length > 0 && <div className={"text-lg font-bold font-mono " + predClass}>{prediction.current.toFixed(2)}</div>}
       </div>
     </Link>
   );
 }
 
-function AlertsSection({ alerts }: any) {
+function AlertsSection({ alerts }: AlertsSectionProps) {
   return (
     <div className="p-6 rounded-xl bg-red-900/20 border border-red-800/30">
       <h2 className="text-lg font-semibold text-red-400 font-mono mb-4 flex items-center gap-2"><AlertTriangle size={20} />Внимание</h2>
       <ul className="space-y-2">
-        {alerts.map((a: any, i: number) => (
+        {alerts.map((a, i) => (
           <li key={i} className="flex items-center gap-3">
             <span className={"w-2 h-2 rounded-full " + (a.type === "critical" ? "bg-red-500" : a.type === "warning" ? "bg-orange-500" : "bg-blue-500")} />
             <span className="text-slate-300 font-mono text-sm">{a.message}</span>

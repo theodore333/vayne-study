@@ -1,13 +1,35 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { PDFParse } from 'pdf-parse';
 
-// See CLAUDE_MODELS.md for correct model IDs
+// See CLAUDE_CONTEXT.md for correct model IDs
+
+// Types for extracted questions
+interface ExtractedQuestion {
+  type: string;
+  text: string;
+  options?: string[] | null;
+  correctAnswer: string;
+  explanation?: string | null;
+  linkedTopicIndex?: number | null;
+  caseId?: string | null;
+}
+
+interface ExtractedCase {
+  id: string;
+  description: string;
+  questionIds?: string[];
+}
+
+interface ExtractionResult {
+  questions: ExtractedQuestion[];
+  cases: ExtractedCase[];
+}
 
 // Repair truncated JSON by extracting complete question objects
-function repairTruncatedJSON(text: string): { questions: any[]; cases: any[] } | null {
+function repairTruncatedJSON(text: string): ExtractionResult | null {
   try {
-    const questions: any[] = [];
-    const cases: any[] = [];
+    const questions: ExtractedQuestion[] = [];
+    const cases: ExtractedCase[] = [];
 
     // Method 1: Extract individual question objects by balanced braces
     const questionsStart = text.indexOf('"questions"');
@@ -202,7 +224,7 @@ async function extractQuestionsFromText(
   subjectName: string,
   topics: string[],
   chunkInfo: string
-): Promise<{ questions: any[]; cases: any[]; inputTokens: number; outputTokens: number }> {
+): Promise<{ questions: ExtractedQuestion[]; cases: ExtractedCase[]; inputTokens: number; outputTokens: number }> {
   const topicListForPrompt = topics.length > 0
     ? `\n\nТЕМИ ЗА СВЪРЗВАНЕ:\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
     : '';
@@ -249,13 +271,13 @@ linkedTopicIndex = 1-based или null. Върни САМО JSON.`;
   }
 
   // Parse response
-  let result: { questions: any[]; cases: any[] } = { questions: [], cases: [] };
+  let result: ExtractionResult = { questions: [], cases: [] };
   try {
     const cleaned = fullText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     const startIdx = cleaned.indexOf('{');
     const endIdx = cleaned.lastIndexOf('}');
     if (startIdx !== -1 && endIdx > startIdx) {
-      result = JSON.parse(cleaned.substring(startIdx, endIdx + 1));
+      result = JSON.parse(cleaned.substring(startIdx, endIdx + 1)) as ExtractionResult;
     }
   } catch {
     const repaired = repairTruncatedJSON(fullText);
@@ -332,8 +354,8 @@ export async function POST(request: Request) {
       if (!pdfAnalysis.isScanned && pdfAnalysis.pageCount > PAGES_PER_CHUNK && pdfAnalysis.textByPage) {
         console.log(`[EXTRACT-Q] Using CHUNKED extraction for ${pdfAnalysis.pageCount} pages`);
 
-        const allQuestions: any[] = [];
-        const allCases: any[] = [];
+        const allQuestions: ExtractedQuestion[] = [];
+        const allCases: ExtractedCase[] = [];
         let totalInputTokens = 0;
         let totalOutputTokens = 0;
         const numChunks = Math.ceil(pdfAnalysis.pageCount / PAGES_PER_CHUNK);
@@ -362,7 +384,7 @@ export async function POST(request: Request) {
         }
 
         // Transform and return chunked results - use topic IDs instead of names
-        const questions = allQuestions.map((q: any) => ({
+        const questions = allQuestions.map((q) => ({
           type: q.type || 'mcq',
           text: q.text || '',
           options: q.options || null,
@@ -535,7 +557,7 @@ ${topicListForPrompt}
     responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
     // Parse the JSON response
-    let result;
+    let result: ExtractionResult = { questions: [], cases: [] };
     let wasRepaired = false;
     try {
       // Try to find JSON object
@@ -543,9 +565,9 @@ ${topicListForPrompt}
       const endIdx = responseText.lastIndexOf('}');
 
       if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-        result = JSON.parse(responseText.substring(startIdx, endIdx + 1));
+        result = JSON.parse(responseText.substring(startIdx, endIdx + 1)) as ExtractionResult;
       } else {
-        result = JSON.parse(responseText);
+        result = JSON.parse(responseText) as ExtractionResult;
       }
     } catch (parseError) {
       console.error('[EXTRACT-Q] JSON parse error, attempting repair:', parseError);
@@ -571,7 +593,7 @@ ${topicListForPrompt}
     }
 
     // Transform questions to match our BankQuestion type - use topic IDs
-    const questions = (result.questions || []).map((q: any) => ({
+    const questions = (result.questions || []).map((q) => ({
       type: q.type || 'mcq',
       text: q.text || '',
       options: q.options || null,
@@ -584,10 +606,10 @@ ${topicListForPrompt}
       stats: { attempts: 0, correct: 0 }
     }));
 
-    const cases = (result.cases || []).map((c: any) => ({
+    const cases = (result.cases || []).map((c) => ({
       id: c.id || '',
       description: c.description || '',
-      questionIds: [] // Will be populated when adding to bank
+      questionIds: [] as string[] // Will be populated when adding to bank
     }));
 
     // Sonnet pricing: $3/1M input, $15/1M output

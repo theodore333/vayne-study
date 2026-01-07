@@ -223,17 +223,24 @@ export default function TodayPage() {
             {workload.bySubject.map(item => {
               const subject = data.subjects.find(s => s.id === item.subjectId);
               return (
-                <div key={item.subjectId} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject?.color || '#666' }} />
-                    <span className="text-slate-200 font-mono">{item.subjectName}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded border font-mono ${urgencyColors[item.urgency]}`}>
+                <div key={item.subjectId} className={`flex items-center justify-between p-3 rounded-lg ${
+                  item.warning ? 'bg-red-500/10 border border-red-500/30' : 'bg-slate-800/30'
+                }`}>
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: subject?.color || '#666' }} />
+                    <span className="text-slate-200 font-mono truncate">{item.subjectName}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded border font-mono shrink-0 ${urgencyColors[item.urgency]}`}>
                       {item.daysLeft}д
                     </span>
+                    {item.warning && (
+                      <span className="text-xs text-red-400 font-mono shrink-0">{item.warning}</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg font-bold text-cyan-400 font-mono">{item.topics}</span>
-                    <span className="text-xs text-slate-500 font-mono">теми</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-lg font-bold font-mono ${item.warning ? 'text-red-400' : 'text-cyan-400'}`}>
+                      {item.topics}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono">/{item.remaining}</span>
                   </div>
                 </div>
               );

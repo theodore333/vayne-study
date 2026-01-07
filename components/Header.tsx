@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw, Star } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { calculateEffectiveHours } from '@/lib/algorithms';
+import { getLevelInfo, getXpForNextLevel } from '@/lib/gamification';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from './modals/DailyCheckinModal';
 
@@ -19,7 +19,9 @@ export default function Header() {
     );
   }
 
-  const effectiveHours = calculateEffectiveHours(data.dailyStatus);
+  const progress = data.userProgress;
+  const levelInfo = getLevelInfo(progress?.level || 1);
+  const xpProgress = getXpForNextLevel(progress?.xp || 0);
 
   // Calculate total status counts across all subjects
   const statusCounts = data.subjects.reduce(
@@ -36,39 +38,48 @@ export default function Header() {
     <>
       <header className="sticky top-0 z-30 bg-[rgba(10,10,15,0.9)] backdrop-blur-sm border-b border-[#1e293b] px-6 py-4">
         <div className="flex items-center justify-between">
+          {/* Level & XP */}
+          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-900/30 to-cyan-900/30 border border-purple-500/20">
+            <span className="text-xl">{levelInfo.icon}</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white font-mono">{levelInfo.name}</span>
+                <span className="text-xs text-purple-300 font-mono">Lv.{progress?.level || 1}</span>
+              </div>
+              <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-purple-500 to-cyan-500"
+                  style={{ width: `${xpProgress.progress}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Daily Status Button */}
           <button
             onClick={() => setShowCheckin(true)}
-            className={`flex items-center gap-3 px-4 py-2 rounded-lg border hover:border-slate-600 transition-all group ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg border hover:border-slate-600 transition-all ${
               data.dailyStatus.sick || data.dailyStatus.holiday
                 ? 'bg-yellow-500/10 border-yellow-500/30'
                 : 'bg-slate-800/50 border-slate-700'
             }`}
           >
             {data.dailyStatus.sick ? (
-              <div className="flex items-center gap-2">
+              <>
                 <Thermometer size={16} className="text-red-400" />
                 <span className="text-sm font-mono text-red-400">Болен</span>
-              </div>
+              </>
             ) : data.dailyStatus.holiday ? (
-              <div className="flex items-center gap-2">
+              <>
                 <Palmtree size={16} className="text-green-400" />
                 <span className="text-sm font-mono text-green-400">Почивка</span>
-              </div>
+              </>
             ) : (
-              <div className="flex items-center gap-2">
+              <>
                 <Zap size={16} className="text-cyan-400" />
                 <span className="text-sm font-mono text-slate-400">Нормален</span>
-              </div>
+              </>
             )}
-            <div className="flex items-center gap-2 pl-3 border-l border-slate-700">
-              <span className={`text-lg font-bold font-mono ${
-                effectiveHours >= 4 ? 'text-green-400' :
-                effectiveHours >= 2 ? 'text-yellow-400' : 'text-red-400'
-              }`}>
-                {effectiveHours}ч
-              </span>
-            </div>
           </button>
 
           {/* API Usage */}
@@ -100,7 +111,7 @@ export default function Header() {
 
           {/* Status Overview */}
           <div className="flex items-center gap-4 px-4 py-2 rounded-lg bg-slate-800/30 border border-slate-800">
-            <span className="text-xs text-slate-500 font-mono uppercase">Общ статус:</span>
+            <span className="text-xs text-slate-500 font-mono uppercase">Статус:</span>
             <div className="flex items-center gap-3">
               {Object.entries(statusCounts).map(([status, count]) => (
                 <div key={status} className="flex items-center gap-1">

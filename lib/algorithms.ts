@@ -262,11 +262,11 @@ export function calculateEffectiveHours(status: DailyStatus): number {
 export function calculateDailyTopics(
   subjects: Subject[],
   status: DailyStatus
-): { total: number; bySubject: { subjectId: string; subjectName: string; topics: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low' }[] } {
+): { total: number; bySubject: { subjectId: string; subjectName: string; topics: number; remaining: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low'; warning: string | null }[] } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const bySubject: { subjectId: string; subjectName: string; topics: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low' }[] = [];
+  const bySubject: { subjectId: string; subjectName: string; topics: number; remaining: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low'; warning: string | null }[] = [];
 
   for (const subject of subjects) {
     if (!subject.examDate) continue;
@@ -282,37 +282,35 @@ export function calculateDailyTopics(
     const remainingTopics = subject.topics.filter(t => t.status !== 'green').length;
     if (remainingTopics === 0) continue;
 
-    // Calculate topics per day needed
-    let topicsPerDay = Math.ceil(remainingTopics / daysLeft);
+    // Calculate exact topics per day needed (no cap - show reality)
+    const topicsPerDay = Math.ceil(remainingTopics / daysLeft);
 
-    // Urgency adjustments
+    // Determine urgency
     let urgency: 'critical' | 'high' | 'medium' | 'low' = 'low';
-    if (daysLeft <= 3) {
-      urgency = 'critical';
-      topicsPerDay = Math.max(topicsPerDay, Math.ceil(remainingTopics / 2)); // Finish fast!
-    } else if (daysLeft <= 7) {
-      urgency = 'high';
-      topicsPerDay = Math.max(topicsPerDay, 3);
-    } else if (daysLeft <= 14) {
-      urgency = 'medium';
-      topicsPerDay = Math.max(topicsPerDay, 2);
-    } else {
-      topicsPerDay = Math.max(topicsPerDay, 1);
-    }
+    if (daysLeft <= 3) urgency = 'critical';
+    else if (daysLeft <= 7) urgency = 'high';
+    else if (daysLeft <= 14) urgency = 'medium';
 
-    // Cap at reasonable maximum
-    topicsPerDay = Math.min(topicsPerDay, 8);
+    // Warning if workload is unrealistic
+    let warning: string | null = null;
+    if (topicsPerDay > 20) {
+      warning = `Невъзможно! ${remainingTopics} теми за ${daysLeft}д`;
+    } else if (topicsPerDay > 10) {
+      warning = 'Много тежко!';
+    }
 
     bySubject.push({
       subjectId: subject.id,
       subjectName: subject.name,
       topics: topicsPerDay,
+      remaining: remainingTopics,
       daysLeft,
-      urgency
+      urgency,
+      warning
     });
   }
 
-  // Sort by urgency
+  // Sort by urgency then by days left
   bySubject.sort((a, b) => {
     const urgencyOrder = { critical: 0, high: 1, medium: 2, low: 3 };
     if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
@@ -321,17 +319,17 @@ export function calculateDailyTopics(
     return a.daysLeft - b.daysLeft;
   });
 
-  // Calculate total with modifiers
+  // Calculate total
   let total = bySubject.reduce((sum, s) => sum + s.topics, 0);
 
   // Apply sick/holiday modifiers
   const modifier = calculateEffectiveHours(status);
-  total = Math.max(1, Math.ceil(total * modifier));
-
-  // Also apply modifier to each subject
-  bySubject.forEach(s => {
-    s.topics = Math.max(1, Math.ceil(s.topics * modifier));
-  });
+  if (modifier < 1) {
+    total = Math.max(1, Math.ceil(total * modifier));
+    bySubject.forEach(s => {
+      s.topics = Math.max(1, Math.ceil(s.topics * modifier));
+    });
+  }
 
   return { total, bySubject };
 }

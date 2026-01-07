@@ -194,7 +194,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
 
       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
       const bgColor = colorConfig?.bg || '#fef08a';
-      content = `${before}<mark style="background-color: ${bgColor} !important; padding: 2px 4px; border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;">${highlighted}</mark>${after}`;
+      content = `${before}<span class="highlight-text" style="background: ${bgColor}; padding: 2px 4px; border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;">${highlighted}</span>${after}`;
     }
 
     return parseMarkdown(content);
@@ -342,7 +342,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                 [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
                 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
                 [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4
-                [&_mark]:text-stone-900"
+                [&_.highlight-text]:text-stone-900"
               style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
               dangerouslySetInnerHTML={{ __html: renderContent() }}
             />

@@ -22,6 +22,13 @@ export default function TodayPage() {
   const [weeklyReview, setWeeklyReview] = useState<string | null>(null);
   const [loadingAdvice, setLoadingAdvice] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  // Load API key
+  useEffect(() => {
+    const stored = localStorage.getItem('claude-api-key');
+    setApiKey(stored);
+  }, []);
 
   // Check which topics have been reviewed today
   const today = new Date().toISOString().split('T')[0];
@@ -95,6 +102,15 @@ export default function TodayPage() {
 
   // Fetch AI advice
   const fetchAiAdvice = async (type: 'daily' | 'weekly') => {
+    if (!apiKey) {
+      if (type === 'daily') {
+        setAiAdvice('❌ Добави API ключ в Settings за да използваш AI съветите.');
+      } else {
+        setWeeklyReview('❌ Добави API ключ в Settings за да използваш AI съветите.');
+      }
+      return;
+    }
+
     if (type === 'daily') {
       setLoadingAdvice(true);
     } else {
@@ -110,12 +126,19 @@ export default function TodayPage() {
           userProgress: data.userProgress,
           timerSessions: data.timerSessions,
           dailyStatus: data.dailyStatus,
-          type
+          type,
+          apiKey
         })
       });
 
       const result = await response.json();
-      if (result.advice) {
+      if (result.error) {
+        if (type === 'daily') {
+          setAiAdvice(`❌ ${result.error}`);
+        } else {
+          setWeeklyReview(`❌ ${result.error}`);
+        }
+      } else if (result.advice) {
         if (type === 'daily') {
           setAiAdvice(result.advice);
         } else {
@@ -127,6 +150,12 @@ export default function TodayPage() {
       }
     } catch (error) {
       console.error('Failed to fetch AI advice:', error);
+      const errorMsg = '❌ Грешка при свързване с AI.';
+      if (type === 'daily') {
+        setAiAdvice(errorMsg);
+      } else {
+        setWeeklyReview(errorMsg);
+      }
     } finally {
       if (type === 'daily') {
         setLoadingAdvice(false);

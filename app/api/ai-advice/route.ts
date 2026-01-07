@@ -1,13 +1,18 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || '',
-});
-
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, userProgress, timerSessions, dailyStatus, type } = await request.json();
+    const { subjects, userProgress, timerSessions, dailyStatus, type, apiKey } = await request.json();
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API ключ е задължителен. Добави го в Settings.' },
+        { status: 400 }
+      );
+    }
+
+    const anthropic = new Anthropic({ apiKey });
 
     // Calculate stats for context
     const today = new Date();

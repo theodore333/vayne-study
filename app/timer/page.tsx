@@ -61,20 +61,22 @@ export default function TimerPage() {
         const state = JSON.parse(saved);
         const now = Date.now();
 
+        // Always restore count and phase (even if paused)
+        setPomodoroPhase(state.phase || 'work');
+        setPomodoroCount(state.count || 0);
+        setTimerMode('pomodoro');
+
         if (state.endTime && state.endTime > now) {
           // Timer is still running
-          setPomodoroPhase(state.phase);
-          setPomodoroCount(state.count);
           setPomodoroEndTime(state.endTime);
           setIsRunning(true);
-          setTimerMode('pomodoro');
         } else if (state.endTime && state.endTime <= now) {
-          // Timer expired while closed - show what phase completed
-          setPomodoroPhase(state.phase);
-          setPomodoroCount(state.count);
-          // Clear the saved state
-          localStorage.removeItem('pomodoro_state');
+          // Timer expired while closed - trigger completion
+          // Don't auto-complete, just show current state
+          setPomodoroEndTime(null);
+          setIsRunning(false);
         }
+        // If no endTime, timer was paused - just restore count/phase
       }
     } catch (e) {
       console.error('Failed to restore pomodoro state:', e);
@@ -82,20 +84,18 @@ export default function TimerPage() {
     setInitialized(true);
   }, []);
 
-  // Save Pomodoro state to localStorage when running
+  // Save Pomodoro state to localStorage (persist count even when paused)
   useEffect(() => {
     if (!initialized || typeof window === 'undefined') return;
 
-    if (isRunning && timerMode === 'pomodoro' && pomodoroEndTime) {
+    if (timerMode === 'pomodoro') {
       const state = {
         phase: pomodoroPhase,
         count: pomodoroCount,
-        endTime: pomodoroEndTime
+        endTime: isRunning ? pomodoroEndTime : null, // Only save endTime if running
+        savedAt: Date.now()
       };
       localStorage.setItem('pomodoro_state', JSON.stringify(state));
-    } else if (!isRunning && timerMode === 'pomodoro') {
-      // Clear saved state when stopped/paused
-      localStorage.removeItem('pomodoro_state');
     }
   }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, initialized]);
 

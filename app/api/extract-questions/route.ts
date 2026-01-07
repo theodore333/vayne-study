@@ -219,7 +219,9 @@ MCQ ФОРМАТИ:
 ФОРМАТ А: Въпрос + буквени отговори → text=въпрос, options=отговори
 ФОРМАТ Б: Твърдения (1.2.3.) + комбинации (А.1,2,3) → text=въпрос+твърдения, options=комбинации
 
-JSON: {"questions": [{"type": "mcq", "text": "...", "options": ["А...", "Б..."], "correctAnswer": "А", "explanation": null, "linkedTopicIndex": null}]}
+JSON: {"questions": [{"type": "mcq", "text": "...", "options": ["А...", "Б..."], "correctAnswer": "А", "explanation": "Кратко обяснение защо този отговор е верен (1-2 изречения)", "linkedTopicIndex": null}]}
+
+ВАЖНО ЗА explanation: Напиши кратко (1-2 изречения) обяснение защо верният отговор е правилен. Ако не знаеш със сигурност, напиши null.
 
 linkedTopicIndex = 1-based или null. Върни САМО JSON.`;
 
@@ -472,7 +474,7 @@ ${topicListForPrompt}
       "text": "Текст на въпроса",
       "options": ["А. ...", "Б. ...", "В. ...", "Г. ..."],
       "correctAnswer": "Б",
-      "explanation": null,
+      "explanation": "Кратко обяснение защо Б е верният отговор (1-2 изречения)",
       "linkedTopicIndex": 5
     }
   ]
@@ -481,6 +483,7 @@ ${topicListForPrompt}
 === ПРАВИЛА ===
 - type винаги е "mcq"
 - linkedTopicIndex = 1-based индекс от темите, или null
+- explanation = кратко обяснение (1-2 изречения) ЗАЩО верният отговор е правилен. Ако не знаеш със сигурност, напиши null.
 - ПРОПУСКАЙ казуси (клинични случаи) и отворени въпроси
 - Върни САМО JSON, без markdown`
     });

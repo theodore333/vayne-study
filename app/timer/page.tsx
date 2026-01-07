@@ -32,6 +32,7 @@ export default function TimerPage() {
   // UI state
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
   // Audio context
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -43,9 +44,58 @@ export default function TimerPage() {
   // Find active session
   const activeSession = data.timerSessions.find(s => s.endTime === null);
 
-  // Initialize pomodoro time
+  // Restore Pomodoro state from localStorage on mount
   useEffect(() => {
-    if (timerMode === 'pomodoro' && !isRunning) {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const saved = localStorage.getItem('pomodoro_state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        const now = Date.now();
+
+        if (state.endTime && state.endTime > now) {
+          // Timer is still running
+          setPomodoroPhase(state.phase);
+          setPomodoroCount(state.count);
+          setPomodoroEndTime(state.endTime);
+          setIsRunning(true);
+          setTimerMode('pomodoro');
+        } else if (state.endTime && state.endTime <= now) {
+          // Timer expired while closed - show what phase completed
+          setPomodoroPhase(state.phase);
+          setPomodoroCount(state.count);
+          // Clear the saved state
+          localStorage.removeItem('pomodoro_state');
+        }
+      }
+    } catch (e) {
+      console.error('Failed to restore pomodoro state:', e);
+    }
+    setInitialized(true);
+  }, []);
+
+  // Save Pomodoro state to localStorage when running
+  useEffect(() => {
+    if (!initialized || typeof window === 'undefined') return;
+
+    if (isRunning && timerMode === 'pomodoro' && pomodoroEndTime) {
+      const state = {
+        phase: pomodoroPhase,
+        count: pomodoroCount,
+        endTime: pomodoroEndTime
+      };
+      localStorage.setItem('pomodoro_state', JSON.stringify(state));
+    } else if (!isRunning && timerMode === 'pomodoro') {
+      // Clear saved state when stopped/paused
+      localStorage.removeItem('pomodoro_state');
+    }
+  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, initialized]);
+
+  // Initialize pomodoro time (only if not restored from localStorage)
+  useEffect(() => {
+    if (!initialized) return;
+    if (timerMode === 'pomodoro' && !isRunning && !pomodoroEndTime) {
       const duration = pomodoroPhase === 'work'
         ? settings.workDuration
         : pomodoroPhase === 'shortBreak'
@@ -53,7 +103,7 @@ export default function TimerPage() {
           : settings.longBreakDuration;
       setPomodoroTimeLeft(duration * 60);
     }
-  }, [timerMode, pomodoroPhase, settings, isRunning]);
+  }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized]);
 
   // Restore active session
   useEffect(() => {

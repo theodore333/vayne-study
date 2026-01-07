@@ -197,6 +197,7 @@ export interface TimerSession {
   rating: number | null;
   pomodorosCompleted?: number; // Number of pomodoro cycles completed in this session
   sessionType?: 'normal' | 'pomodoro'; // Type of timer session
+  distractionNote?: string; // Notes about what distracted during the session
 }
 
 export interface PomodoroSettings {
@@ -212,6 +213,14 @@ export interface PomodoroSettings {
 export interface StudyGoals {
   dailyMinutes: number;       // Daily goal in minutes (default 240 = 4 hours)
   weeklyMinutes: number;      // Weekly goal in minutes (default 1200 = 20 hours)
+  monthlyMinutes: number;     // Monthly goal in minutes (default 4800 = 80 hours)
+}
+
+export interface AcademicPeriod {
+  semesterStart: string | null;  // Semester start date (ISO)
+  semesterEnd: string | null;    // Semester end date (ISO)
+  sessionStart: string | null;   // Exam session start (ISO)
+  sessionEnd: string | null;     // Exam session end (ISO)
 }
 
 
@@ -279,6 +288,7 @@ export interface AppData {
   questionBanks: QuestionBank[];
   pomodoroSettings: PomodoroSettings;
   studyGoals: StudyGoals;
+  academicPeriod: AcademicPeriod;
 }
 
 export interface PredictedGrade {

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -59,6 +59,10 @@ interface AppContextType {
   // Pomodoro & Goals operations
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
   updateStudyGoals: (goals: Partial<StudyGoals>) => void;
+  updateAcademicPeriod: (period: Partial<AcademicPeriod>) => void;
+
+  // Timer with distraction note
+  stopTimerWithNote: (rating: number | null, distractionNote?: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -86,8 +90,16 @@ const defaultPomodoroSettings: PomodoroSettings = {
 };
 
 const defaultStudyGoals: StudyGoals = {
-  dailyMinutes: 240,  // 4 hours
-  weeklyMinutes: 1200 // 20 hours
+  dailyMinutes: 240,   // 4 hours
+  weeklyMinutes: 1200, // 20 hours
+  monthlyMinutes: 4800 // 80 hours
+};
+
+const defaultAcademicPeriod: AcademicPeriod = {
+  semesterStart: null,
+  semesterEnd: null,
+  sessionStart: null,
+  sessionEnd: null
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -106,7 +118,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     usageData: defaultUsageData,
     questionBanks: [],
     pomodoroSettings: defaultPomodoroSettings,
-    studyGoals: defaultStudyGoals
+    studyGoals: defaultStudyGoals,
+    academicPeriod: defaultAcademicPeriod
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -386,6 +399,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
+  const stopTimerWithNote = useCallback((rating: number | null, distractionNote?: string) => {
+    updateData(prev => {
+      const sessions = [...prev.timerSessions];
+      const activeIndex = sessions.findIndex(s => s.endTime === null);
+      if (activeIndex === -1) return prev;
+
+      const endTime = new Date().toISOString();
+      const startTime = new Date(sessions[activeIndex].startTime);
+      const duration = Math.round((new Date(endTime).getTime() - startTime.getTime()) / 1000 / 60);
+
+      sessions[activeIndex] = {
+        ...sessions[activeIndex],
+        endTime,
+        duration,
+        rating,
+        distractionNote: distractionNote || undefined
+      };
+
+      return { ...prev, timerSessions: sessions };
+    });
+  }, [updateData]);
+
   // GPA operations
   const addSemesterGrade = useCallback((grade: Omit<SemesterGrade, 'id'>) => {
     updateData(prev => ({
@@ -546,6 +581,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const updateAcademicPeriod = useCallback((period: Partial<AcademicPeriod>) => {
+    updateData(prev => ({
+      ...prev,
+      academicPeriod: { ...(prev.academicPeriod || defaultAcademicPeriod), ...period }
+    }));
+  }, [updateData]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -581,7 +623,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteQuestionBank,
       deleteQuestion,
       updatePomodoroSettings,
-      updateStudyGoals
+      updateStudyGoals,
+      updateAcademicPeriod,
+      stopTimerWithNote
     }}>
       {children}
     </AppContext.Provider>

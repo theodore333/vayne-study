@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 
@@ -36,7 +36,15 @@ const defaultPomodoroSettings: PomodoroSettings = {
 
 const defaultStudyGoals: StudyGoals = {
   dailyMinutes: 240,
-  weeklyMinutes: 1200
+  weeklyMinutes: 1200,
+  monthlyMinutes: 4800
+};
+
+const defaultAcademicPeriod: AcademicPeriod = {
+  semesterStart: null,
+  semesterEnd: null,
+  sessionStart: null,
+  sessionEnd: null
 };
 
 const defaultData: AppData = {
@@ -48,7 +56,8 @@ const defaultData: AppData = {
   usageData: defaultUsageData,
   questionBanks: [],
   pomodoroSettings: defaultPomodoroSettings,
-  studyGoals: defaultStudyGoals
+  studyGoals: defaultStudyGoals,
+  academicPeriod: defaultAcademicPeriod
 };
 
 export function loadData(): AppData {
@@ -67,6 +76,8 @@ export function loadData(): AppData {
     if (!data.questionBanks) data.questionBanks = [];
     if (!data.pomodoroSettings) data.pomodoroSettings = defaultPomodoroSettings;
     if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
+    if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
+    if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     // Remove deprecated focusSession
     delete data.focusSession;
 

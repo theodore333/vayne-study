@@ -294,16 +294,17 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
 
           {/* Main content */}
           <div
-            className="prose prose-stone prose-lg max-w-none
-              prose-headings:text-stone-900 prose-headings:font-bold
-              prose-h1:text-3xl prose-h1:mb-6 prose-h1:mt-8
-              prose-h2:text-2xl prose-h2:mb-4 prose-h2:mt-6
-              prose-h3:text-xl prose-h3:mb-3 prose-h3:mt-4
-              prose-p:text-stone-700 prose-p:leading-relaxed prose-p:mb-4
-              prose-strong:text-stone-900
-              prose-li:text-stone-700 prose-li:mb-1
-              selection:bg-amber-200"
-            style={{ fontSize: `${fontSize}px`, lineHeight: 1.8 }}
+            className="max-w-none text-stone-800 selection:bg-amber-200
+              [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-6 [&_h1]:mt-8
+              [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-stone-900 [&_h2]:mb-4 [&_h2]:mt-6
+              [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-stone-900 [&_h3]:mb-3 [&_h3]:mt-4
+              [&_p]:text-stone-700 [&_p]:leading-relaxed [&_p]:mb-4
+              [&_strong]:text-stone-900 [&_strong]:font-semibold
+              [&_em]:italic
+              [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
+              [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
+              [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4"
+            style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
             dangerouslySetInnerHTML={{ __html: renderContent() }}
           />
         </article>

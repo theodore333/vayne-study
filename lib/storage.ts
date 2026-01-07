@@ -1,8 +1,9 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, UserProgress } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
+import { defaultUserProgress } from './gamification';
 
 const defaultDailyStatus: DailyStatus = {
   date: getTodayString(),
@@ -55,7 +56,8 @@ const defaultData: AppData = {
   questionBanks: [],
   pomodoroSettings: defaultPomodoroSettings,
   studyGoals: defaultStudyGoals,
-  academicPeriod: defaultAcademicPeriod
+  academicPeriod: defaultAcademicPeriod,
+  userProgress: defaultUserProgress
 };
 
 export function loadData(): AppData {
@@ -76,6 +78,7 @@ export function loadData(): AppData {
     if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
     if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
+    if (!data.userProgress) data.userProgress = defaultUserProgress;
     // Remove deprecated focusSession
     delete data.focusSession;
 

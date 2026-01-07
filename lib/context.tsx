@@ -1,10 +1,11 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
+import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
 interface AppContextType {
   data: AppData;
@@ -63,6 +64,11 @@ interface AppContextType {
 
   // Timer with distraction note
   stopTimerWithNote: (rating: number | null, distractionNote?: string) => void;
+
+  // Gamification
+  earnXp: (amount: number, reason: string) => void;
+  newAchievements: Achievement[];
+  clearNewAchievements: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -117,11 +123,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     questionBanks: [],
     pomodoroSettings: defaultPomodoroSettings,
     studyGoals: defaultStudyGoals,
-    academicPeriod: defaultAcademicPeriod
+    academicPeriod: defaultAcademicPeriod,
+    userProgress: defaultUserProgress
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
+  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
 
   useEffect(() => {
     const initData = async () => {
@@ -252,9 +260,46 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const setTopicStatus = useCallback((subjectId: string, topicId: string, status: TopicStatus) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => {
+    updateData(prev => {
+      // Find old status for XP calculation
+      let oldStatus: TopicStatus = 'gray';
+      const subject = prev.subjects.find(s => s.id === subjectId);
+      if (subject) {
+        const topic = subject.topics.find(t => t.id === topicId);
+        if (topic) oldStatus = topic.status;
+      }
+
+      // Calculate XP
+      const progress = prev.userProgress || defaultUserProgress;
+      const comboMultiplier = getComboMultiplier(progress.combo.count);
+      const xpEarned = calculateTopicXp(oldStatus, status, comboMultiplier);
+
+      // Update combo and XP
+      const newCombo = xpEarned > 0 ? updateCombo(progress.combo.lastActionTime, progress.combo.count) : progress.combo;
+      const newXp = progress.xp + xpEarned;
+      const newLevel = calculateLevel(newXp);
+
+      // Update stats
+      const newStats = { ...progress.stats };
+      if (status !== 'gray' && oldStatus === 'gray') {
+        newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
+      }
+      if (status === 'green' && oldStatus !== 'green') {
+        newStats.greenTopics = (newStats.greenTopics || 0) + 1;
+      }
+
+      const newProgress: UserProgress = {
+        ...progress,
+        xp: newXp,
+        level: newLevel,
+        totalXpEarned: progress.totalXpEarned + xpEarned,
+        combo: newCombo,
+        stats: newStats
+      };
+
+      // Check achievements
+      const streak = prev.timerSessions.filter(s => s.endTime !== null).length > 0 ? 1 : 0;
+      const newSubjects = prev.subjects.map(s => {
         if (s.id !== subjectId) return s;
         return {
           ...s,
@@ -267,14 +312,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
           })
         };
-      })
-    }));
+      });
+
+      const unlocked = checkAchievements(newProgress, newSubjects, streak);
+      if (unlocked.length > 0) {
+        newProgress.achievements = [...newProgress.achievements, ...unlocked];
+        setNewAchievements(prev => [...prev, ...unlocked]);
+      }
+
+      return {
+        ...prev,
+        subjects: newSubjects,
+        userProgress: newProgress
+      };
+    });
   }, [updateData]);
 
   const addGrade = useCallback((subjectId: string, topicId: string, grade: number) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => {
+    updateData(prev => {
+      // Find old status for XP calculation
+      let oldStatus: TopicStatus = 'gray';
+      const subject = prev.subjects.find(s => s.id === subjectId);
+      if (subject) {
+        const topic = subject.topics.find(t => t.id === topicId);
+        if (topic) oldStatus = topic.status;
+      }
+
+      // Calculate quiz XP (convert grade 2-6 to score 0-100)
+      const score = Math.round(((grade - 2) / 4) * 100);
+      const progress = prev.userProgress || defaultUserProgress;
+      const comboMultiplier = getComboMultiplier(progress.combo.count);
+      const quizXp = calculateQuizXp(score, comboMultiplier);
+
+      // Update subjects
+      const newSubjects = prev.subjects.map(s => {
         if (s.id !== subjectId) return s;
         return {
           ...s,
@@ -292,8 +363,56 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             };
           })
         };
-      })
-    }));
+      });
+
+      // Calculate topic status change XP
+      const newTopic = newSubjects.find(s => s.id === subjectId)?.topics.find(t => t.id === topicId);
+      const newStatus = newTopic?.status || oldStatus;
+      const topicXp = calculateTopicXp(oldStatus, newStatus, comboMultiplier);
+
+      const totalXp = quizXp + topicXp;
+
+      // Update combo and XP
+      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      const newXp = progress.xp + totalXp;
+      const newLevel = calculateLevel(newXp);
+
+      // Update stats
+      const newStats = { ...progress.stats };
+      newStats.quizzesTaken = (newStats.quizzesTaken || 0) + 1;
+      if (score === 100) {
+        newStats.perfectQuizzes = (newStats.perfectQuizzes || 0) + 1;
+      }
+      if (newStatus !== 'gray' && oldStatus === 'gray') {
+        newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
+      }
+      if (newStatus === 'green' && oldStatus !== 'green') {
+        newStats.greenTopics = (newStats.greenTopics || 0) + 1;
+      }
+
+      const newProgress: UserProgress = {
+        ...progress,
+        xp: newXp,
+        level: newLevel,
+        totalXpEarned: progress.totalXpEarned + totalXp,
+        combo: newCombo,
+        stats: newStats
+      };
+
+      // Check achievements
+      const streak = prev.timerSessions.filter(s => s.endTime !== null).length > 0 ? 1 : 0;
+      const unlocked = checkAchievements(newProgress, newSubjects, streak);
+      if (unlocked.length > 0) {
+        newProgress.achievements = [...newProgress.achievements, ...unlocked];
+        setNewAchievements(prev => [...prev, ...unlocked]);
+      }
+
+      return {
+        ...prev,
+        subjects: newSubjects,
+        userProgress: newProgress
+      };
+    });
   }, [updateData]);
 
   const updateTopicMaterial = useCallback((subjectId: string, topicId: string, material: string) => {
@@ -586,6 +705,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // Calculate streak for achievement checking
+  const calculateStreak = useCallback((sessions: TimerSession[]) => {
+    const dates = new Set(
+      sessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0])
+    );
+    let count = 0;
+    const checkDate = new Date();
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (dates.has(dateStr)) {
+        count++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else if (count === 0) {
+        checkDate.setDate(checkDate.getDate() - 1);
+        if (dates.has(checkDate.toISOString().split('T')[0])) {
+          count++;
+          checkDate.setDate(checkDate.getDate() - 1);
+          continue;
+        }
+        break;
+      } else break;
+    }
+    return count;
+  }, []);
+
+  // Gamification: Earn XP
+  const earnXp = useCallback((amount: number, _reason: string) => {
+    updateData(prev => {
+      const progress = prev.userProgress || defaultUserProgress;
+      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      const newXp = progress.xp + amount;
+      const newLevel = calculateLevel(newXp);
+
+      // Update user progress
+      const newProgress: UserProgress = {
+        ...progress,
+        xp: newXp,
+        level: newLevel,
+        totalXpEarned: progress.totalXpEarned + amount,
+        combo: newCombo
+      };
+
+      // Check for new achievements
+      const streak = calculateStreak(prev.timerSessions);
+      const unlocked = checkAchievements(newProgress, prev.subjects, streak);
+      if (unlocked.length > 0) {
+        newProgress.achievements = [...newProgress.achievements, ...unlocked];
+        // Update longest streak stat if needed
+        if (streak > newProgress.stats.longestStreak) {
+          newProgress.stats.longestStreak = streak;
+        }
+        setNewAchievements(prev => [...prev, ...unlocked]);
+      }
+
+      return { ...prev, userProgress: newProgress };
+    });
+  }, [updateData, calculateStreak]);
+
+  const clearNewAchievements = useCallback(() => {
+    setNewAchievements([]);
+  }, []);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -623,7 +804,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatePomodoroSettings,
       updateStudyGoals,
       updateAcademicPeriod,
-      stopTimerWithNote
+      stopTimerWithNote,
+      earnXp,
+      newAchievements,
+      clearNewAchievements
     }}>
       {children}
     </AppContext.Provider>

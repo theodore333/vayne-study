@@ -251,17 +251,89 @@ export function getTopicPriority(topic: Topic): number {
 }
 
 export function calculateEffectiveHours(status: DailyStatus): number {
-  // Base hours: 4 hours for normal day
-  let hours = 4;
+  // Legacy function - returns topic multiplier instead of hours
+  // 1.0 = normal, 0.5 = reduced
+  if (status.sick && status.holiday) return 0.25;
+  if (status.sick || status.holiday) return 0.5;
+  return 1.0;
+}
 
-  // Reduced workload for special modes
-  if (status.sick) hours = 2;      // Болен: 2 часа
-  if (status.holiday) hours = 2;   // Почивка: 2 часа
+// Calculate daily topic workload based on exam dates
+export function calculateDailyTopics(
+  subjects: Subject[],
+  status: DailyStatus
+): { total: number; bySubject: { subjectId: string; subjectName: string; topics: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low' }[] } {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  // Both = minimal
-  if (status.sick && status.holiday) hours = 1;
+  const bySubject: { subjectId: string; subjectName: string; topics: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low' }[] = [];
 
-  return hours;
+  for (const subject of subjects) {
+    if (!subject.examDate) continue;
+
+    const examDate = new Date(subject.examDate);
+    examDate.setHours(0, 0, 0, 0);
+    const daysLeft = Math.max(1, Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+
+    // Skip past exams
+    if (daysLeft < 0) continue;
+
+    // Count non-green topics
+    const remainingTopics = subject.topics.filter(t => t.status !== 'green').length;
+    if (remainingTopics === 0) continue;
+
+    // Calculate topics per day needed
+    let topicsPerDay = Math.ceil(remainingTopics / daysLeft);
+
+    // Urgency adjustments
+    let urgency: 'critical' | 'high' | 'medium' | 'low' = 'low';
+    if (daysLeft <= 3) {
+      urgency = 'critical';
+      topicsPerDay = Math.max(topicsPerDay, Math.ceil(remainingTopics / 2)); // Finish fast!
+    } else if (daysLeft <= 7) {
+      urgency = 'high';
+      topicsPerDay = Math.max(topicsPerDay, 3);
+    } else if (daysLeft <= 14) {
+      urgency = 'medium';
+      topicsPerDay = Math.max(topicsPerDay, 2);
+    } else {
+      topicsPerDay = Math.max(topicsPerDay, 1);
+    }
+
+    // Cap at reasonable maximum
+    topicsPerDay = Math.min(topicsPerDay, 8);
+
+    bySubject.push({
+      subjectId: subject.id,
+      subjectName: subject.name,
+      topics: topicsPerDay,
+      daysLeft,
+      urgency
+    });
+  }
+
+  // Sort by urgency
+  bySubject.sort((a, b) => {
+    const urgencyOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+      return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+    }
+    return a.daysLeft - b.daysLeft;
+  });
+
+  // Calculate total with modifiers
+  let total = bySubject.reduce((sum, s) => sum + s.topics, 0);
+
+  // Apply sick/holiday modifiers
+  const modifier = calculateEffectiveHours(status);
+  total = Math.max(1, Math.ceil(total * modifier));
+
+  // Also apply modifier to each subject
+  bySubject.forEach(s => {
+    s.topics = Math.max(1, Math.ceil(s.topics * modifier));
+  });
+
+  return { total, bySubject };
 }
 
 export function calculatePredictedGrade(

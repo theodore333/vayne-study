@@ -146,7 +146,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
 
       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
       const bgColor = colorConfig?.bg || '#fef08a';
-      content = `${before}<mark style="background-color: ${bgColor}; padding: 0 2px; border-radius: 2px;">${highlighted}</mark>${after}`;
+      content = `${before}<mark style="background-color: ${bgColor} !important; padding: 2px 4px; border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone;">${highlighted}</mark>${after}`;
     }
 
     return parseMarkdown(content);
@@ -293,7 +293,8 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                 [&_em]:italic
                 [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
                 [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
-                [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4"
+                [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4
+                [&_mark]:text-stone-900"
               style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
               dangerouslySetInnerHTML={{ __html: renderContent() }}
             />
@@ -320,18 +321,23 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                   <div className="space-y-2">
                     {highlights.map(hl => {
                       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
+                      const bgColor = colorConfig?.bg || '#fef08a';
                       return (
                         <div
                           key={hl.id}
-                          className="group p-2 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors relative"
-                          style={{ backgroundColor: colorConfig?.bg + '30' }}
+                          className="flex items-start gap-2 p-2 rounded-lg border border-stone-200 hover:border-stone-300 transition-colors"
+                          style={{ backgroundColor: bgColor + '40' }}
                         >
-                          <p className="text-sm text-stone-700 line-clamp-2 pr-6">"{hl.text}"</p>
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
+                            style={{ backgroundColor: bgColor }}
+                          />
+                          <p className="text-sm text-stone-700 line-clamp-2 flex-1">"{hl.text}"</p>
                           <button
                             onClick={() => removeHighlight(hl.id)}
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 text-stone-400 hover:text-red-500 transition-all"
+                            className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-stone-400 hover:text-red-500 transition-colors"
                           >
-                            <X size={12} />
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       );

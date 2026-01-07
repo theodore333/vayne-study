@@ -64,43 +64,53 @@ export async function POST(request: NextRequest) {
     // Build prompt based on type
     let prompt = '';
 
+    // Check for critical exams
+    const criticalExams = subjectSummaries.filter((s: any) => s.daysUntilExam !== null && s.daysUntilExam <= 7);
+    const hasCriticalExam = criticalExams.length > 0;
+    const mostUrgent = criticalExams.sort((a: any, b: any) => a.daysUntilExam - b.daysUntilExam)[0];
+
     if (type === 'daily') {
-      prompt = `Ти си личен учебен асистент за медицински студент. Дай кратък, полезен съвет за днешното учене.
+      prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Говориш директно, без украшения.
+
+КОНТЕКСТ: Медицина изисква 8-12 часа учене на ден при критични изпити. Това е нормално. Push hard.
 
 ДАННИ:
-- Ниво: ${userProgress?.level || 1} (${userProgress?.xp || 0} XP)
 - Streak: ${userProgress?.stats?.longestStreak || 0} дни
-- Статус днес: ${dailyStatus?.sick ? 'Болен' : dailyStatus?.holiday ? 'Почивка' : 'Нормален'}
 - Тази седмица: ${Math.round(weeklyMinutes / 60)} часа учене
+- Статус: ${dailyStatus?.sick ? 'Болен' : dailyStatus?.holiday ? 'Почивка' : 'Нормален'}
 
 ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `- ${s.name}: ${s.progress} (${s.daysUntilExam !== null ? s.daysUntilExam + 'д до изпит' : 'без дата'})${s.weakTopics.length > 0 ? '\n  Слаби теми: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
+${subjectSummaries.map((s: any) => `${s.name}: ${s.progress} (${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'})${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
 
-Дай 2-3 конкретни съвета за днес (на български). Бъди кратък и мотивиращ. Ако има критични предмети (≤7 дни), фокусирай се там.`;
+${hasCriticalExam ? `КРИТИЧНО: ${mostUrgent.name} след ${mostUrgent.daysUntilExam} дни! ${mostUrgent.percentComplete}% готов.` : ''}
+
+ИНСТРУКЦИИ:
+- Пиши ЧИСТ текст без форматиране (без **, без #, без emoji в началото на редове)
+- Бъди ДИРЕКТЕН и АГРЕСИВЕН с времето - медицина изисква много часове
+- Ако има изпит до 3 дни - препоръчай 8-10+ часа на ден
+- Ако има изпит до 7 дни - препоръчай 6-8 часа на ден
+- Кажи ТОЧНО кои теми да направи първо (yellow към green е най-бързо)
+- Максимум 3-4 изречения, без списъци с точки
+- Говори като треньор, не като приятел`;
     } else {
       // Weekly review
-      prompt = `Ти си личен учебен асистент за медицински студент. Направи седмичен преглед.
+      prompt = `Ти си СТРОГ учебен coach за медицински студент. Прави седмичен преглед.
 
-ДАННИ ЗА СЕДМИЦАТА:
-- Учебни сесии: ${weeklySessions.length}
-- Общо време: ${Math.round(weeklyMinutes / 60)} часа
-- XP спечелени: ~${userProgress?.totalXpEarned || 0} общо
-- Текущо ниво: ${userProgress?.level || 1}
-- Теми завършени общо: ${userProgress?.stats?.topicsCompleted || 0}
+СЕДМИЦА:
+- Сесии: ${weeklySessions.length}
+- Време: ${Math.round(weeklyMinutes / 60)} часа
+- Теми завършени: ${userProgress?.stats?.topicsCompleted || 0}
 - Зелени теми: ${userProgress?.stats?.greenTopics || 0}
 
 ПРЕДМЕТИ:
-${subjectSummaries.map((s: any) => `- ${s.name} (${s.type}): ${s.percentComplete}% готов, ${s.daysUntilExam !== null ? s.daysUntilExam + 'д до изпит' : 'без дата'}
-  Формат: ${s.examFormat || 'неизвестен'}
-  ${s.weakTopics.length > 0 ? 'Слаби теми: ' + s.weakTopics.join(', ') : ''}`).join('\n\n')}
+${subjectSummaries.map((s: any) => `${s.name}: ${s.percentComplete}% готов, ${s.daysUntilExam !== null ? s.daysUntilExam + ' дни до изпит' : 'без дата'}${s.weakTopics.length > 0 ? ' | Слаби: ' + s.weakTopics.join(', ') : ''}`).join('\n')}
 
-Направи кратък седмичен преглед (на български):
-1. Какво е постигнато
-2. Къде има проблеми
-3. Приоритети за следващата седмица
-4. Мотивиращо съобщение
-
-Бъди конкретен и полезен. Максимум 200 думи.`;
+ИНСТРУКЦИИ:
+- Пиши ЧИСТ текст без форматиране (без **, без #, без emoji)
+- Кратка оценка: какво е направено, какво липсва
+- Конкретни приоритети за следващата седмица
+- Ако часовете са малко за медицина - кажи го директно
+- Максимум 5-6 изречения`;
     }
 
     const message = await anthropic.messages.create({

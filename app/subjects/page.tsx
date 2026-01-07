@@ -43,6 +43,26 @@ function SubjectsContent() {
   const [editExamDate, setEditExamDate] = useState('');
   const [editExamFormat, setEditExamFormat] = useState('');
 
+  // Multi-topic quiz selection
+  const [quizSelectMode, setQuizSelectMode] = useState(false);
+  const [selectedTopicsForQuiz, setSelectedTopicsForQuiz] = useState<Array<{ subjectId: string; topicId: string }>>([]);
+
+  const toggleTopicForQuiz = (subjectId: string, topicId: string) => {
+    setSelectedTopicsForQuiz(prev => {
+      const exists = prev.some(t => t.subjectId === subjectId && t.topicId === topicId);
+      if (exists) {
+        return prev.filter(t => !(t.subjectId === subjectId && t.topicId === topicId));
+      }
+      return [...prev, { subjectId, topicId }];
+    });
+  };
+
+  const startMixQuiz = () => {
+    if (selectedTopicsForQuiz.length === 0) return;
+    const topicsParam = selectedTopicsForQuiz.map(t => `${t.subjectId}:${t.topicId}`).join(',');
+    router.push(`/quiz?multi=true&topics=${topicsParam}`);
+  };
+
   useEffect(() => {
     const id = searchParams.get('id');
     if (id && data.subjects.find(s => s.id === id)) {
@@ -207,6 +227,19 @@ function SubjectsContent() {
                   </div>
                   <div className="flex gap-2">
                     <button
+                      onClick={() => {
+                        setQuizSelectMode(!quizSelectMode);
+                        if (quizSelectMode) setSelectedTopicsForQuiz([]);
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                        quizSelectMode
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30'
+                      }`}
+                    >
+                      <Brain size={16} /> {quizSelectMode ? 'Отказ' : 'Mix Quiz'}
+                    </button>
+                    <button
                       onClick={() => setShowAIImport(true)}
                       className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-colors font-mono text-sm"
                     >
@@ -281,17 +314,44 @@ function SubjectsContent() {
                     {filteredTopics.map(topic => {
                       const config = STATUS_CONFIG[topic.status];
                       const hasMaterial = topic.material && topic.material.trim().length > 0;
+                      const isSelectedForQuiz = selectedTopicsForQuiz.some(t => t.topicId === topic.id);
+
                       return (
                         <div
                           key={topic.id}
-                          className="flex items-center gap-2 p-4 rounded-lg border transition-all hover:scale-[1.005]"
+                          className={`flex items-center gap-2 p-4 rounded-lg border transition-all hover:scale-[1.005] ${
+                            isSelectedForQuiz ? 'ring-2 ring-purple-500' : ''
+                          }`}
                           style={{
-                            backgroundColor: config.bg,
-                            borderColor: config.border
+                            backgroundColor: isSelectedForQuiz ? 'rgba(147, 51, 234, 0.15)' : config.bg,
+                            borderColor: isSelectedForQuiz ? 'rgb(147, 51, 234)' : config.border
                           }}
                         >
+                          {/* Checkbox for Mix Quiz selection */}
+                          {quizSelectMode && (
+                            <button
+                              onClick={() => hasMaterial && toggleTopicForQuiz(selectedSubject.id, topic.id)}
+                              disabled={!hasMaterial}
+                              className={`shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                                !hasMaterial
+                                  ? 'border-slate-600 bg-slate-800 cursor-not-allowed opacity-50'
+                                  : isSelectedForQuiz
+                                    ? 'border-purple-500 bg-purple-500 text-white'
+                                    : 'border-slate-500 hover:border-purple-400'
+                              }`}
+                            >
+                              {isSelectedForQuiz && <span className="text-sm">✓</span>}
+                            </button>
+                          )}
+
                           <Link
-                            href={`/subjects/${selectedSubjectId}/topics/${topic.id}`}
+                            href={quizSelectMode ? '#' : `/subjects/${selectedSubjectId}/topics/${topic.id}`}
+                            onClick={(e) => {
+                              if (quizSelectMode) {
+                                e.preventDefault();
+                                if (hasMaterial) toggleTopicForQuiz(selectedSubject.id, topic.id);
+                              }
+                            }}
                             className="flex-1 flex items-center gap-4 text-left"
                           >
                             <span className="text-2xl">{config.emoji}</span>
@@ -311,26 +371,29 @@ function SubjectsContent() {
                                 <span>{config.label}</span>
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
+                                {!hasMaterial && <span className="text-amber-500">Няма материал</span>}
                               </div>
                             </div>
                           </Link>
-                          {/* Quiz Button */}
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              router.push(`/quiz?subject=${selectedSubjectId}&topic=${topic.id}`);
-                            }}
-                            disabled={!hasMaterial}
-                            title={hasMaterial ? "Започни Quiz" : "Добави материал първо"}
-                            className={`p-2.5 rounded-lg transition-all flex items-center gap-1.5 font-mono text-xs ${
-                              hasMaterial
-                                ? 'bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30'
-                                : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'
-                            }`}
-                          >
-                            <Brain size={16} />
-                            Quiz
-                          </button>
+                          {/* Quiz Button - hide in select mode */}
+                          {!quizSelectMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/quiz?subject=${selectedSubjectId}&topic=${topic.id}`);
+                              }}
+                              disabled={!hasMaterial}
+                              title={hasMaterial ? "Започни Quiz" : "Добави материал първо"}
+                              className={`p-2.5 rounded-lg transition-all flex items-center gap-1.5 font-mono text-xs ${
+                                hasMaterial
+                                  ? 'bg-purple-600/20 hover:bg-purple-600/40 text-purple-400 border border-purple-500/30'
+                                  : 'bg-slate-700/30 text-slate-600 cursor-not-allowed'
+                              }`}
+                            >
+                              <Brain size={16} />
+                              Quiz
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -345,6 +408,34 @@ function SubjectsContent() {
           )}
         </div>
       </div>
+
+      {/* Floating bar for selected topics */}
+      {quizSelectMode && selectedTopicsForQuiz.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-slate-900/95 backdrop-blur border border-purple-500/50 rounded-2xl px-6 py-4 shadow-2xl shadow-purple-500/20 flex items-center gap-6">
+            <div>
+              <span className="text-purple-300 font-mono text-lg font-semibold">
+                {selectedTopicsForQuiz.length} {selectedTopicsForQuiz.length === 1 ? 'тема' : 'теми'}
+              </span>
+              <p className="text-xs text-slate-400 font-mono">избрани за Mix Quiz</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setSelectedTopicsForQuiz([])}
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-mono text-sm transition-all"
+              >
+                Изчисти
+              </button>
+              <button
+                onClick={startMixQuiz}
+                className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold rounded-lg font-mono text-sm transition-all flex items-center gap-2"
+              >
+                <Brain size={18} /> Започни Quiz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
       {showImportTopics && selectedSubjectId && <ImportTopicsModal subjectId={selectedSubjectId} onClose={() => setShowImportTopics(false)} />}

@@ -36,6 +36,7 @@ function SubjectsContent() {
   const [showImportTopics, setShowImportTopics] = useState(false);
   const [showAIImport, setShowAIImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<TopicStatus | 'all'>('all');
+  const [sizeFilter, setSizeFilter] = useState<'small' | 'medium' | 'large' | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -199,11 +200,12 @@ function SubjectsContent() {
 
   const filteredTopics = selectedSubject?.topics.filter(topic => {
     const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
+    const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
     const matchesSearch = searchQuery === '' ||
       topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       topic.number.toString().includes(searchQuery) ||
       (topic.cluster && topic.cluster.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesStatus && matchesSearch;
+    return matchesStatus && matchesSize && matchesSearch;
   }) || [];
 
   const handleStartEdit = (subject: Subject) => {
@@ -396,38 +398,80 @@ function SubjectsContent() {
                 </div>
 
                 {/* Filters */}
-                <div className="flex gap-4">
-                  <div className="flex-1 relative">
-                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                    <input
-                      type="text"
-                      placeholder="Търси тема..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm"
-                    />
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => setStatusFilter('all')}
-                      className={"px-3 py-2 rounded-lg font-mono text-sm transition-all " + (statusFilter === 'all' ? "bg-slate-700 text-slate-200" : "text-slate-400 hover:bg-slate-800")}
-                    >
-                      Всички
-                    </button>
-                    {(Object.keys(STATUS_CONFIG) as TopicStatus[]).map(status => (
+                <div className="flex flex-col gap-3">
+                  {/* Search and Status Filter */}
+                  <div className="flex gap-4">
+                    <div className="flex-1 relative">
+                      <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Търси тема..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm"
+                      />
+                    </div>
+                    <div className="flex gap-1">
                       <button
-                        key={status}
-                        onClick={() => setStatusFilter(status)}
-                        className={"px-3 py-2 rounded-lg font-mono text-sm transition-all " + (statusFilter === status ? "bg-slate-700" : "hover:bg-slate-800")}
-                        style={{ color: statusFilter === status ? STATUS_CONFIG[status].text : undefined }}
+                        onClick={() => setStatusFilter('all')}
+                        className={"px-3 py-2 rounded-lg font-mono text-sm transition-all " + (statusFilter === 'all' ? "bg-slate-700 text-slate-200" : "text-slate-400 hover:bg-slate-800")}
                       >
-                        {STATUS_CONFIG[status].emoji}
+                        Всички
                       </button>
-                    ))}
+                      {(Object.keys(STATUS_CONFIG) as TopicStatus[]).map(status => (
+                        <button
+                          key={status}
+                          onClick={() => setStatusFilter(status)}
+                          className={"px-3 py-2 rounded-lg font-mono text-sm transition-all " + (statusFilter === status ? "bg-slate-700" : "hover:bg-slate-800")}
+                          style={{ color: statusFilter === status ? STATUS_CONFIG[status].text : undefined }}
+                        >
+                          {STATUS_CONFIG[status].emoji}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Size Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-mono">Размер:</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setSizeFilter('all')}
+                        className={`px-2.5 py-1 rounded text-xs font-mono transition-all ${
+                          sizeFilter === 'all' ? 'bg-slate-700 text-slate-200' : 'text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        Всички
+                      </button>
+                      {(['small', 'medium', 'large'] as const).map(size => (
+                        <button
+                          key={size}
+                          onClick={() => setSizeFilter(size)}
+                          className={`px-2.5 py-1 rounded text-xs font-mono border transition-all ${
+                            sizeFilter === size
+                              ? 'border-current font-semibold'
+                              : 'border-transparent opacity-60 hover:opacity-100'
+                          }`}
+                          style={{ color: TOPIC_SIZE_CONFIG[size].color }}
+                          title={`${TOPIC_SIZE_CONFIG[size].label} (~${TOPIC_SIZE_CONFIG[size].minutes} мин)`}
+                        >
+                          {TOPIC_SIZE_CONFIG[size].short}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Size stats */}
+                    {selectedSubject && (
+                      <span className="text-[10px] text-slate-600 font-mono ml-2">
+                        {selectedSubject.topics.filter(t => t.size === 'small').length}S /
+                        {selectedSubject.topics.filter(t => t.size === 'medium').length}M /
+                        {selectedSubject.topics.filter(t => t.size === 'large').length}L /
+                        {selectedSubject.topics.filter(t => !t.size).length}?
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                {/* Clusters Overview - show clusters with 3+ topics */}
+                {/* Clusters Overview */}
                 {(() => {
                   const clusters = new Map<string, number>();
                   selectedSubject.topics.forEach(t => {
@@ -435,15 +479,22 @@ function SubjectsContent() {
                       clusters.set(t.cluster, (clusters.get(t.cluster) || 0) + 1);
                     }
                   });
-                  // Only show clusters with 3+ topics
+
+                  // Significant clusters (3+ topics)
                   const significantClusters = Array.from(clusters.entries())
                     .filter(([, count]) => count >= 3)
-                    .sort((a, b) => b[1] - a[1]); // Sort by count descending
+                    .sort((a, b) => b[1] - a[1]);
 
-                  if (significantClusters.length === 0) return null;
+                  // Small clusters (< 3 topics) grouped as "Други"
+                  const smallClusters = Array.from(clusters.entries())
+                    .filter(([, count]) => count < 3);
+                  const othersCount = smallClusters.reduce((sum, [, count]) => sum + count, 0);
+
+                  if (significantClusters.length === 0 && othersCount === 0) return null;
+
                   return (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <span className="text-xs text-slate-500 font-mono self-center mr-1">Клъстери:</span>
+                    <div className="mt-4 flex flex-wrap gap-2 items-center">
+                      <span className="text-xs text-slate-500 font-mono mr-1">Клъстери:</span>
                       {significantClusters.map(([name, count]) => (
                         <button
                           key={name}
@@ -458,6 +509,15 @@ function SubjectsContent() {
                           {name} ({count})
                         </button>
                       ))}
+                      {/* "Други" for small clusters */}
+                      {othersCount > 0 && (
+                        <span
+                          className="px-2 py-1 text-xs font-mono bg-slate-700/50 text-slate-400 border border-slate-600/30 rounded-lg"
+                          title={`Малки клъстери: ${smallClusters.map(([n, c]) => `${n} (${c})`).join(', ')}`}
+                        >
+                          Други ({othersCount})
+                        </span>
+                      )}
                       {searchQuery && (
                         <button
                           onClick={() => setSearchQuery('')}

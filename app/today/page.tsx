@@ -230,7 +230,7 @@ export default function TodayPage() {
                             return (
                               <div
                                 key={topic.id}
-                                className={`flex items-center gap-2 p-2 rounded-lg transition-all ${
+                                className={`flex items-center gap-2 p-2 rounded-lg transition-all overflow-hidden ${
                                   isTopicDone ? 'bg-green-500/10' : 'hover:bg-slate-800/50'
                                 }`}
                               >
@@ -249,17 +249,17 @@ export default function TodayPage() {
                                 </button>
                                 <Link
                                   href={subject ? `/subjects/${subject.id}/topics/${topic.id}` : '#'}
-                                  className={`flex-1 min-w-0 text-xs font-mono ${
+                                  className={`flex-1 min-w-0 overflow-hidden text-xs font-mono ${
                                     isTopicDone ? 'line-through text-slate-500' : 'text-slate-300 hover:text-white'
                                   }`}
                                   title={`#${topic.number} ${topic.name}`}
                                 >
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
                                     <span
                                       className="shrink-0 w-2 h-2 rounded-full"
                                       style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
                                     />
-                                    <span className="truncate">
+                                    <span className="truncate block">
                                       #{topic.number} {topic.name}
                                     </span>
                                   </div>

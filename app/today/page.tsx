@@ -57,8 +57,8 @@ export default function TodayPage() {
   );
 
   const dailyPlan = useMemo(
-    () => generateDailyPlan(data.subjects, data.schedule, 1),
-    [data.subjects, data.schedule]
+    () => generateDailyPlan(data.subjects, data.schedule, data.dailyStatus),
+    [data.subjects, data.schedule, data.dailyStatus]
   );
 
   // Calculate study streak

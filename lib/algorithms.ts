@@ -557,19 +557,25 @@ export function calculatePredictedGrade(
 export function generateDailyPlan(
   subjects: Subject[],
   schedule: ScheduleClass[],
-  effectiveHours: number
+  dailyStatus: DailyStatus
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
-  const totalMinutes = effectiveHours * 60;
-  let remainingMinutes = totalMinutes;
+
+  // Get topic-based workload from calculateDailyTopics
+  const workload = calculateDailyTopics(subjects, dailyStatus);
+  let remainingTopics = workload.total;
+
+  if (remainingTopics === 0) return tasks;
 
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDay = (tomorrow.getDay() + 6) % 7; // Convert to Mon=0
 
-  // 1. CRITICAL: Exercises tomorrow (40% of time)
-  const criticalMinutes = totalMinutes * 0.4;
+  // Create a map of subject workload for reference
+  const subjectWorkload = new Map(workload.bySubject.map(s => [s.subjectId, s]));
+
+  // 1. CRITICAL: Exercises tomorrow - take topics from that subject's workload
   const tomorrowExercises = schedule.filter(
     c => c.day === tomorrowDay && CLASS_TYPES[c.type].prepRequired
   );
@@ -578,14 +584,16 @@ export function generateDailyPlan(
     const subject = subjects.find(s => s.id === exercise.subjectId);
     if (!subject || subject.topics.length === 0) continue;
 
+    const subjectWork = subjectWorkload.get(subject.id);
+    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, remainingTopics) : Math.min(5, remainingTopics);
+
     // Sort by weighted priority (lower = needs more attention)
     const weakTopics = subject.topics
       .filter(t => t.status !== 'green')
       .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
-      .slice(0, 5);
+      .slice(0, topicsToTake);
 
     if (weakTopics.length > 0) {
-      const taskMinutes = Math.min(criticalMinutes / tomorrowExercises.length, remainingMinutes);
       tasks.push({
         id: generateId(),
         subjectId: subject.id,
@@ -595,24 +603,24 @@ export function generateDailyPlan(
         typeLabel: `${CLASS_TYPES[exercise.type].icon} ${CLASS_TYPES[exercise.type].label} утре`,
         description: `Подготовка за ${CLASS_TYPES[exercise.type].label.toLowerCase()}`,
         topics: weakTopics,
-        estimatedMinutes: Math.round(taskMinutes),
+        estimatedMinutes: weakTopics.length * 20, // ~20 min per topic
         completed: false
       });
-      remainingMinutes -= taskMinutes;
+      remainingTopics -= weakTopics.length;
     }
   }
 
-  // 2. HIGH: Exam in 7 days (50% of remaining)
-  const examSubjects = subjects
-    .filter(s => {
-      const days = getDaysUntil(s.examDate);
-      return days >= 0 && days <= 7;
-    })
-    .sort((a, b) => getDaysUntil(a.examDate) - getDaysUntil(b.examDate));
+  // 2. HIGH: Subjects with exams - use their calculated daily workload
+  for (const subjectWork of workload.bySubject) {
+    if (remainingTopics <= 0) break;
 
-  const highMinutes = remainingMinutes * 0.5;
-  for (const subject of examSubjects) {
-    if (remainingMinutes <= 0) break;
+    const subject = subjects.find(s => s.id === subjectWork.subjectId);
+    if (!subject) continue;
+
+    // Skip if already added as critical
+    if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
+
+    const topicsToTake = Math.min(subjectWork.topics, remainingTopics);
 
     // Check exam format for special recommendations
     const examFormat = parseExamFormat(subject.examFormat);
@@ -622,12 +630,9 @@ export function generateDailyPlan(
     const weakTopics = subject.topics
       .filter(t => t.status !== 'green')
       .sort((a, b) => getTopicPriority(a) - getTopicPriority(b))
-      .slice(0, 8);
+      .slice(0, topicsToTake);
 
     if (weakTopics.length > 0) {
-      const taskMinutes = Math.min(highMinutes / examSubjects.length, remainingMinutes);
-      const daysLeft = getDaysUntil(subject.examDate);
-
       // Format-aware description
       let description = 'Интензивна подготовка за изпит';
       if (formatGaps.caseWeakness && examFormat?.cases) {
@@ -638,74 +643,80 @@ export function generateDailyPlan(
         description = `MCQ практика (${examFormat.mcq} на изпита) - покрий повече теми`;
       }
 
+      const taskType = subjectWork.urgency === 'critical' ? 'critical' :
+                       subjectWork.urgency === 'high' ? 'high' : 'medium';
+
       tasks.push({
         id: generateId(),
         subjectId: subject.id,
         subjectName: subject.name,
         subjectColor: subject.color,
-        type: 'high',
-        typeLabel: `📝 Изпит след ${daysLeft} ${daysLeft === 1 ? 'ден' : 'дни'}`,
+        type: taskType,
+        typeLabel: `📝 Изпит след ${subjectWork.daysLeft} ${subjectWork.daysLeft === 1 ? 'ден' : 'дни'}`,
         description,
         topics: weakTopics,
-        estimatedMinutes: Math.round(taskMinutes),
+        estimatedMinutes: weakTopics.length * 20,
         completed: false
       });
-      remainingMinutes -= taskMinutes;
+      remainingTopics -= weakTopics.length;
     }
   }
 
-  // 3. MEDIUM: Decay warning (30% of remaining)
-  const mediumMinutes = remainingMinutes * 0.3;
-  for (const subject of subjects) {
-    if (remainingMinutes <= 0) break;
+  // 3. MEDIUM: Decay warning - only if we have remaining capacity
+  if (remainingTopics > 0) {
+    for (const subject of subjects) {
+      if (remainingTopics <= 0) break;
 
-    const decayingTopics = subject.topics.filter(t => {
-      const days = getDaysSince(t.lastReview);
-      return days >= 7 && t.status !== 'gray';
-    });
-
-    if (decayingTopics.length > 0) {
-      const taskMinutes = Math.min(mediumMinutes / 2, remainingMinutes);
-      tasks.push({
-        id: generateId(),
-        subjectId: subject.id,
-        subjectName: subject.name,
-        subjectColor: subject.color,
-        type: 'medium',
-        typeLabel: '⚠️ Риск от забравяне',
-        description: 'Преговор на теми без review 7+ дни',
-        topics: decayingTopics.slice(0, 5),
-        estimatedMinutes: Math.round(taskMinutes),
-        completed: false
+      const decayingTopics = subject.topics.filter(t => {
+        const days = getDaysSince(t.lastReview);
+        return days >= 7 && t.status !== 'gray';
       });
-      remainingMinutes -= taskMinutes;
-    }
-  }
 
-  // 4. NORMAL: New material (rest)
-  for (const subject of subjects) {
-    if (remainingMinutes <= 15) break;
-
-    const newTopics = subject.topics.filter(t => t.status === 'gray');
-    const daysUntilExam = getDaysUntil(subject.examDate);
-
-    if (newTopics.length > 0 && daysUntilExam !== Infinity) {
-      const priority = newTopics.length / Math.max(1, daysUntilExam);
-      if (priority > 0.5) {
-        const taskMinutes = Math.min(remainingMinutes / 2, remainingMinutes);
+      if (decayingTopics.length > 0) {
+        const topicsToTake = Math.min(Math.ceil(remainingTopics * 0.3), decayingTopics.length, 5);
         tasks.push({
           id: generateId(),
           subjectId: subject.id,
           subjectName: subject.name,
           subjectColor: subject.color,
-          type: 'normal',
-          typeLabel: '📚 Нов материал',
-          description: 'Започни нови теми',
-          topics: newTopics.slice(0, 3),
-          estimatedMinutes: Math.round(taskMinutes),
+          type: 'medium',
+          typeLabel: '⚠️ Риск от забравяне',
+          description: 'Преговор на теми без review 7+ дни',
+          topics: decayingTopics.slice(0, topicsToTake),
+          estimatedMinutes: topicsToTake * 20,
           completed: false
         });
-        remainingMinutes -= taskMinutes;
+        remainingTopics -= topicsToTake;
+      }
+    }
+  }
+
+  // 4. NORMAL: New material - only if we have remaining capacity
+  if (remainingTopics > 0) {
+    for (const subject of subjects) {
+      if (remainingTopics <= 0) break;
+
+      const newTopics = subject.topics.filter(t => t.status === 'gray');
+      const daysUntilExam = getDaysUntil(subject.examDate);
+
+      if (newTopics.length > 0 && daysUntilExam !== Infinity) {
+        const priority = newTopics.length / Math.max(1, daysUntilExam);
+        if (priority > 0.5) {
+          const topicsToTake = Math.min(remainingTopics, 3);
+          tasks.push({
+            id: generateId(),
+            subjectId: subject.id,
+            subjectName: subject.name,
+            subjectColor: subject.color,
+            type: 'normal',
+            typeLabel: '📚 Нов материал',
+            description: 'Започни нови теми',
+            topics: newTopics.slice(0, topicsToTake),
+            estimatedMinutes: topicsToTake * 20,
+            completed: false
+          });
+          remainingTopics -= topicsToTake;
+        }
       }
     }
   }

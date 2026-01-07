@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Star, TrendingUp } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, calculateDailyTopics } from '@/lib/algorithms';
 import { getLevelInfo, getXpForNextLevel, getComboMultiplier, ACHIEVEMENT_DEFINITIONS } from '@/lib/gamification';
@@ -11,11 +11,17 @@ import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import Link from 'next/link';
 
 export default function TodayPage() {
-  const { data, isLoading, newAchievements, clearNewAchievements } = useApp();
+  const { data, isLoading, newAchievements, clearNewAchievements, incrementApiCalls } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
   const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
   const [showAchievementPopup, setShowAchievementPopup] = useState(false);
+
+  // AI Advice state
+  const [aiAdvice, setAiAdvice] = useState<string | null>(null);
+  const [weeklyReview, setWeeklyReview] = useState<string | null>(null);
+  const [loadingAdvice, setLoadingAdvice] = useState(false);
+  const [loadingWeekly, setLoadingWeekly] = useState(false);
 
   // Check which topics have been reviewed today
   const today = new Date().toISOString().split('T')[0];
@@ -86,6 +92,49 @@ export default function TodayPage() {
   const xpProgress = getXpForNextLevel(progress?.xp || 0);
   const comboMultiplier = getComboMultiplier(progress?.combo?.count || 0);
   const recentAchievements = (progress?.achievements || []).slice(-3).reverse();
+
+  // Fetch AI advice
+  const fetchAiAdvice = async (type: 'daily' | 'weekly') => {
+    if (type === 'daily') {
+      setLoadingAdvice(true);
+    } else {
+      setLoadingWeekly(true);
+    }
+
+    try {
+      const response = await fetch('/api/ai-advice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjects: data.subjects,
+          userProgress: data.userProgress,
+          timerSessions: data.timerSessions,
+          dailyStatus: data.dailyStatus,
+          type
+        })
+      });
+
+      const result = await response.json();
+      if (result.advice) {
+        if (type === 'daily') {
+          setAiAdvice(result.advice);
+        } else {
+          setWeeklyReview(result.advice);
+        }
+        if (result.cost) {
+          incrementApiCalls(result.cost);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI advice:', error);
+    } finally {
+      if (type === 'daily') {
+        setLoadingAdvice(false);
+      } else {
+        setLoadingWeekly(false);
+      }
+    }
+  };
 
   if (isLoading) {
     return (
@@ -247,6 +296,81 @@ export default function TodayPage() {
             })}
           </div>
         )}
+      </div>
+
+      {/* AI Advice & Weekly Review */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* AI Daily Advice */}
+        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2">
+              <Bot size={16} className="text-cyan-400" />
+              AI Съвет
+            </h3>
+            <button
+              onClick={() => fetchAiAdvice('daily')}
+              disabled={loadingAdvice}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 text-white text-xs rounded-lg transition-colors font-mono"
+            >
+              {loadingAdvice ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Мисля...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={12} />
+                  Генерирай
+                </>
+              )}
+            </button>
+          </div>
+          {aiAdvice ? (
+            <div className="text-sm text-slate-300 font-mono whitespace-pre-wrap bg-slate-800/50 rounded-lg p-3 max-h-48 overflow-y-auto">
+              {aiAdvice}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500 font-mono text-center py-4">
+              Натисни "Генерирай" за персонализиран AI съвет за днес
+            </p>
+          )}
+        </div>
+
+        {/* Weekly Review */}
+        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2">
+              <Calendar size={16} className="text-purple-400" />
+              Седмичен Преглед
+            </h3>
+            <button
+              onClick={() => fetchAiAdvice('weekly')}
+              disabled={loadingWeekly}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:bg-slate-700 text-white text-xs rounded-lg transition-colors font-mono"
+            >
+              {loadingWeekly ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Анализирам...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={12} />
+                  Генерирай
+                </>
+              )}
+            </button>
+          </div>
+          {weeklyReview ? (
+            <div className="text-sm text-slate-300 font-mono whitespace-pre-wrap bg-slate-800/50 rounded-lg p-3 max-h-48 overflow-y-auto">
+              {weeklyReview}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500 font-mono text-center py-4">
+              Натисни "Генерирай" за AI преглед на седмицата
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Recent Achievements */}

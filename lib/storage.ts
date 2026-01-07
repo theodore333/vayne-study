@@ -79,6 +79,35 @@ export function loadData(): AppData {
     if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     if (!data.userProgress) data.userProgress = defaultUserProgress;
+
+    // Migrate: Calculate stats from existing data
+    if (data.userProgress && data.subjects) {
+      let topicsCompleted = 0;
+      let greenTopics = 0;
+      let quizzesTaken = 0;
+
+      data.subjects.forEach((subject: any) => {
+        subject.topics.forEach((topic: any) => {
+          if (topic.status !== 'gray') topicsCompleted++;
+          if (topic.status === 'green') greenTopics++;
+          quizzesTaken += topic.quizCount || 0;
+        });
+      });
+
+      // Only update if current stats are lower (don't overwrite progress)
+      if (!data.userProgress.stats) {
+        data.userProgress.stats = {
+          topicsCompleted: 0,
+          quizzesTaken: 0,
+          perfectQuizzes: 0,
+          greenTopics: 0,
+          longestStreak: 0
+        };
+      }
+      data.userProgress.stats.topicsCompleted = Math.max(data.userProgress.stats.topicsCompleted || 0, topicsCompleted);
+      data.userProgress.stats.greenTopics = Math.max(data.userProgress.stats.greenTopics || 0, greenTopics);
+      data.userProgress.stats.quizzesTaken = Math.max(data.userProgress.stats.quizzesTaken || 0, quizzesTaken);
+    }
     // Remove deprecated focusSession
     delete data.focusSession;
 

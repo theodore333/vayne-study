@@ -264,13 +264,19 @@ function QuizContent() {
   };
 
   const generateQuiz = async () => {
+    // Validate mode is selected
+    if (!mode) {
+      setQuizState(prev => ({ ...prev, error: 'Избери режим на теста.' }));
+      return;
+    }
+
     // Check if we have material (single topic or multi-topic)
     const hasValidMaterial = isMultiMode
       ? multiTopics.length > 0
-      : topic?.material;
+      : (topic?.material && topic.material.trim().length > 0);
 
     if (!hasValidMaterial && mode !== 'free_recall') {
-      setQuizState(prev => ({ ...prev, error: 'Няма добавен материал.' }));
+      setQuizState(prev => ({ ...prev, error: 'Няма добавен материал към темата.' }));
       return;
     }
 
@@ -774,8 +780,8 @@ function QuizContent() {
     );
   }
 
-  // No topic selected - show simple topic selection
-  if (!subject || !topic) {
+  // No topic selected - show simple topic selection (skip if multi-topic mode or showing preview)
+  if ((!subject || !topic) && !isMultiMode && !showPreview) {
     return (
       <div className="min-h-screen p-6 space-y-6">
         <div>
@@ -1130,7 +1136,7 @@ function QuizContent() {
           <div className="flex items-center gap-3 mb-6">
             <FileText size={24} className="text-emerald-400" />
             <div>
-              <h2 className="text-lg font-semibold text-slate-100 font-mono">Free Recall: {topic.name}</h2>
+              <h2 className="text-lg font-semibold text-slate-100 font-mono">Free Recall: {topic?.name}</h2>
               <p className="text-sm text-slate-400 font-mono">Напиши всичко, което знаеш</p>
             </div>
           </div>
@@ -1341,8 +1347,8 @@ function QuizContent() {
           {/* Start Button */}
           <button
             onClick={generateQuiz}
-            disabled={quizState.isGenerating}
-            className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all ${
+            disabled={quizState.isGenerating || !mode}
+            className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'gap_analysis'
                 ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
                 : mode === 'mid_order'
@@ -1354,6 +1360,8 @@ function QuizContent() {
           >
             {quizState.isGenerating ? (
               <><RefreshCw size={20} className="animate-spin" /> Генериране...</>
+            ) : !mode ? (
+              <>Избери режим първо</>
             ) : (
               <><Play size={20} /> Старт Quiz ({previewQuestionCount} въпроса)</>
             )}
@@ -1374,8 +1382,8 @@ function QuizContent() {
         <div className="flex items-center gap-3 mb-6">
           <Brain size={24} className="text-pink-400" />
           <div>
-            <h2 className="text-lg font-semibold text-slate-100 font-mono">{topic.name}</h2>
-            <p className="text-sm font-mono" style={{ color: subject.color }}>{subject.name}</p>
+            <h2 className="text-lg font-semibold text-slate-100 font-mono">{topic?.name}</h2>
+            <p className="text-sm font-mono" style={{ color: subject?.color }}>{subject?.name}</p>
           </div>
         </div>
 
@@ -1528,7 +1536,7 @@ function QuizContent() {
           )}
 
           {/* Match Exam Format Checkbox */}
-          {subject.examFormat && (
+          {subject?.examFormat && (
             <label className="flex items-center gap-3 mt-4 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-colors">
               <input
                 type="checkbox"
@@ -1538,7 +1546,7 @@ function QuizContent() {
               />
               <div>
                 <span className="text-sm text-slate-300 font-mono">Match Exam Format</span>
-                <p className="text-xs text-slate-500 font-mono">{subject.examFormat}</p>
+                <p className="text-xs text-slate-500 font-mono">{subject?.examFormat}</p>
               </div>
             </label>
           )}
@@ -1594,7 +1602,7 @@ function QuizContent() {
         {/* Start Button */}
         <button
           onClick={mode === 'free_recall' ? () => {} : openPreview}
-          disabled={quizState.isGenerating || (!topic.material && mode !== 'free_recall') || !mode}
+          disabled={quizState.isGenerating || (!topic?.material && mode !== 'free_recall') || !mode}
           className={`w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 ${
             mode === 'free_recall'
               ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'

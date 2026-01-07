@@ -1185,8 +1185,8 @@ function QuizContent() {
     );
   }
 
-  // Preview/Edit Screen
-  if (showPreview && !quizState.isGenerating && quizState.questions.length === 0) {
+  // Preview/Edit Screen (also shows during generation)
+  if (showPreview && quizState.questions.length === 0) {
     const getModeLabel = () => {
       switch (mode) {
         case 'assessment': return 'Assess My Level';

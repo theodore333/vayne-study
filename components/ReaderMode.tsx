@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check } from 'lucide-react';
+import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -101,6 +101,7 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
   const [showSidebar, setShowSidebar] = useState(true);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
+  const [loadingTipId, setLoadingTipId] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -205,6 +206,47 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
       updateHighlightNote(editingNoteId, noteText);
       setEditingNoteId(null);
       setNoteText('');
+    }
+  };
+
+  // Fetch encoding tip from AI
+  const fetchEncodingTip = async (hl: TextHighlight) => {
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      alert('Добави API ключ в Settings');
+      return;
+    }
+
+    setLoadingTipId(hl.id);
+
+    try {
+      const response = await fetch('/api/encoding-tip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: hl.text,
+          context: topic.name,
+          apiKey
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Грешка');
+      }
+
+      // Save the tip to the highlight
+      const updatedHighlights = highlights.map(h =>
+        h.id === hl.id ? { ...h, encodingTip: data.tip } : h
+      );
+      setHighlights(updatedHighlights);
+      onSaveHighlights(updatedHighlights);
+    } catch (error) {
+      console.error('Error fetching encoding tip:', error);
+      alert(error instanceof Error ? error.message : 'Грешка при генериране');
+    } finally {
+      setLoadingTipId(null);
     }
   };
 
@@ -422,8 +464,9 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                             </button>
                           </div>
 
-                          {/* Note section */}
-                          <div className="px-2 pb-2">
+                          {/* Note & Tip section */}
+                          <div className="px-2 pb-2 space-y-1.5">
+                            {/* Note */}
                             {isEditing ? (
                               <div className="flex gap-1">
                                 <input
@@ -465,7 +508,38 @@ export default function ReaderMode({ topic, onClose, onSaveHighlights }: ReaderM
                               >
                                 <span className="flex items-center gap-1">
                                   <MessageSquare size={10} />
-                                  Добави бележка...
+                                  Бележка...
+                                </span>
+                              </button>
+                            )}
+
+                            {/* Encoding Tip */}
+                            {hl.encodingTip ? (
+                              <div className="px-2 py-1.5 text-xs bg-purple-50 border border-purple-200 rounded">
+                                <div className="flex items-center gap-1 text-purple-600 font-medium mb-1">
+                                  <Lightbulb size={10} />
+                                  Как да запомня:
+                                </div>
+                                <p className="text-purple-800">{hl.encodingTip}</p>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => fetchEncodingTip(hl)}
+                                disabled={loadingTipId === hl.id}
+                                className="w-full text-left px-2 py-1 text-xs text-purple-500 hover:text-purple-700 bg-purple-50/50 hover:bg-purple-50 rounded border border-dashed border-purple-300 transition-colors disabled:opacity-50"
+                              >
+                                <span className="flex items-center gap-1">
+                                  {loadingTipId === hl.id ? (
+                                    <>
+                                      <Loader2 size={10} className="animate-spin" />
+                                      Генерирам...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Lightbulb size={10} />
+                                      AI съвет за запомняне
+                                    </>
+                                  )}
                                 </span>
                               </button>
                             )}

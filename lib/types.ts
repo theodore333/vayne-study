@@ -197,6 +197,7 @@ export interface TextHighlight {
   endOffset: number; // End character offset
   color: 'yellow' | 'green' | 'blue' | 'pink'; // Highlight color
   note?: string; // Optional note attached to this highlight
+  encodingTip?: string; // AI-generated memory tip for this highlight
   createdAt: string;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 
@@ -24,6 +24,21 @@ const defaultUsageData: UsageData = {
   lastReset: getTodayString()
 };
 
+const defaultPomodoroSettings: PomodoroSettings = {
+  workDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  longBreakAfter: 4,
+  autoStartBreaks: false,
+  autoStartWork: false,
+  soundEnabled: true
+};
+
+const defaultStudyGoals: StudyGoals = {
+  dailyMinutes: 240,
+  weeklyMinutes: 1200
+};
+
 const defaultData: AppData = {
   subjects: [],
   schedule: [],
@@ -31,7 +46,9 @@ const defaultData: AppData = {
   timerSessions: [],
   gpaData: defaultGPAData,
   usageData: defaultUsageData,
-  questionBanks: []
+  questionBanks: [],
+  pomodoroSettings: defaultPomodoroSettings,
+  studyGoals: defaultStudyGoals
 };
 
 export function loadData(): AppData {
@@ -48,6 +65,8 @@ export function loadData(): AppData {
     if (!data.gpaData) data.gpaData = defaultGPAData;
     if (!data.usageData) data.usageData = defaultUsageData;
     if (!data.questionBanks) data.questionBanks = [];
+    if (!data.pomodoroSettings) data.pomodoroSettings = defaultPomodoroSettings;
+    if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
     // Remove deprecated focusSession
     delete data.focusSession;
 

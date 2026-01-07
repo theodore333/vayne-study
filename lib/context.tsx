@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, BloomLevel, QuizResult, SubjectType, QuestionBank, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals } from './types';
 import { loadData, saveData } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -55,6 +55,10 @@ interface AppContextType {
   updateQuestionStats: (bankId: string, questionId: string, correct: boolean) => void;
   deleteQuestionBank: (bankId: string) => void;
   deleteQuestion: (bankId: string, questionId: string) => void;
+
+  // Pomodoro & Goals operations
+  updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
+  updateStudyGoals: (goals: Partial<StudyGoals>) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -71,6 +75,21 @@ const defaultUsageData: UsageData = {
   lastReset: getTodayString()
 };
 
+const defaultPomodoroSettings: PomodoroSettings = {
+  workDuration: 25,
+  shortBreakDuration: 5,
+  longBreakDuration: 15,
+  longBreakAfter: 4,
+  autoStartBreaks: false,
+  autoStartWork: false,
+  soundEnabled: true
+};
+
+const defaultStudyGoals: StudyGoals = {
+  dailyMinutes: 240,  // 4 hours
+  weeklyMinutes: 1200 // 20 hours
+};
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<AppData>({
     subjects: [],
@@ -85,7 +104,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     timerSessions: [],
     gpaData: defaultGPAData,
     usageData: defaultUsageData,
-    questionBanks: []
+    questionBanks: [],
+    pomodoroSettings: defaultPomodoroSettings,
+    studyGoals: defaultStudyGoals
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -511,6 +532,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const updatePomodoroSettings = useCallback((settings: Partial<PomodoroSettings>) => {
+    updateData(prev => ({
+      ...prev,
+      pomodoroSettings: { ...(prev.pomodoroSettings || defaultPomodoroSettings), ...settings }
+    }));
+  }, [updateData]);
+
+  const updateStudyGoals = useCallback((goals: Partial<StudyGoals>) => {
+    updateData(prev => ({
+      ...prev,
+      studyGoals: { ...(prev.studyGoals || defaultStudyGoals), ...goals }
+    }));
+  }, [updateData]);
+
   return (
     <AppContext.Provider value={{
       data,
@@ -544,7 +579,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addQuestionsToBank,
       updateQuestionStats,
       deleteQuestionBank,
-      deleteQuestion
+      deleteQuestion,
+      updatePomodoroSettings,
+      updateStudyGoals
     }}>
       {children}
     </AppContext.Provider>

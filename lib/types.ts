@@ -195,6 +195,23 @@ export interface TimerSession {
   endTime: string | null;
   duration: number;
   rating: number | null;
+  pomodorosCompleted?: number; // Number of pomodoro cycles completed in this session
+  sessionType?: 'normal' | 'pomodoro'; // Type of timer session
+}
+
+export interface PomodoroSettings {
+  workDuration: number;      // Work duration in minutes (default 25)
+  shortBreakDuration: number; // Short break in minutes (default 5)
+  longBreakDuration: number;  // Long break in minutes (default 15)
+  longBreakAfter: number;     // Long break after N pomodoros (default 4)
+  autoStartBreaks: boolean;   // Auto-start break timer
+  autoStartWork: boolean;     // Auto-start work after break
+  soundEnabled: boolean;      // Play sound on timer end
+}
+
+export interface StudyGoals {
+  dailyMinutes: number;       // Daily goal in minutes (default 240 = 4 hours)
+  weeklyMinutes: number;      // Weekly goal in minutes (default 1200 = 20 hours)
 }
 
 
@@ -260,6 +277,8 @@ export interface AppData {
   gpaData: GPAData;
   usageData: UsageData;
   questionBanks: QuestionBank[];
+  pomodoroSettings: PomodoroSettings;
+  studyGoals: StudyGoals;
 }
 
 export interface PredictedGrade {

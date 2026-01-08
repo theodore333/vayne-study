@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -11,6 +11,7 @@ import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
 import ImportFileModal from '@/components/modals/ImportFileModal';
 import ConfirmDialog from '@/components/modals/ConfirmDialog';
 import Link from 'next/link';
+import { checkAnkiConnect, exportSubjectToAnki } from '@/lib/anki';
 
 function LoadingFallback() {
   return (
@@ -31,7 +32,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject, batchUpdateTopicRelations, incrementApiCalls, setTopicStatus } = useApp();
+  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -63,17 +64,16 @@ function SubjectsContent() {
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  // Analyze relations state
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [apiKey, setApiKey] = useState<string | null>(null);
+  // Anki export state
+  const [ankiConnected, setAnkiConnected] = useState(false);
+  const [isExportingAnki, setIsExportingAnki] = useState(false);
 
   // Track if initial subject selection has been done
   const initialSelectionDone = useRef(false);
 
-  // Load API key
+  // Check Anki connection
   useEffect(() => {
-    const stored = localStorage.getItem('claude-api-key');
-    setApiKey(stored);
+    checkAnkiConnect().then(setAnkiConnected);
   }, []);
 
   const toggleTopicForQuiz = (subjectId: string, topicId: string) => {
@@ -119,108 +119,34 @@ function SubjectsContent() {
     setBulkEditMode(false);
   };
 
-  // Analyze topic relations with AI
-  const handleAnalyzeRelations = async () => {
-    if (!selectedSubject || !apiKey || selectedSubject.topics.length < 3) return;
+  // Export subject to Anki
+  const handleExportToAnki = async () => {
+    if (!selectedSubject || selectedSubject.topics.length === 0) return;
 
-    setIsAnalyzing(true);
+    // Re-check connection
+    const connected = await checkAnkiConnect();
+    if (!connected) {
+      alert('Anki не е свързан!\n\nУвери се, че:\n1. Anki е отворен\n2. AnkiConnect добавката е инсталирана\n3. AnkiConnect работи на localhost:8765');
+      return;
+    }
+
+    setIsExportingAnki(true);
     try {
-      const response = await fetch('/api/analyze-relations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          topics: selectedSubject.topics.map(t => ({ id: t.id, name: t.name, number: t.number })),
-          subjectName: selectedSubject.name,
-          apiKey
-        })
-      });
+      const result = await exportSubjectToAnki(
+        selectedSubject.name,
+        selectedSubject.topics.map(t => ({ number: t.number, name: t.name }))
+      );
 
-      const result = await response.json();
-      if (!response.ok) {
-        alert(result.error || 'Грешка при анализа');
-        return;
-      }
-
-      // Build updates array mapping topic numbers to IDs
-      const updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }> = [];
-
-      // Apply clusters
-      for (const [clusterName, topicNumbers] of Object.entries(result.clusters)) {
-        for (const num of topicNumbers as number[]) {
-          const topic = selectedSubject.topics.find(t => t.number === num);
-          if (topic) {
-            const existing = updates.find(u => u.topicId === topic.id);
-            if (existing) {
-              existing.cluster = clusterName;
-            } else {
-              updates.push({ topicId: topic.id, cluster: clusterName });
-            }
-          }
-        }
-      }
-
-      // Apply relations
-      for (const rel of result.relations) {
-        const topic = selectedSubject.topics.find(t => t.number === rel.topic);
-        if (topic) {
-          const relatedIds = (rel.related as number[])
-            .map(num => selectedSubject.topics.find(t => t.number === num)?.id)
-            .filter(Boolean) as string[];
-
-          const existing = updates.find(u => u.topicId === topic.id);
-          if (existing) {
-            existing.relatedTopics = relatedIds;
-          } else {
-            updates.push({ topicId: topic.id, relatedTopics: relatedIds });
-          }
-        }
-      }
-
-      // Apply prerequisites
-      for (const prereq of result.prerequisites) {
-        const topic = selectedSubject.topics.find(t => t.number === prereq.topic);
-        if (topic) {
-          const prereqIds = (prereq.requires as number[])
-            .map(num => selectedSubject.topics.find(t => t.number === num)?.id)
-            .filter(Boolean) as string[];
-
-          const existing = updates.find(u => u.topicId === topic.id);
-          if (existing) {
-            existing.prerequisites = prereqIds;
-          } else {
-            updates.push({ topicId: topic.id, prerequisites: prereqIds });
-          }
-        }
-      }
-
-      // Apply all updates
-      console.log('[ANALYZE] Updates to apply:', updates);
-      console.log('[ANALYZE] API result:', result);
-
-      if (updates.length > 0) {
-        batchUpdateTopicRelations(selectedSubject.id, updates);
-        console.log('[ANALYZE] Applied', updates.length, 'updates');
+      if (result.success) {
+        alert(`Успешно експортирани в Anki!\n\nГлавен deck: ${result.parentDeck}\nСъздадени: ${result.createdDecks.length} тестета\n\nСега можеш да добавяш карти директно в Anki.`);
       } else {
-        console.warn('[ANALYZE] No updates to apply!');
+        alert(`Грешка при експорт: ${result.error}\n\nЧастично създадени: ${result.createdDecks.length} тестета`);
       }
-
-      // Track API cost
-      if (result.usage?.cost) {
-        incrementApiCalls(result.usage.cost);
-      }
-
-      // Count topics with clusters
-      const topicsWithClusters = updates.filter(u => u.cluster).length;
-      const topicsWithRelations = updates.filter(u => u.relatedTopics && u.relatedTopics.length > 0).length;
-      const topicsWithPrereqs = updates.filter(u => u.prerequisites && u.prerequisites.length > 0).length;
-
-      alert(`Анализът е готов!\n\nКлъстери: ${Object.keys(result.clusters).length} (${topicsWithClusters} теми)\nВръзки: ${result.relations.length} (${topicsWithRelations} теми)\nPrerequisites: ${result.prerequisites.length} (${topicsWithPrereqs} теми)\n\nОбновени теми: ${updates.length}`);
-
     } catch (error) {
-      console.error('Analysis failed:', error);
-      alert('Грешка при анализа на връзките');
+      console.error('Anki export error:', error);
+      alert('Грешка при експорт към Anki');
     } finally {
-      setIsAnalyzing(false);
+      setIsExportingAnki(false);
     }
   };
 
@@ -517,22 +443,26 @@ function SubjectsContent() {
                     >
                       <Upload size={16} /> Ръчен
                     </button>
-                    {/* Analyze Relations Button */}
+                    {/* Export to Anki Button */}
                     <button
-                      onClick={handleAnalyzeRelations}
-                      disabled={isAnalyzing || !apiKey || selectedSubject.topics.length < 3}
-                      className="flex items-center gap-2 px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 rounded-lg transition-colors font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                      title={!apiKey ? 'Добави API ключ в Settings' : selectedSubject.topics.length < 3 ? 'Нужни са поне 3 теми' : 'Анализирай връзките между темите'}
+                      onClick={handleExportToAnki}
+                      disabled={isExportingAnki || selectedSubject.topics.length === 0}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                        ankiConnected
+                          ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
+                          : 'bg-slate-600/20 hover:bg-slate-600/30 text-slate-400 border border-slate-500/30'
+                      }`}
+                      title={!ankiConnected ? 'Anki не е свързан - отвори Anki и AnkiConnect' : selectedSubject.topics.length === 0 ? 'Няма теми за експорт' : 'Създай deck структура в Anki'}
                     >
-                      {isAnalyzing ? (
+                      {isExportingAnki ? (
                         <>
                           <Loader2 size={16} className="animate-spin" />
-                          Анализирам...
+                          Експорт...
                         </>
                       ) : (
                         <>
-                          <Link2 size={16} />
-                          Връзки
+                          <Download size={16} />
+                          Anki
                         </>
                       )}
                     </button>

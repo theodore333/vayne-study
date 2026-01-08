@@ -194,3 +194,51 @@ export async function getTodayStats(): Promise<{ reviewed: number; minutes: numb
     return { reviewed: 0, minutes: 0 };
   }
 }
+
+// Create a deck (supports nested decks with :: notation)
+export async function createDeck(deckName: string): Promise<number> {
+  return invoke<number>('createDeck', { deck: deckName });
+}
+
+// Export subject with all topics as Anki subdecks
+export interface ExportResult {
+  success: boolean;
+  parentDeck: string;
+  createdDecks: string[];
+  error?: string;
+}
+
+export async function exportSubjectToAnki(
+  subjectName: string,
+  topics: { number: number; name: string }[]
+): Promise<ExportResult> {
+  const createdDecks: string[] = [];
+
+  try {
+    // Create parent deck
+    await createDeck(subjectName);
+    createdDecks.push(subjectName);
+
+    // Create subdeck for each topic
+    for (const topic of topics) {
+      // Format: "Subject::01. Topic Name"
+      const paddedNumber = String(topic.number).padStart(2, '0');
+      const subdeckName = `${subjectName}::${paddedNumber}. ${topic.name}`;
+      await createDeck(subdeckName);
+      createdDecks.push(subdeckName);
+    }
+
+    return {
+      success: true,
+      parentDeck: subjectName,
+      createdDecks
+    };
+  } catch (error) {
+    return {
+      success: false,
+      parentDeck: subjectName,
+      createdDecks,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    };
+  }
+}

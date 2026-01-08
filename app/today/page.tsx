@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar, Layers, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, calculateDailyTopics, detectCrunchMode } from '@/lib/algorithms';
 import { getLevelInfo, getXpForNextLevel, getComboMultiplier, ACHIEVEMENT_DEFINITIONS } from '@/lib/gamification';
@@ -9,6 +9,7 @@ import { LEVEL_THRESHOLDS } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import Link from 'next/link';
+import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
 
 export default function TodayPage() {
   const { data, isLoading, newAchievements, clearNewAchievements, incrementApiCalls } = useApp();
@@ -28,6 +29,33 @@ export default function TodayPage() {
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);
+  }, []);
+
+  // Anki integration
+  const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
+  const [ankiLoading, setAnkiLoading] = useState(false);
+
+  const refreshAnkiStats = async () => {
+    setAnkiLoading(true);
+    try {
+      const connected = await checkAnkiConnect();
+      if (connected) {
+        const stats = await getCollectionStats();
+        setAnkiStats(stats);
+      } else {
+        setAnkiStats(null);
+      }
+    } catch {
+      setAnkiStats(null);
+    }
+    setAnkiLoading(false);
+  };
+
+  useEffect(() => {
+    const ankiEnabled = localStorage.getItem('anki-enabled');
+    if (ankiEnabled === 'true') {
+      refreshAnkiStats();
+    }
   }, []);
 
   // Check which topics have been reviewed today
@@ -133,6 +161,7 @@ export default function TodayPage() {
           timerSessions: data.timerSessions,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
+          ankiStats: ankiStats, // Include Anki data
           type,
           apiKey
         })
@@ -327,6 +356,44 @@ export default function TodayPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Anki Due Cards Widget */}
+      {ankiStats && (
+        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Layers size={24} className="text-blue-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki Flashcards</h3>
+                <p className="text-xs text-slate-400 font-mono">Due за днес</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-blue-400">{ankiStats.dueToday}</div>
+                <div className="text-xs text-slate-500 font-mono">Due</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-cyan-400">{ankiStats.newToday}</div>
+                <div className="text-xs text-slate-500 font-mono">New</div>
+              </div>
+              <button
+                onClick={refreshAnkiStats}
+                disabled={ankiLoading}
+                className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                title="Обнови"
+              >
+                <RefreshCw size={16} className={ankiLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
+            <div className="mt-3 text-xs text-slate-400 font-mono">
+              Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
+            </div>
+          )}
         </div>
       )}
 

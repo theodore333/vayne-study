@@ -52,15 +52,23 @@ interface SubjectSummary {
   touchedTopics: number;
 }
 
+interface AnkiStats {
+  dueToday: number;
+  newToday: number;
+  totalCards: number;
+  totalDecks: number;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, timerSessions, dailyStatus, type, apiKey, studyGoals } = await request.json() as {
+    const { subjects, timerSessions, dailyStatus, type, apiKey, studyGoals, ankiStats } = await request.json() as {
       subjects: RequestSubject[];
       timerSessions: RequestTimerSession[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
       type: 'daily' | 'weekly';
       apiKey: string;
       studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number };
+      ankiStats?: AnkiStats | null;
     };
 
     if (!apiKey) {
@@ -264,6 +272,12 @@ export async function POST(request: NextRequest) {
 ${urgencyBoost ? '- ' + urgencyBoost : ''}
 ${statusNote ? '- ' + statusNote : ''}
 ${isLate ? '- ЗАКЪСНЕНИЕ: ' + currentHour + ':00 е, само ' + todayHours + 'ч от ' + dailyTarget + 'ч!' : ''}
+${ankiStats ? `
+ANKI FLASHCARDS:
+- Due карти: ${ankiStats.dueToday}
+- Нови карти: ${ankiStats.newToday}
+- Общо карти в колекцията: ${ankiStats.totalCards}
+- Очаквано време за Anki: ~${Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин` : ''}
 
 СЕДМИЦА: ${Math.round(weeklyMinutes / 60)}ч
 
@@ -292,6 +306,7 @@ ${mostUrgent.formatStrategy ? '- ' + mostUrgent.formatStrategy : ''}
 - Използвай WEIGHTED workload (units), не брой теми! Жълтите НЕ са като сивите!
 - Кажи колко СИВИ (нови) + колко ОРАНЖЕВИ (с основи, нужна работа) + колко ЖЪЛТИ (преговор) теми да мине днес
 - ОРАНЖЕВИТЕ са приоритет заедно със сивите - те имат само минимални основи!
+${ankiStats && ankiStats.dueToday > 0 ? '- ANKI: Препоръчай да направи Anki reviews ПЪРВО, преди новите теми (due: ' + ankiStats.dueToday + ', ~' + Math.round(ankiStats.dueToday * 0.5) + ' мин)' : ''}
 - Ако има случаен избор на изпита - препоръчай широко покритие на сиви + оранжеви
 - Ако натоварването е нереалистично (>10 units/ден) - предложи да фокусира сиви и оранжеви
 - ${dailyStatus?.sick ? 'БОЛЕН - бъди разбиращ, ' + dailyTarget + 'ч цел' : dailyStatus?.holiday ? 'ПОЧИВКА - ' + dailyTarget + 'ч цел' : 'Бъди строг'}

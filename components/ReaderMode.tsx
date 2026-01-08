@@ -354,22 +354,40 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     return html;
   };
 
-  // Handle escape key
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger shortcuts when typing in inputs
+      const target = e.target as HTMLElement;
+      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
+
       if (e.key === 'Escape') {
-        if (selectionInfo) {
+        if (isEditing) {
+          cancelEditing();
+        } else if (selectionInfo) {
           setSelectionInfo(null);
           window.getSelection()?.removeAllRanges();
         } else {
           onClose();
         }
       }
+
+      // E to edit (when not typing)
+      if (e.key === 'e' && !isTyping && !isEditing) {
+        e.preventDefault();
+        startEditing();
+      }
+
+      // Ctrl+S to save (when editing)
+      if (e.key === 's' && (e.ctrlKey || e.metaKey) && isEditing) {
+        e.preventDefault();
+        saveEditing();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, selectionInfo]);
+  }, [onClose, selectionInfo, isEditing, hasUnsavedChanges]);
 
   const handleContentClick = () => {
     if (selectionInfo && window.getSelection()?.isCollapsed) {

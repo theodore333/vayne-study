@@ -3,7 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProvider } from "@/lib/context";
 import Sidebar from "@/components/Sidebar";
-import Header from "@/components/Header";
+import MainContent from "@/components/MainContent";
 import FloatingTimer from "@/components/FloatingTimer";
 
 const geistMono = Geist_Mono({
@@ -27,12 +27,7 @@ export default function RootLayout({
         <AppProvider>
           <div className="flex min-h-screen">
             <Sidebar />
-            <div className="flex-1 ml-[280px]">
-              <Header />
-              <main className="p-6">
-                {children}
-              </main>
-            </div>
+            <MainContent>{children}</MainContent>
           </div>
           <FloatingTimer />
         </AppProvider>

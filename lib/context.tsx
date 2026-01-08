@@ -74,6 +74,10 @@ interface AppContextType {
   earnXp: (amount: number, reason: string) => void;
   newAchievements: Achievement[];
   clearNewAchievements: () => void;
+
+  // UI State
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -137,6 +141,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
+
+  // Load sidebar state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebar-collapsed');
+    if (saved === 'true') setSidebarCollapsedState(true);
+  }, []);
+
+  const setSidebarCollapsed = useCallback((collapsed: boolean) => {
+    setSidebarCollapsedState(collapsed);
+    localStorage.setItem('sidebar-collapsed', String(collapsed));
+  }, []);
 
   useEffect(() => {
     const initData = async () => {
@@ -891,7 +907,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       stopTimerWithNote,
       earnXp,
       newAchievements,
-      clearNewAchievements
+      clearNewAchievements,
+      sidebarCollapsed,
+      setSidebarCollapsed
     }}>
       {children}
     </AppContext.Provider>

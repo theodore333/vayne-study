@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2 } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -43,6 +43,9 @@ function SubjectsContent() {
   const [editColor, setEditColor] = useState('');
   const [editExamDate, setEditExamDate] = useState('');
   const [editExamFormat, setEditExamFormat] = useState('');
+
+  // Sidebar toggle
+  const [sidebarHidden, setSidebarHidden] = useState(false);
 
   // Multi-topic quiz selection
   const [quizSelectMode, setQuizSelectMode] = useState(false);
@@ -246,9 +249,19 @@ function SubjectsContent() {
 
       <div className="flex gap-6">
         {/* Subject List */}
-        <div className="w-72 flex-shrink-0">
-          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-3">Предмети</h3>
+        {!sidebarHidden ? (
+          <div className="w-72 flex-shrink-0">
+            <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase">Предмети</h3>
+                <button
+                  onClick={() => setSidebarHidden(true)}
+                  className="p-1 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-colors"
+                  title="Скрий sidebar"
+                >
+                  <PanelLeftClose size={16} />
+                </button>
+              </div>
             {data.subjects.length === 0 ? (
               <p className="text-sm text-slate-500 font-mono">Няма предмети</p>
             ) : (
@@ -339,6 +352,15 @@ function SubjectsContent() {
             </button>
           </div>
         </div>
+        ) : (
+          <button
+            onClick={() => setSidebarHidden(false)}
+            className="flex-shrink-0 p-2 bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors self-start"
+            title="Покажи списък с предмети"
+          >
+            <PanelLeft size={20} />
+          </button>
+        )}
 
         {/* Topic Browser */}
         <div className="flex-1">
@@ -734,7 +756,7 @@ function SubjectsContent() {
       )}
 
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
-      {showImportTopics && selectedSubjectId && <ImportTopicsModal subjectId={selectedSubjectId} onClose={() => setShowImportTopics(false)} />}
+      {showImportTopics && selectedSubjectId && <ImportTopicsModal subjectId={selectedSubjectId} subjectName={selectedSubject?.name} onClose={() => setShowImportTopics(false)} />}
       {showAIImport && selectedSubjectId && selectedSubject && (
         <ImportFileModal
           subjectId={selectedSubjectId}

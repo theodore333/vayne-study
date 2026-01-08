@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -34,21 +34,23 @@ const NAV_ITEMS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { data, isLoading } = useApp();
+  const { data, isLoading, sidebarCollapsed, setSidebarCollapsed } = useApp();
 
   if (isLoading) {
     return (
-      <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col">
+      <aside className={`fixed left-0 top-0 h-screen ${sidebarCollapsed ? 'w-[60px]' : 'w-[280px]'} bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col transition-all duration-200`}>
         <div className="p-6 border-b border-[#1e293b]">
           <div className="flex items-center gap-3">
             <span className="text-2xl">⚡</span>
-            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              VAYNE
-            </span>
+            {!sidebarCollapsed && (
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+                VAYNE
+              </span>
+            )}
           </div>
         </div>
         <div className="flex-1 p-4 flex items-center justify-center">
-          <div className="animate-pulse text-slate-500">Зареждане...</div>
+          <div className="animate-pulse text-slate-500">{sidebarCollapsed ? '...' : 'Зареждане...'}</div>
         </div>
       </aside>
     );
@@ -56,16 +58,97 @@ export default function Sidebar() {
 
   const alerts = getAlerts(data.subjects, data.schedule).slice(0, 2);
 
+  // Collapsed sidebar
+  if (sidebarCollapsed) {
+    return (
+      <aside className="fixed left-0 top-0 h-screen w-[60px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40 transition-all duration-200">
+        {/* Logo */}
+        <div className="p-3 border-b border-[#1e293b] flex flex-col items-center">
+          <Link href="/" className="group">
+            <span className="text-2xl group-hover:animate-pulse">⚡</span>
+          </Link>
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            className="mt-2 p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+            title="Покажи меню"
+          >
+            <PanelLeft size={18} />
+          </button>
+        </div>
+
+        {/* Navigation Icons */}
+        <nav className="p-2 border-b border-[#1e293b]">
+          <ul className="space-y-1">
+            {NAV_ITEMS.map(item => {
+              const Icon = icons[item.icon as keyof typeof icons];
+              const isActive = pathname === item.href;
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className={`flex items-center justify-center p-2.5 rounded-lg transition-all ${
+                      isActive
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                    title={item.label}
+                  >
+                    <Icon size={18} />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        {/* Subject colors */}
+        <div className="flex-1 overflow-y-auto p-2">
+          {data.subjects.map(subject => (
+            <Link
+              key={subject.id}
+              href={`/subjects?id=${subject.id}`}
+              className="block p-2 mb-1 rounded-lg hover:bg-slate-800/50 transition-all"
+              title={subject.name}
+            >
+              <div
+                className="w-6 h-6 rounded-full mx-auto"
+                style={{ backgroundColor: subject.color }}
+              />
+            </Link>
+          ))}
+        </div>
+
+        {/* Alert indicator */}
+        {alerts.length > 0 && (
+          <div className="p-2 border-t border-[#1e293b]">
+            <div className="flex justify-center">
+              <AlertTriangle size={18} className="text-red-400" />
+            </div>
+          </div>
+        )}
+      </aside>
+    );
+  }
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40">
+    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40 transition-all duration-200">
       {/* Logo */}
       <div className="p-6 border-b border-[#1e293b]">
-        <Link href="/" className="flex items-center gap-3 group">
-          <span className="text-2xl group-hover:animate-pulse">⚡</span>
-          <span className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-            VAYNE
-          </span>
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3 group">
+            <span className="text-2xl group-hover:animate-pulse">⚡</span>
+            <span className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+              VAYNE
+            </span>
+          </Link>
+          <button
+            onClick={() => setSidebarCollapsed(true)}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+            title="Скрий меню"
+          >
+            <PanelLeftClose size={18} />
+          </button>
+        </div>
         <p className="text-xs text-slate-500 mt-1 font-mono">Study Command Center</p>
       </div>
 

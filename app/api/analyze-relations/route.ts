@@ -80,33 +80,41 @@ ${topicList}
     const textContent = message.content.find(block => block.type === 'text');
     const responseText = textContent?.text || '{}';
 
-    console.log('[ANALYZE-RELATIONS] Response length:', responseText.length);
+    console.log('[ANALYZE-RELATIONS] Raw response:', responseText.slice(0, 1000));
 
-    // Parse JSON response
+    // Clean and parse JSON response
     let parsed;
     let cleanedResponse = responseText;
 
-    // Remove markdown code blocks if present
-    cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    // Remove markdown code blocks
+    cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '');
+    cleanedResponse = cleanedResponse.replace(/```\s*/g, '');
+
+    // Remove any text before first { and after last }
+    const firstBrace = cleanedResponse.indexOf('{');
+    const lastBrace = cleanedResponse.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleanedResponse = cleanedResponse.slice(firstBrace, lastBrace + 1);
+    }
+
+    // Fix common JSON issues
+    cleanedResponse = cleanedResponse
+      .replace(/,\s*}/g, '}')  // trailing commas in objects
+      .replace(/,\s*]/g, ']')  // trailing commas in arrays
+      .replace(/'/g, '"')       // single quotes to double
+      .trim();
+
+    console.log('[ANALYZE-RELATIONS] Cleaned response:', cleanedResponse.slice(0, 500));
 
     try {
-      // Try direct parse first
       parsed = JSON.parse(cleanedResponse);
-    } catch {
-      // Try to extract JSON from response if wrapped in text
-      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          parsed = JSON.parse(jsonMatch[0]);
-        } catch (e) {
-          console.error('[ANALYZE-RELATIONS] Failed to parse JSON:', cleanedResponse.slice(0, 500));
-          console.error('[ANALYZE-RELATIONS] Parse error:', e);
-          return NextResponse.json({ error: 'Невалиден JSON отговор от AI' }, { status: 500 });
-        }
-      } else {
-        console.error('[ANALYZE-RELATIONS] No JSON found in response:', cleanedResponse.slice(0, 500));
-        return NextResponse.json({ error: 'Не намерих JSON в отговора' }, { status: 500 });
-      }
+    } catch (e) {
+      console.error('[ANALYZE-RELATIONS] Failed to parse JSON:', cleanedResponse);
+      console.error('[ANALYZE-RELATIONS] Parse error:', e);
+      return NextResponse.json({
+        error: 'Невалиден JSON отговор от AI. Пробвай пак.',
+        debug: cleanedResponse.slice(0, 200)
+      }, { status: 500 });
     }
 
     // Validate structure

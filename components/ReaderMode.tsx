@@ -1,7 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2 } from 'lucide-react';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Highlight from '@tiptap/extension-highlight';
+import Placeholder from '@tiptap/extension-placeholder';
+import Typography from '@tiptap/extension-typography';
+import Underline from '@tiptap/extension-underline';
+import {
+  X, Minus, Plus, BookOpen, ChevronUp, ChevronLeft, PanelRightClose, PanelRight,
+  Type, Lightbulb, Loader2, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
+  Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote
+} from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -13,35 +23,169 @@ interface ReaderModeProps {
   onSaveMaterial: (material: string) => void;
 }
 
-type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
+// Convert markdown to HTML for initial load
+function markdownToHtml(markdown: string): string {
+  if (!markdown) return '<p></p>';
 
-const HIGHLIGHT_COLORS: { color: HighlightColor; bg: string; name: string }[] = [
-  { color: 'yellow', bg: '#fef08a', name: 'Жълто' },
-  { color: 'green', bg: '#bbf7d0', name: 'Зелено' },
-  { color: 'blue', bg: '#bfdbfe', name: 'Синьо' },
-  { color: 'pink', bg: '#fbcfe8', name: 'Розово' },
-];
+  let html = markdown
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Headers (must be before other replacements)
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+  // Bold and italic
+  html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+
+  // Strikethrough
+  html = html.replace(/~~(.+?)~~/g, '<s>$1</s>');
+
+  // Blockquotes
+  html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+
+  // Unordered lists
+  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+
+  // Ordered lists
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+  // Wrap consecutive <li> in <ul>
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+
+  // Paragraphs - split by double newlines
+  const blocks = html.split(/\n\n+/);
+  html = blocks.map(block => {
+    block = block.trim();
+    if (!block) return '';
+    if (block.startsWith('<h') || block.startsWith('<ul') || block.startsWith('<ol') || block.startsWith('<blockquote')) {
+      return block;
+    }
+    // Convert single newlines to <br> within paragraphs
+    block = block.replace(/\n/g, '<br>');
+    return `<p>${block}</p>`;
+  }).join('');
+
+  return html || '<p></p>';
+}
+
+// Convert HTML back to markdown for saving
+function htmlToMarkdown(html: string): string {
+  if (!html) return '';
+
+  let md = html;
+
+  // Headers
+  md = md.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n');
+  md = md.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n');
+  md = md.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n');
+
+  // Bold and italic
+  md = md.replace(/<strong><em>(.*?)<\/em><\/strong>/gi, '***$1***');
+  md = md.replace(/<em><strong>(.*?)<\/strong><\/em>/gi, '***$1***');
+  md = md.replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**');
+  md = md.replace(/<b[^>]*>(.*?)<\/b>/gi, '**$1**');
+  md = md.replace(/<em[^>]*>(.*?)<\/em>/gi, '*$1*');
+  md = md.replace(/<i[^>]*>(.*?)<\/i>/gi, '*$1*');
+  md = md.replace(/<u[^>]*>(.*?)<\/u>/gi, '$1'); // No markdown for underline
+  md = md.replace(/<s[^>]*>(.*?)<\/s>/gi, '~~$1~~');
+
+  // Highlights - just keep the text
+  md = md.replace(/<mark[^>]*>(.*?)<\/mark>/gi, '$1');
+
+  // Blockquotes
+  md = md.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '> $1\n\n');
+
+  // Lists
+  md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, content) => {
+    return content.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n') + '\n';
+  });
+  md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, content) => {
+    let i = 1;
+    return content.replace(/<li[^>]*>(.*?)<\/li>/gi, () => `${i++}. $1\n`) + '\n';
+  });
+
+  // Paragraphs and line breaks
+  md = md.replace(/<br\s*\/?>/gi, '\n');
+  md = md.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n');
+  md = md.replace(/<\/p><p[^>]*>/gi, '\n\n');
+
+  // Clean up remaining tags
+  md = md.replace(/<[^>]+>/g, '');
+
+  // Decode entities
+  md = md.replace(/&amp;/g, '&');
+  md = md.replace(/&lt;/g, '<');
+  md = md.replace(/&gt;/g, '>');
+  md = md.replace(/&nbsp;/g, ' ');
+
+  // Clean up extra whitespace
+  md = md.replace(/\n{3,}/g, '\n\n');
+  md = md.trim();
+
+  return md;
+}
 
 export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveEncodingCoach, onSaveMaterial }: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
-  const [highlights, setHighlights] = useState<TextHighlight[]>(topic.highlights || []);
-  const [selectedColor, setSelectedColor] = useState<HighlightColor>('yellow');
-  const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [noteText, setNoteText] = useState('');
-  const [loadingTipId, setLoadingTipId] = useState<string | null>(null);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [encodingCoach, setEncodingCoach] = useState<string | null>(topic.encodingCoach || null);
   const [loadingCoach, setLoadingCoach] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentMaterialRef = useRef(topic.material);
+
+  // Initialize TipTap editor
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
+      Highlight.configure({
+        multicolor: true,
+        HTMLAttributes: {
+          class: 'highlight',
+        },
+      }),
+      Placeholder.configure({
+        placeholder: 'Започни да пишеш...',
+      }),
+      Typography,
+      Underline,
+    ],
+    content: markdownToHtml(topic.material),
+    editorProps: {
+      attributes: {
+        class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',
+      },
+    },
+    onUpdate: ({ editor }) => {
+      setHasUnsavedChanges(true);
+
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+
+      saveTimeoutRef.current = setTimeout(() => {
+        const markdown = htmlToMarkdown(editor.getHTML());
+        onSaveMaterial(markdown);
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+      }, 1000);
+    },
+  });
 
   // Handle scroll progress
   useEffect(() => {
@@ -60,170 +204,48 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Debounced auto-save
-  const saveContent = useCallback(() => {
-    const content = contentRef.current;
-    if (!content) return;
-
-    // Get plain text from contentEditable
-    const newMaterial = content.innerText || '';
-
-    if (newMaterial !== currentMaterialRef.current) {
-      currentMaterialRef.current = newMaterial;
-      onSaveMaterial(newMaterial);
-      setLastSaved(new Date());
-      setHasUnsavedChanges(false);
-    }
-  }, [onSaveMaterial]);
-
-  const debouncedSave = useCallback(() => {
-    setHasUnsavedChanges(true);
-
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(() => {
-      saveContent();
-    }, 1000); // Save after 1 second of no typing
-  }, [saveContent]);
-
-  // Clean up timeout on unmount
+  // Save on unmount
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      // Save any pending changes on unmount
-      saveContent();
-    };
-  }, [saveContent]);
-
-  // Handle input in contentEditable
-  const handleInput = useCallback(() => {
-    debouncedSave();
-  }, [debouncedSave]);
-
-  // Handle text selection for highlights
-  const handleMouseUp = useCallback(() => {
-    const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) {
-      setSelectionInfo(null);
-      return;
-    }
-
-    const text = selection.toString().trim();
-    if (text.length < 3) {
-      setSelectionInfo(null);
-      return;
-    }
-
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-
-    setSelectionInfo({
-      text,
-      x: rect.left + rect.width / 2,
-      y: rect.top - 10
-    });
-  }, []);
-
-  // Add highlight
-  const addHighlight = useCallback((color: HighlightColor) => {
-    if (!selectionInfo) return;
-
-    const content = contentRef.current?.innerText || topic.material;
-    const startOffset = content.indexOf(selectionInfo.text);
-
-    if (startOffset === -1) return;
-
-    const newHighlight: TextHighlight = {
-      id: `hl-${Date.now()}`,
-      text: selectionInfo.text,
-      startOffset,
-      endOffset: startOffset + selectionInfo.text.length,
-      color,
-      createdAt: new Date().toISOString()
-    };
-
-    const updatedHighlights = [...highlights, newHighlight];
-    setHighlights(updatedHighlights);
-    onSaveHighlights(updatedHighlights);
-
-    setSelectionInfo(null);
-    window.getSelection()?.removeAllRanges();
-  }, [selectionInfo, highlights, topic.material, onSaveHighlights]);
-
-  // Remove highlight
-  const removeHighlight = (id: string) => {
-    const updatedHighlights = highlights.filter(h => h.id !== id);
-    setHighlights(updatedHighlights);
-    onSaveHighlights(updatedHighlights);
-  };
-
-  // Update highlight note
-  const updateHighlightNote = (id: string, note: string) => {
-    const updatedHighlights = highlights.map(h =>
-      h.id === id ? { ...h, note: note.trim() || undefined } : h
-    );
-    setHighlights(updatedHighlights);
-    onSaveHighlights(updatedHighlights);
-  };
-
-  // Start editing note
-  const startEditingNote = (hl: TextHighlight) => {
-    setEditingNoteId(hl.id);
-    setNoteText(hl.note || '');
-  };
-
-  // Save note
-  const saveNote = () => {
-    if (editingNoteId) {
-      updateHighlightNote(editingNoteId, noteText);
-      setEditingNoteId(null);
-      setNoteText('');
-    }
-  };
-
-  // Fetch encoding tip from AI
-  const fetchEncodingTip = async (hl: TextHighlight) => {
-    const apiKey = localStorage.getItem('claude-api-key');
-    if (!apiKey) {
-      alert('Добави API ключ в Settings');
-      return;
-    }
-
-    setLoadingTipId(hl.id);
-
-    try {
-      const response = await fetch('/api/encoding-tip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: hl.text,
-          context: topic.name,
-          apiKey
-        })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Грешка');
+      if (editor && hasUnsavedChanges) {
+        const markdown = htmlToMarkdown(editor.getHTML());
+        onSaveMaterial(markdown);
       }
+    };
+  }, [editor, hasUnsavedChanges, onSaveMaterial]);
 
-      const updatedHighlights = highlights.map(h =>
-        h.id === hl.id ? { ...h, encodingTip: data.tip } : h
-      );
-      setHighlights(updatedHighlights);
-      onSaveHighlights(updatedHighlights);
-    } catch (error) {
-      console.error('Error fetching encoding tip:', error);
-      alert(error instanceof Error ? error.message : 'Грешка при генериране');
-    } finally {
-      setLoadingTipId(null);
+  // Force save
+  const forceSave = useCallback(() => {
+    if (editor) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      const markdown = htmlToMarkdown(editor.getHTML());
+      onSaveMaterial(markdown);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
     }
-  };
+  }, [editor, onSaveMaterial]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        forceSave();
+        onClose();
+      }
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        forceSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, forceSave]);
 
   // Fetch encoding coach
   const fetchEncodingCoach = async () => {
@@ -269,70 +291,40 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (selectionInfo) {
-          setSelectionInfo(null);
-          window.getSelection()?.removeAllRanges();
-        } else {
-          // Save before closing
-          saveContent();
-          onClose();
-        }
-      }
+  // Toolbar button component
+  const ToolbarButton = ({ onClick, active, disabled, children, title }: {
+    onClick: () => void;
+    active?: boolean;
+    disabled?: boolean;
+    children: React.ReactNode;
+    title: string;
+  }) => (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`p-2 rounded transition-colors ${
+        active
+          ? 'bg-amber-100 text-amber-700'
+          : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+      } disabled:opacity-30 disabled:cursor-not-allowed`}
+      title={title}
+    >
+      {children}
+    </button>
+  );
 
-      // Ctrl+S to force save
-      if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        saveContent();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, selectionInfo, saveContent]);
-
-  // Handle paste - strip formatting
-  const handlePaste = useCallback((e: React.ClipboardEvent) => {
-    e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
-  }, []);
-
-  // Simple markdown parsing for display
-  const parseMarkdownSimple = (text: string): string => {
-    let html = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-
-    // Headers
-    html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-stone-800 mt-4 mb-2">$1</h3>');
-    html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-stone-800 mt-5 mb-3">$1</h2>');
-    html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-stone-900 mt-6 mb-4">$1</h1>');
-
-    // Bold and italic
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-stone-900">$1</strong>');
-    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-    // Lists
-    html = html.replace(/^[-•] (.+)$/gm, '<li class="ml-4">$1</li>');
-    html = html.replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4">$2</li>');
-
-    // Line breaks to paragraphs
-    html = html.replace(/\n\n/g, '</p><p class="mb-3">');
-    html = '<p class="mb-3">' + html + '</p>';
-    html = html.replace(/<p class="mb-3"><\/p>/g, '');
-
-    return html;
-  };
+  if (!editor) {
+    return (
+      <div className="fixed inset-0 z-50 bg-stone-100 flex items-center justify-center">
+        <Loader2 className="animate-spin text-stone-400" size={32} />
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-100 flex flex-col">
+    <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col">
       {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 h-1 bg-stone-300 z-50">
+      <div className="fixed top-0 left-0 right-0 h-1 bg-stone-200 z-50">
         <div className="h-full bg-amber-500 transition-all duration-150" style={{ width: `${scrollProgress}%` }} />
       </div>
 
@@ -341,7 +333,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => { saveContent(); onClose(); }}
+              onClick={() => { forceSave(); onClose(); }}
               className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors"
             >
               <ChevronLeft size={20} />
@@ -356,11 +348,11 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
           <div className="flex items-center gap-2">
             {/* Save status */}
-            <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400">
+            <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400 mr-2">
               {hasUnsavedChanges ? (
                 <span className="text-amber-600">Записване...</span>
               ) : lastSaved ? (
-                <span>Запазено</span>
+                <span className="text-green-600">Запазено</span>
               ) : null}
             </div>
 
@@ -393,7 +385,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
             </button>
             <button
-              onClick={() => { saveContent(); onClose(); }}
+              onClick={() => { forceSave(); onClose(); }}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
               title="Затвори (Esc)"
             >
@@ -401,264 +393,288 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Main layout */}
-      <div className="flex-1 flex overflow-hidden">
+        {/* Formatting Toolbar */}
+        <div className="px-4 py-2 border-t border-stone-100 flex items-center gap-1 flex-wrap bg-stone-50/50">
+          {/* Undo/Redo */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            title="Отмени (Ctrl+Z)"
+          >
+            <Undo size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+            title="Повтори (Ctrl+Y)"
+          >
+            <Redo size={18} />
+          </ToolbarButton>
 
-        {/* LEFT TOOLBAR */}
-        <aside className="w-16 flex-shrink-0 bg-white border-r border-stone-200 flex flex-col items-center py-4 gap-2">
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
+          {/* Headings */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            active={editor.isActive('heading', { level: 1 })}
+            title="Заглавие 1 (Ctrl+Alt+1)"
+          >
+            <Heading1 size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            active={editor.isActive('heading', { level: 2 })}
+            title="Заглавие 2 (Ctrl+Alt+2)"
+          >
+            <Heading2 size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            active={editor.isActive('heading', { level: 3 })}
+            title="Заглавие 3 (Ctrl+Alt+3)"
+          >
+            <Heading3 size={18} />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
+          {/* Text formatting */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            active={editor.isActive('bold')}
+            title="Удебелен (Ctrl+B)"
+          >
+            <Bold size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            active={editor.isActive('italic')}
+            title="Курсив (Ctrl+I)"
+          >
+            <Italic size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            active={editor.isActive('underline')}
+            title="Подчертан (Ctrl+U)"
+          >
+            <UnderlineIcon size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()}
+            active={editor.isActive('highlight')}
+            title="Маркирай"
+          >
+            <Highlighter size={18} />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
+          {/* Lists */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            active={editor.isActive('bulletList')}
+            title="Списък с точки"
+          >
+            <List size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            active={editor.isActive('orderedList')}
+            title="Номериран списък"
+          >
+            <ListOrdered size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            active={editor.isActive('blockquote')}
+            title="Цитат"
+          >
+            <Quote size={18} />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
           {/* Font size */}
-          <div className="flex flex-col items-center gap-1 pb-3 border-b border-stone-200 w-full">
-            <Type size={16} className="text-stone-400 mb-1" />
-            <button
-              onClick={() => setFontSize(Math.min(28, fontSize + 2))}
-              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
-            >
-              <Plus size={14} />
-            </button>
-            <span className="text-xs text-stone-500 font-mono">{fontSize}</span>
+          <div className="flex items-center gap-1">
+            <Type size={16} className="text-stone-400" />
             <button
               onClick={() => setFontSize(Math.max(14, fontSize - 2))}
-              className="w-10 h-8 flex items-center justify-center text-stone-600 hover:bg-stone-100 rounded transition-colors"
+              className="p-1 text-stone-600 hover:bg-stone-100 rounded"
+              title="По-малък шрифт"
             >
               <Minus size={14} />
             </button>
+            <span className="text-xs text-stone-500 font-mono w-6 text-center">{fontSize}</span>
+            <button
+              onClick={() => setFontSize(Math.min(28, fontSize + 2))}
+              className="p-1 text-stone-600 hover:bg-stone-100 rounded"
+              title="По-голям шрифт"
+            >
+              <Plus size={14} />
+            </button>
           </div>
+        </div>
+      </header>
 
-          {/* Highlight colors */}
-          <div className="flex flex-col items-center gap-2 py-3 border-b border-stone-200 w-full">
-            <Highlighter size={16} className="text-stone-400 mb-1" />
-            {HIGHLIGHT_COLORS.map(({ color, bg }) => (
-              <button
-                key={color}
-                onClick={() => {
-                  setSelectedColor(color);
-                  if (selectionInfo) addHighlight(color);
-                }}
-                style={{ backgroundColor: bg }}
-                className={`w-8 h-8 rounded-lg border-2 transition-all hover:scale-110 ${
-                  selectedColor === color ? 'border-stone-600 ring-2 ring-stone-400' : 'border-stone-300'
-                }`}
-                title={`Маркирай ${color}`}
-              />
-            ))}
-          </div>
-
-          {highlights.length > 0 && (
-            <div className="flex flex-col items-center py-2">
-              <span className="text-xs text-stone-400">{highlights.length}</span>
-              <span className="text-[10px] text-stone-300">маркирани</span>
-            </div>
-          )}
-        </aside>
-
-        {/* CENTER - Editable Content */}
+      {/* Main content */}
+      <div className="flex-1 flex overflow-hidden">
         <div
           ref={containerRef}
-          className="flex-1 overflow-y-auto bg-[#fafaf9]"
+          className="flex-1 overflow-y-auto"
         >
-          <article className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
-            {/* Images */}
-            {topic.materialImages && topic.materialImages.length > 0 && (
-              <div className="mb-8 space-y-4">
+          {/* Images */}
+          {topic.materialImages && topic.materialImages.length > 0 && (
+            <div className="max-w-4xl mx-auto px-8 sm:px-16 pt-8">
+              <div className="space-y-4">
                 {topic.materialImages.map((img, idx) => (
                   <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
                 ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Editable content - Notion style */}
-            <div
-              ref={contentRef}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={handleInput}
-              onMouseUp={handleMouseUp}
-              onPaste={handlePaste}
-              className="min-h-[60vh] outline-none text-stone-800 leading-relaxed
-                focus:outline-none
-                [&:empty]:before:content-['Започни_да_пишеш...'] [&:empty]:before:text-stone-400
-                selection:bg-amber-200"
-              style={{
-                fontSize: `${fontSize}px`,
-                lineHeight: 1.8,
-                whiteSpace: 'pre-wrap'
-              }}
-              dangerouslySetInnerHTML={{ __html: topic.material || '' }}
-            />
-
-            <p className="mt-8 text-xs text-stone-400 text-center">
-              Кликни и пиши директно. Промените се запазват автоматично.
-            </p>
+          {/* Editor */}
+          <article className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
+            <style jsx global>{`
+              .ProseMirror {
+                font-family: 'Georgia', 'Charter', serif;
+                font-size: ${fontSize}px;
+                line-height: 1.8;
+                color: #292524;
+              }
+              .ProseMirror:focus {
+                outline: none;
+              }
+              .ProseMirror p {
+                margin-bottom: 1em;
+              }
+              .ProseMirror h1 {
+                font-size: 1.875em;
+                font-weight: 700;
+                margin-top: 1.5em;
+                margin-bottom: 0.5em;
+                color: #1c1917;
+              }
+              .ProseMirror h2 {
+                font-size: 1.5em;
+                font-weight: 700;
+                margin-top: 1.25em;
+                margin-bottom: 0.5em;
+                color: #1c1917;
+              }
+              .ProseMirror h3 {
+                font-size: 1.25em;
+                font-weight: 600;
+                margin-top: 1em;
+                margin-bottom: 0.5em;
+                color: #1c1917;
+              }
+              .ProseMirror strong {
+                font-weight: 700;
+                color: #1c1917;
+              }
+              .ProseMirror em {
+                font-style: italic;
+              }
+              .ProseMirror u {
+                text-decoration: underline;
+              }
+              .ProseMirror mark {
+                background-color: #fef08a;
+                padding: 0.125em 0.25em;
+                border-radius: 0.25em;
+              }
+              .ProseMirror ul {
+                list-style-type: disc;
+                padding-left: 1.5em;
+                margin-bottom: 1em;
+              }
+              .ProseMirror ol {
+                list-style-type: decimal;
+                padding-left: 1.5em;
+                margin-bottom: 1em;
+              }
+              .ProseMirror li {
+                margin-bottom: 0.25em;
+              }
+              .ProseMirror blockquote {
+                border-left: 4px solid #d6d3d1;
+                padding-left: 1em;
+                margin-left: 0;
+                margin-right: 0;
+                color: #57534e;
+                font-style: italic;
+              }
+              .ProseMirror p.is-editor-empty:first-child::before {
+                content: attr(data-placeholder);
+                float: left;
+                color: #a8a29e;
+                pointer-events: none;
+                height: 0;
+              }
+              .ProseMirror ::selection {
+                background-color: #fde68a;
+              }
+            `}</style>
+            <EditorContent editor={editor} />
           </article>
         </div>
 
-        {/* RIGHT SIDEBAR */}
+        {/* Right Sidebar */}
         {showSidebar && (
-          <aside className="w-80 flex-shrink-0 bg-white border-l border-stone-200 flex flex-col overflow-hidden">
-            <div className="border-b border-stone-200">
-              <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
-                <h3 className="text-sm font-medium text-stone-700 flex items-center gap-2">
-                  <Highlighter size={14} />
-                  Маркирани ({highlights.length})
-                </h3>
+          <aside className="w-72 flex-shrink-0 bg-white border-l border-stone-200 p-4 overflow-y-auto">
+            <h3 className="text-sm font-medium text-stone-700 mb-3">Клавишни комбинации</h3>
+            <div className="space-y-2 text-xs text-stone-500">
+              <div className="flex justify-between">
+                <span>Удебелен</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+B</kbd>
               </div>
-              <div className="max-h-[40vh] overflow-y-auto p-3">
-                {highlights.length === 0 ? (
-                  <p className="text-sm text-stone-400 text-center py-4">
-                    Селектирай текст и избери цвят отляво
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {highlights.map(hl => {
-                      const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
-                      const bgColor = colorConfig?.bg || '#fef08a';
-                      const isEditingNote = editingNoteId === hl.id;
-
-                      return (
-                        <div
-                          key={hl.id}
-                          className="rounded-lg border border-stone-200 hover:border-stone-300 transition-colors overflow-hidden"
-                          style={{ backgroundColor: bgColor + '20' }}
-                        >
-                          <div className="flex items-start gap-2 p-2">
-                            <div
-                              className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                              style={{ backgroundColor: bgColor }}
-                            />
-                            <p className="text-sm text-stone-700 line-clamp-2 flex-1">"{hl.text}"</p>
-                            <button
-                              onClick={() => removeHighlight(hl.id)}
-                              className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-red-100 text-stone-400 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-
-                          <div className="px-2 pb-2 space-y-1.5">
-                            {isEditingNote ? (
-                              <div className="flex gap-1">
-                                <input
-                                  type="text"
-                                  value={noteText}
-                                  onChange={(e) => setNoteText(e.target.value)}
-                                  onKeyDown={(e) => e.key === 'Enter' && saveNote()}
-                                  placeholder="Добави бележка..."
-                                  className="flex-1 px-2 py-1 text-sm bg-white border border-stone-300 rounded focus:outline-none focus:border-amber-500"
-                                  autoFocus
-                                />
-                                <button onClick={saveNote} className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded transition-colors">
-                                  <Check size={14} />
-                                </button>
-                                <button onClick={() => { setEditingNoteId(null); setNoteText(''); }} className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-600 rounded transition-colors">
-                                  <X size={14} />
-                                </button>
-                              </div>
-                            ) : hl.note ? (
-                              <button
-                                onClick={() => startEditingNote(hl)}
-                                className="w-full text-left px-2 py-1 text-xs text-stone-600 bg-white/50 rounded border border-stone-200 hover:border-stone-300 transition-colors"
-                              >
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare size={10} />
-                                  {hl.note}
-                                </span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => startEditingNote(hl)}
-                                className="w-full text-left px-2 py-1 text-xs text-stone-400 hover:text-stone-600 bg-white/30 hover:bg-white/50 rounded border border-dashed border-stone-300 transition-colors"
-                              >
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare size={10} />
-                                  Бележка...
-                                </span>
-                              </button>
-                            )}
-
-                            {hl.encodingTip ? (
-                              <div className="px-2 py-1.5 text-xs bg-purple-50 border border-purple-200 rounded">
-                                <div className="flex items-center gap-1 text-purple-600 font-medium mb-1">
-                                  <Lightbulb size={10} />
-                                  Как да запомня:
-                                </div>
-                                <p className="text-purple-800">{hl.encodingTip}</p>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => fetchEncodingTip(hl)}
-                                disabled={loadingTipId === hl.id}
-                                className="w-full text-left px-2 py-1 text-xs text-purple-500 hover:text-purple-700 bg-purple-50/50 hover:bg-purple-50 rounded border border-dashed border-purple-300 transition-colors disabled:opacity-50"
-                              >
-                                <span className="flex items-center gap-1">
-                                  {loadingTipId === hl.id ? (
-                                    <>
-                                      <Loader2 size={10} className="animate-spin" />
-                                      Генерирам...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Lightbulb size={10} />
-                                      AI съвет за запомняне
-                                    </>
-                                  )}
-                                </span>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div className="flex justify-between">
+                <span>Курсив</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+I</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Подчертан</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+U</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Заглавие 1</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Alt+1</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Заглавие 2</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Alt+2</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Списък</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Shift+8</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Запази</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+S</kbd>
+              </div>
+              <div className="flex justify-between">
+                <span>Затвори</span>
+                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Esc</kbd>
               </div>
             </div>
 
-            {highlights.length > 0 && (
-              <div className="p-3 border-t border-stone-200">
-                <p className="text-xs text-stone-400 text-center">
-                  Кликни на highlight за бележка
-                </p>
+            <div className="mt-6 pt-4 border-t border-stone-200">
+              <h3 className="text-sm font-medium text-stone-700 mb-2">Markdown shortcuts</h3>
+              <div className="space-y-1 text-xs text-stone-500">
+                <p><code className="bg-stone-100 px-1 rounded"># </code> Заглавие 1</p>
+                <p><code className="bg-stone-100 px-1 rounded">## </code> Заглавие 2</p>
+                <p><code className="bg-stone-100 px-1 rounded">### </code> Заглавие 3</p>
+                <p><code className="bg-stone-100 px-1 rounded">- </code> Списък</p>
+                <p><code className="bg-stone-100 px-1 rounded">1. </code> Номериран списък</p>
+                <p><code className="bg-stone-100 px-1 rounded">&gt; </code> Цитат</p>
               </div>
-            )}
+            </div>
           </aside>
         )}
       </div>
-
-      {/* Floating toolbar on selection */}
-      {selectionInfo && (
-        <div
-          className="fixed z-50 bg-white rounded-lg shadow-xl border border-stone-200 px-3 py-2 flex items-center gap-2"
-          style={{
-            left: `${Math.max(100, Math.min(selectionInfo.x, window.innerWidth - 200))}px`,
-            top: `${Math.max(60, selectionInfo.y - 50)}px`,
-            transform: 'translateX(-50%)'
-          }}
-          onMouseDown={(e) => e.preventDefault()}
-        >
-          <span className="text-xs text-stone-500 mr-1">Маркирай:</span>
-          {HIGHLIGHT_COLORS.map(({ color, bg, name }) => (
-            <button
-              key={color}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => addHighlight(color)}
-              style={{ backgroundColor: bg }}
-              className={`w-7 h-7 rounded hover:scale-110 transition-transform border ${
-                selectedColor === color ? 'border-stone-600' : 'border-stone-300'
-              }`}
-              title={name}
-            />
-          ))}
-          <button
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { setSelectionInfo(null); window.getSelection()?.removeAllRanges(); }}
-            className="ml-1 p-1 text-stone-400 hover:text-stone-600"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
 
       {/* Scroll to top */}
       {scrollProgress > 20 && (

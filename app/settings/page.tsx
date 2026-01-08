@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { TopicStatus } from '@/lib/types';
+
+interface ImportResult {
+  matched: number;
+  notFound: string[];
+  updated: { name: string; oldStatus: string; newStatus: string }[];
+}
 
 export default function SettingsPage() {
-  const { data, updateUsageBudget } = useApp();
+  const { data, updateUsageBudget, setTopicStatus } = useApp();
   const { usageData } = data;
 
   const [apiKey, setApiKey] = useState('');
@@ -14,6 +21,14 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [budget, setBudget] = useState(usageData.monthlyBudget);
+
+  // Notion import state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [csvPreview, setCsvPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
+  const [columnMapping, setColumnMapping] = useState<{ name: string; status: string }>({ name: '', status: '' });
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -62,6 +77,206 @@ export default function SettingsPage() {
     updateUsageBudget(budget);
   };
 
+  // Parse CSV file
+  const parseCSV = (text: string): { headers: string[]; rows: string[][] } => {
+    const lines = text.split('\n').filter(line => line.trim());
+    if (lines.length === 0) return { headers: [], rows: [] };
+
+    // Parse CSV with proper quote handling
+    const parseLine = (line: string): string[] => {
+      const result: string[] = [];
+      let current = '';
+      let inQuotes = false;
+
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim());
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    };
+
+    const headers = parseLine(lines[0]);
+    const rows = lines.slice(1).map(parseLine);
+    return { headers, rows };
+  };
+
+  // Map Notion status to app status
+  const mapNotionStatus = (notionStatus: string): TopicStatus | null => {
+    const normalized = notionStatus.toLowerCase().trim();
+
+    // Gray mappings
+    if (normalized.includes('не съм почнал') ||
+        normalized.includes('червен') ||
+        normalized === 'red' ||
+        normalized === 'not started') {
+      return 'gray';
+    }
+
+    // Orange mappings
+    if (normalized.includes('оранжев') ||
+        normalized === 'orange' ||
+        normalized.includes('в прогрес') ||
+        normalized.includes('in progress')) {
+      return 'orange';
+    }
+
+    // Yellow mappings
+    if (normalized.includes('жълт') ||
+        normalized === 'yellow' ||
+        normalized.includes('почти')) {
+      return 'yellow';
+    }
+
+    // Green mappings
+    if (normalized.includes('зелен') ||
+        normalized === 'green' ||
+        normalized.includes('готов') ||
+        normalized.includes('done') ||
+        normalized.includes('complete')) {
+      return 'green';
+    }
+
+    return null;
+  };
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImportError(null);
+    setImportResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = parseCSV(text);
+
+        if (parsed.headers.length === 0) {
+          setImportError('CSV файлът е празен');
+          return;
+        }
+
+        setCsvPreview(parsed);
+
+        // Try to auto-detect columns
+        const nameCol = parsed.headers.find(h =>
+          h.toLowerCase().includes('name') ||
+          h.toLowerCase().includes('име') ||
+          h.toLowerCase().includes('тема') ||
+          h.toLowerCase().includes('topic')
+        ) || '';
+
+        const statusCol = parsed.headers.find(h =>
+          h.toLowerCase().includes('status') ||
+          h.toLowerCase().includes('progress') ||
+          h.toLowerCase().includes('прогрес') ||
+          h.toLowerCase().includes('статус')
+        ) || '';
+
+        setColumnMapping({ name: nameCol, status: statusCol });
+      } catch {
+        setImportError('Грешка при парсване на CSV файла');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Execute import
+  const handleImport = () => {
+    if (!csvPreview || !columnMapping.name || !columnMapping.status) {
+      setImportError('Избери колони за име и статус');
+      return;
+    }
+
+    setImporting(true);
+    setImportError(null);
+
+    const nameIndex = csvPreview.headers.indexOf(columnMapping.name);
+    const statusIndex = csvPreview.headers.indexOf(columnMapping.status);
+
+    const result: ImportResult = {
+      matched: 0,
+      notFound: [],
+      updated: []
+    };
+
+    // Build a map of all topics by name (normalized)
+    const topicMap = new Map<string, { subjectId: string; topicId: string; currentStatus: TopicStatus }>();
+    for (const subject of data.subjects) {
+      for (const topic of subject.topics) {
+        const normalizedName = topic.name.toLowerCase().trim();
+        topicMap.set(normalizedName, {
+          subjectId: subject.id,
+          topicId: topic.id,
+          currentStatus: topic.status
+        });
+      }
+    }
+
+    // Process each row
+    for (const row of csvPreview.rows) {
+      const topicName = row[nameIndex]?.trim();
+      const notionStatus = row[statusIndex]?.trim();
+
+      if (!topicName || !notionStatus) continue;
+
+      const normalizedName = topicName.toLowerCase().trim();
+      const topicInfo = topicMap.get(normalizedName);
+
+      if (!topicInfo) {
+        result.notFound.push(topicName);
+        continue;
+      }
+
+      const newStatus = mapNotionStatus(notionStatus);
+      if (!newStatus) continue;
+
+      result.matched++;
+
+      if (topicInfo.currentStatus !== newStatus) {
+        setTopicStatus(topicInfo.subjectId, topicInfo.topicId, newStatus);
+        result.updated.push({
+          name: topicName,
+          oldStatus: topicInfo.currentStatus,
+          newStatus
+        });
+      }
+    }
+
+    setImportResult(result);
+    setImporting(false);
+    setCsvPreview(null);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const cancelImport = () => {
+    setCsvPreview(null);
+    setColumnMapping({ name: '', status: '' });
+    setImportError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const isOverBudget = usageData.monthlyCost >= usageData.monthlyBudget;
   const budgetPercentage = Math.min((usageData.monthlyCost / usageData.monthlyBudget) * 100, 100);
 
@@ -89,6 +304,200 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Notion Import */}
+      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2 mb-4">
+          <FileSpreadsheet size={20} className="text-orange-400" />
+          Import от Notion
+        </h2>
+
+        <p className="text-sm text-slate-400 font-mono mb-4">
+          Експортни database от Notion като CSV и импортирай прогреса си.
+        </p>
+
+        {/* File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        {!csvPreview ? (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-4 border-2 border-dashed border-slate-600 hover:border-orange-500/50 rounded-xl transition-colors flex flex-col items-center gap-2 text-slate-400 hover:text-orange-400"
+          >
+            <Upload size={24} />
+            <span className="font-mono text-sm">Избери CSV файл</span>
+          </button>
+        ) : (
+          <div className="space-y-4">
+            {/* Preview info */}
+            <div className="bg-slate-800/50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-slate-300 font-mono">
+                  {csvPreview.rows.length} реда намерени
+                </span>
+                <button
+                  onClick={cancelImport}
+                  className="p-1 hover:bg-slate-700 rounded text-slate-400 hover:text-slate-200"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Column mapping */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs text-slate-500 font-mono mb-1">
+                    Колона за име на тема
+                  </label>
+                  <select
+                    value={columnMapping.name}
+                    onChange={(e) => setColumnMapping(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 font-mono text-sm"
+                  >
+                    <option value="">Избери...</option>
+                    {csvPreview.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-500 font-mono mb-1">
+                    Колона за статус/прогрес
+                  </label>
+                  <select
+                    value={columnMapping.status}
+                    onChange={(e) => setColumnMapping(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 font-mono text-sm"
+                  >
+                    <option value="">Избери...</option>
+                    {csvPreview.headers.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Sample data */}
+              {columnMapping.name && columnMapping.status && (
+                <div className="mt-4 border-t border-slate-700 pt-4">
+                  <p className="text-xs text-slate-500 font-mono mb-2">Примерни данни:</p>
+                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                    {csvPreview.rows.slice(0, 5).map((row, i) => {
+                      const nameIdx = csvPreview.headers.indexOf(columnMapping.name);
+                      const statusIdx = csvPreview.headers.indexOf(columnMapping.status);
+                      const mappedStatus = mapNotionStatus(row[statusIdx] || '');
+                      return (
+                        <div key={i} className="flex items-center gap-2 text-xs font-mono">
+                          <span className="text-slate-300 truncate flex-1">{row[nameIdx]}</span>
+                          <span className="text-slate-500">{row[statusIdx]}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-xs ${
+                            mappedStatus === 'green' ? 'bg-green-500/20 text-green-400' :
+                            mappedStatus === 'yellow' ? 'bg-yellow-500/20 text-yellow-400' :
+                            mappedStatus === 'orange' ? 'bg-orange-500/20 text-orange-400' :
+                            mappedStatus === 'gray' ? 'bg-slate-500/20 text-slate-400' :
+                            'bg-red-500/20 text-red-400'
+                          }`}>
+                            {mappedStatus || '?'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Import button */}
+            <button
+              onClick={handleImport}
+              disabled={!columnMapping.name || !columnMapping.status || importing}
+              className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-mono text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              {importing ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Импортиране...
+                </>
+              ) : (
+                <>
+                  <Upload size={16} />
+                  Импортирай
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Import error */}
+        {importError && (
+          <div className="mt-4 p-3 bg-red-900/20 border border-red-800/30 rounded-lg flex items-center gap-2">
+            <AlertCircle size={18} className="text-red-400 shrink-0" />
+            <span className="text-sm text-red-300 font-mono">{importError}</span>
+          </div>
+        )}
+
+        {/* Import result */}
+        {importResult && (
+          <div className="mt-4 p-4 bg-green-900/20 border border-green-800/30 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle size={18} className="text-green-400" />
+              <span className="text-sm text-green-300 font-mono font-semibold">Import завършен!</span>
+            </div>
+            <div className="space-y-2 text-sm font-mono">
+              <p className="text-slate-300">
+                Намерени: <span className="text-green-400">{importResult.matched}</span> теми
+              </p>
+              <p className="text-slate-300">
+                Обновени: <span className="text-cyan-400">{importResult.updated.length}</span> теми
+              </p>
+              {importResult.notFound.length > 0 && (
+                <div>
+                  <p className="text-amber-400 mb-1">
+                    Не са намерени ({importResult.notFound.length}):
+                  </p>
+                  <div className="max-h-24 overflow-y-auto text-xs text-slate-500">
+                    {importResult.notFound.slice(0, 10).map((name, i) => (
+                      <div key={i}>• {name}</div>
+                    ))}
+                    {importResult.notFound.length > 10 && (
+                      <div>... и още {importResult.notFound.length - 10}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Status mapping info */}
+        <div className="mt-4 p-3 bg-slate-800/30 rounded-lg">
+          <p className="text-xs text-slate-500 font-mono mb-2">Автоматичен mapping на статуси:</p>
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-slate-500" />
+              <span className="text-slate-400">не съм почнал, червено</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-orange-500" />
+              <span className="text-slate-400">оранжево</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-yellow-500" />
+              <span className="text-slate-400">жълто</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-green-500" />
+              <span className="text-slate-400">зелено, готово</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Usage Statistics */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">

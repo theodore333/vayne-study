@@ -96,10 +96,27 @@ export default function FloatingTimer() {
         if (saved) {
           const state = JSON.parse(saved) as PomodoroState;
           const now = Date.now();
-          if (state.endTime && state.endTime > now) {
-            setPomodoroState(state);
-            setPomodoroTimeLeft(Math.ceil((state.endTime - now) / 1000));
-          } else {
+          // Always set state if it exists - let the countdown effect handle expiration
+          setPomodoroState(state);
+          const remaining = Math.max(0, Math.ceil((state.endTime - now) / 1000));
+          setPomodoroTimeLeft(remaining);
+
+          // If timer just expired and we haven't played sound yet, play it now
+          if (state.endTime <= now && !hasPlayedSound) {
+            playSound();
+            setHasPlayedSound(true);
+
+            const phaseLabel = state.phase === 'work'
+              ? `Pomodoro #${state.count + 1} завърши!`
+              : 'Почивката свърши!';
+            const phaseBody = state.phase === 'work'
+              ? 'Време за почивка!'
+              : 'Време за работа!';
+
+            showNotification(phaseLabel, phaseBody);
+
+            // Clear localStorage after playing sound
+            localStorage.removeItem('pomodoro_state');
             setPomodoroState(null);
           }
         } else {
@@ -114,7 +131,7 @@ export default function FloatingTimer() {
     // Check every 500ms for changes
     const interval = setInterval(checkPomodoroState, 500);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasPlayedSound, playSound, showNotification]);
 
   // Update pomodoro countdown
   useEffect(() => {

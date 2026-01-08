@@ -53,6 +53,7 @@ export default function TimerPage() {
 
   // Track if we need to complete a missed pomodoro (expired while tab closed)
   const [pendingCompletion, setPendingCompletion] = useState<{ phase: PomodoroPhase; count: number } | null>(null);
+  const [isPaused, setIsPaused] = useState(false); // Track if timer is paused vs stopped
 
   // Restore Pomodoro state from localStorage on mount
   useEffect(() => {
@@ -78,8 +79,13 @@ export default function TimerPage() {
           setPendingCompletion({ phase: state.phase, count: state.count || 0 });
           setPomodoroEndTime(null);
           setIsRunning(false);
+        } else if (state.pausedTimeLeft && state.pausedTimeLeft > 0) {
+          // Timer was paused - restore the remaining time
+          setPomodoroTimeLeft(state.pausedTimeLeft);
+          setIsPaused(true);
+          setIsRunning(false);
         }
-        // If no endTime, timer was paused - just restore count/phase
+        // If no endTime and no pausedTimeLeft, timer was stopped - just restore count/phase
       }
     } catch (e) {
       console.error('Failed to restore pomodoro state:', e);
@@ -96,16 +102,18 @@ export default function TimerPage() {
         phase: pomodoroPhase,
         count: pomodoroCount,
         endTime: isRunning ? pomodoroEndTime : null, // Only save endTime if running
+        pausedTimeLeft: isPaused ? pomodoroTimeLeft : null, // Save remaining time if paused
         savedAt: Date.now()
       };
       localStorage.setItem('pomodoro_state', JSON.stringify(state));
     }
-  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, initialized]);
+  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized]);
 
-  // Initialize pomodoro time (only if not restored from localStorage)
+  // Initialize pomodoro time (only if not restored from localStorage and not paused)
   useEffect(() => {
     if (!initialized) return;
-    if (timerMode === 'pomodoro' && !isRunning && !pomodoroEndTime && !pendingCompletion) {
+    // Don't reset time if paused - we want to preserve the remaining time
+    if (timerMode === 'pomodoro' && !isRunning && !pomodoroEndTime && !pendingCompletion && !isPaused) {
       const duration = pomodoroPhase === 'work'
         ? settings.workDuration
         : pomodoroPhase === 'shortBreak'
@@ -113,7 +121,7 @@ export default function TimerPage() {
           : settings.longBreakDuration;
       setPomodoroTimeLeft(duration * 60);
     }
-  }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized, pendingCompletion]);
+  }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized, pendingCompletion, isPaused]);
 
   // Restore active session
   useEffect(() => {
@@ -315,6 +323,7 @@ export default function TimerPage() {
         settings.longBreakDuration * 60
       );
       setPomodoroEndTime(Date.now() + duration * 1000);
+      setIsPaused(false); // Clear paused state when starting
     }
     setIsRunning(true);
     setElapsed(0);
@@ -324,17 +333,34 @@ export default function TimerPage() {
     // pomodoroTimeLeft is already updated by the timer tick, so just stop
     setPomodoroEndTime(null);
     setIsRunning(false);
+    setIsPaused(true); // Mark as paused to preserve remaining time
   };
 
   const handleStop = () => {
     if (timerMode === 'normal') {
       setShowRating(true);
     } else {
+      // Calculate time worked before stopping
+      const fullDuration = pomodoroPhase === 'work'
+        ? settings.workDuration * 60
+        : pomodoroPhase === 'shortBreak'
+          ? settings.shortBreakDuration * 60
+          : settings.longBreakDuration * 60;
+
+      const timeWorked = fullDuration - pomodoroTimeLeft;
+      const minutesWorked = Math.floor(timeWorked / 60);
+
+      // Record partial pomodoro if it was a work phase and at least 1 minute worked
+      if (pomodoroPhase === 'work' && minutesWorked >= 1) {
+        addPomodoroSession(minutesWorked, selectedSubject || undefined, selectedTopic);
+      }
+
       setIsRunning(false);
       setPomodoroEndTime(null);
+      setIsPaused(false);
       setPomodoroPhase('work');
       setPomodoroTimeLeft(settings.workDuration * 60);
-      setPomodoroCount(0);
+      // Don't reset pomodoroCount - keep the completed count
     }
   };
 
@@ -356,6 +382,7 @@ export default function TimerPage() {
   const handleReset = () => {
     setIsRunning(false);
     setPomodoroEndTime(null);
+    setIsPaused(false);
     setPomodoroPhase('work');
     setPomodoroTimeLeft(settings.workDuration * 60);
     setPomodoroCount(0);

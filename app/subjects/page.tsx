@@ -30,7 +30,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject, batchUpdateTopicRelations, incrementApiCalls } = useApp();
+  const { data, isLoading, deleteSubject, updateSubject, batchUpdateTopicRelations, incrementApiCalls, setTopicStatus } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -50,6 +50,10 @@ function SubjectsContent() {
   // Multi-topic quiz selection
   const [quizSelectMode, setQuizSelectMode] = useState(false);
   const [selectedTopicsForQuiz, setSelectedTopicsForQuiz] = useState<Array<{ subjectId: string; topicId: string }>>([]);
+
+  // Bulk edit mode
+  const [bulkEditMode, setBulkEditMode] = useState(false);
+  const [selectedTopicsForBulk, setSelectedTopicsForBulk] = useState<string[]>([]);
 
   // Analyze relations state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -78,6 +82,33 @@ function SubjectsContent() {
     if (selectedTopicsForQuiz.length === 0) return;
     const topicsParam = selectedTopicsForQuiz.map(t => `${t.subjectId}:${t.topicId}`).join(',');
     router.push(`/quiz?multi=true&topics=${topicsParam}`);
+  };
+
+  // Bulk edit functions
+  const toggleTopicForBulk = (topicId: string) => {
+    setSelectedTopicsForBulk(prev => {
+      if (prev.includes(topicId)) {
+        return prev.filter(id => id !== topicId);
+      }
+      return [...prev, topicId];
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedTopicsForBulk(filteredTopics.map(t => t.id));
+  };
+
+  const clearBulkSelection = () => {
+    setSelectedTopicsForBulk([]);
+  };
+
+  const applyBulkStatus = (status: TopicStatus) => {
+    if (!selectedSubjectId || selectedTopicsForBulk.length === 0) return;
+    for (const topicId of selectedTopicsForBulk) {
+      setTopicStatus(selectedSubjectId, topicId, status);
+    }
+    clearBulkSelection();
+    setBulkEditMode(false);
   };
 
   // Analyze topic relations with AI
@@ -375,10 +406,32 @@ function SubjectsContent() {
                     <span className="text-sm text-slate-500 font-mono">({selectedSubject.topics.length} теми)</span>
                   </div>
                   <div className="flex gap-2">
+                    {/* Bulk Edit Button */}
+                    <button
+                      onClick={() => {
+                        setBulkEditMode(!bulkEditMode);
+                        if (bulkEditMode) clearBulkSelection();
+                        if (quizSelectMode) {
+                          setQuizSelectMode(false);
+                          setSelectedTopicsForQuiz([]);
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                        bulkEditMode
+                          ? 'bg-orange-600 text-white'
+                          : 'bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/30'
+                      }`}
+                    >
+                      <Edit2 size={16} /> {bulkEditMode ? 'Отказ' : 'Bulk Edit'}
+                    </button>
                     <button
                       onClick={() => {
                         setQuizSelectMode(!quizSelectMode);
                         if (quizSelectMode) setSelectedTopicsForQuiz([]);
+                        if (bulkEditMode) {
+                          setBulkEditMode(false);
+                          clearBulkSelection();
+                        }
                       }}
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
                         quizSelectMode
@@ -585,15 +638,19 @@ function SubjectsContent() {
                       const hasMaterial = topic.material && topic.material.trim().length > 0;
                       const isSelectedForQuiz = selectedTopicsForQuiz.some(t => t.topicId === topic.id);
 
+                      const isSelectedForBulk = selectedTopicsForBulk.includes(topic.id);
+
                       return (
                         <div
                           key={topic.id}
                           className={`flex items-center gap-2 p-4 rounded-lg border transition-all hover:scale-[1.005] ${
                             isSelectedForQuiz ? 'ring-2 ring-purple-500' : ''
+                          } ${
+                            isSelectedForBulk ? 'ring-2 ring-orange-500' : ''
                           }`}
                           style={{
-                            backgroundColor: isSelectedForQuiz ? 'rgba(147, 51, 234, 0.15)' : config.bg,
-                            borderColor: isSelectedForQuiz ? 'rgb(147, 51, 234)' : config.border
+                            backgroundColor: isSelectedForQuiz ? 'rgba(147, 51, 234, 0.15)' : isSelectedForBulk ? 'rgba(249, 115, 22, 0.15)' : config.bg,
+                            borderColor: isSelectedForQuiz ? 'rgb(147, 51, 234)' : isSelectedForBulk ? 'rgb(249, 115, 22)' : config.border
                           }}
                         >
                           {/* Checkbox for Mix Quiz selection */}
@@ -613,12 +670,29 @@ function SubjectsContent() {
                             </button>
                           )}
 
+                          {/* Checkbox for Bulk Edit selection */}
+                          {bulkEditMode && (
+                            <button
+                              onClick={() => toggleTopicForBulk(topic.id)}
+                              className={`shrink-0 w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                                selectedTopicsForBulk.includes(topic.id)
+                                  ? 'border-orange-500 bg-orange-500 text-white'
+                                  : 'border-slate-500 hover:border-orange-400'
+                              }`}
+                            >
+                              {selectedTopicsForBulk.includes(topic.id) && <span className="text-sm">✓</span>}
+                            </button>
+                          )}
+
                           <Link
-                            href={quizSelectMode ? '#' : `/subjects/${selectedSubjectId}/topics/${topic.id}`}
+                            href={quizSelectMode || bulkEditMode ? '#' : `/subjects/${selectedSubjectId}/topics/${topic.id}`}
                             onClick={(e) => {
                               if (quizSelectMode) {
                                 e.preventDefault();
                                 if (hasMaterial) toggleTopicForQuiz(selectedSubject.id, topic.id);
+                              } else if (bulkEditMode) {
+                                e.preventDefault();
+                                toggleTopicForBulk(topic.id);
                               }
                             }}
                             className="flex-1 flex items-center gap-4 text-left"
@@ -727,7 +801,7 @@ function SubjectsContent() {
         </div>
       </div>
 
-      {/* Floating bar for selected topics */}
+      {/* Floating bar for selected topics - Mix Quiz */}
       {quizSelectMode && selectedTopicsForQuiz.length > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
           <div className="bg-slate-900/95 backdrop-blur border border-purple-500/50 rounded-2xl px-6 py-4 shadow-2xl shadow-purple-500/20 flex items-center gap-6">
@@ -751,6 +825,50 @@ function SubjectsContent() {
                 <Brain size={18} /> Започни Quiz
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating bar for Bulk Edit */}
+      {bulkEditMode && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-slate-900/95 backdrop-blur border border-orange-500/50 rounded-2xl px-6 py-4 shadow-2xl shadow-orange-500/20 flex items-center gap-6">
+            <div>
+              <span className="text-orange-300 font-mono text-lg font-semibold">
+                {selectedTopicsForBulk.length} / {filteredTopics.length}
+              </span>
+              <p className="text-xs text-slate-400 font-mono">теми избрани</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={selectAllFiltered}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-mono text-xs transition-all"
+              >
+                Избери всички
+              </button>
+              <button
+                onClick={clearBulkSelection}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-mono text-xs transition-all"
+              >
+                Изчисти
+              </button>
+            </div>
+            {selectedTopicsForBulk.length > 0 && (
+              <div className="flex gap-2 border-l border-slate-700 pl-4">
+                <span className="text-xs text-slate-500 font-mono self-center mr-1">Статус:</span>
+                {(Object.keys(STATUS_CONFIG) as TopicStatus[]).map(status => (
+                  <button
+                    key={status}
+                    onClick={() => applyBulkStatus(status)}
+                    className="w-10 h-10 rounded-lg flex items-center justify-center text-xl transition-all hover:scale-110"
+                    style={{ backgroundColor: STATUS_CONFIG[status].bg, border: `1px solid ${STATUS_CONFIG[status].border}` }}
+                    title={`Смени на ${STATUS_CONFIG[status].label}`}
+                  >
+                    {STATUS_CONFIG[status].emoji}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

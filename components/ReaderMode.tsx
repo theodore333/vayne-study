@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2, Edit3, Save } from 'lucide-react';
+import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -15,85 +15,12 @@ interface ReaderModeProps {
 
 type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
 
-const HIGHLIGHT_COLORS: { color: HighlightColor; bg: string; bgClass: string; name: string }[] = [
-  { color: 'yellow', bg: '#fef08a', bgClass: 'bg-yellow-200', name: 'Жълто' },
-  { color: 'green', bg: '#bbf7d0', bgClass: 'bg-green-200', name: 'Зелено' },
-  { color: 'blue', bg: '#bfdbfe', bgClass: 'bg-blue-200', name: 'Синьо' },
-  { color: 'pink', bg: '#fbcfe8', bgClass: 'bg-pink-200', name: 'Розово' },
+const HIGHLIGHT_COLORS: { color: HighlightColor; bg: string; name: string }[] = [
+  { color: 'yellow', bg: '#fef08a', name: 'Жълто' },
+  { color: 'green', bg: '#bbf7d0', name: 'Зелено' },
+  { color: 'blue', bg: '#bfdbfe', name: 'Синьо' },
+  { color: 'pink', bg: '#fbcfe8', name: 'Розово' },
 ];
-
-function cleanMarkdown(text: string): string {
-  return text
-    .replace(/(?<!\*)\*(?!\*)/g, '')
-    .replace(/(?<!^)#+(?!\s)/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function parseMarkdown(text: string): string {
-  let html = cleanMarkdown(text);
-
-  // Horizontal rules
-  html = html.replace(/^-{3,}$/gm, '<hr class="my-6 border-stone-300" />');
-
-  // Headers
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-
-  // Bold and italic
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // Code blocks (``` or lines with tree characters like |── ├── └──)
-  html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-stone-100 p-4 rounded-lg overflow-x-auto font-mono text-sm my-4">$1</pre>');
-
-  // Detect tree/diagram sections (lines with |, ├, └, ─)
-  const lines = html.split('\n');
-  let inTree = false;
-  let treeContent: string[] = [];
-  const processedLines: string[] = [];
-
-  for (const line of lines) {
-    const isTreeLine = /^[`\s]*[│├└─|┌┐┘┴┬┼╔╗╚╝═║]/.test(line) ||
-                       /[│├└─|┌┐┘┴┬┼].*[│├└─|┌┐┘┴┬┼]/.test(line) ||
-                       (inTree && /^\s+/.test(line) && line.trim().length > 0);
-
-    if (isTreeLine && !inTree) {
-      inTree = true;
-      treeContent = [line];
-    } else if (isTreeLine && inTree) {
-      treeContent.push(line);
-    } else if (!isTreeLine && inTree) {
-      processedLines.push(`<pre class="bg-stone-50 p-4 rounded-lg overflow-x-auto font-mono text-sm my-4 whitespace-pre">${treeContent.join('\n')}</pre>`);
-      inTree = false;
-      treeContent = [];
-      processedLines.push(line);
-    } else {
-      processedLines.push(line);
-    }
-  }
-
-  if (inTree && treeContent.length > 0) {
-    processedLines.push(`<pre class="bg-stone-50 p-4 rounded-lg overflow-x-auto font-mono text-sm my-4 whitespace-pre">${treeContent.join('\n')}</pre>`);
-  }
-
-  html = processedLines.join('\n');
-
-  // Lists
-  html = html.replace(/^[-•] (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
-
-  // Paragraphs
-  html = html.replace(/\n\n/g, '</p><p>');
-  html = '<p>' + html + '</p>';
-  html = html.replace(/<p><\/p>/g, '');
-  html = html.replace(/<p>\s*<\/p>/g, '');
-  html = html.replace(/<p>(\s*<(?:h[1-3]|pre|hr|ul|ol|li))/g, '$1');
-  html = html.replace(/(<\/(?:h[1-3]|pre|hr|ul|ol|li)>\s*)<\/p>/g, '$1');
-
-  return html;
-}
 
 export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveEncodingCoach, onSaveMaterial }: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
@@ -108,12 +35,13 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [encodingCoach, setEncodingCoach] = useState<string | null>(topic.encodingCoach || null);
   const [loadingCoach, setLoadingCoach] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedMaterial, setEditedMaterial] = useState(topic.material);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentMaterialRef = useRef(topic.material);
 
   // Handle scroll progress
   useEffect(() => {
@@ -132,7 +60,51 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Handle text selection
+  // Debounced auto-save
+  const saveContent = useCallback(() => {
+    const content = contentRef.current;
+    if (!content) return;
+
+    // Get plain text from contentEditable
+    const newMaterial = content.innerText || '';
+
+    if (newMaterial !== currentMaterialRef.current) {
+      currentMaterialRef.current = newMaterial;
+      onSaveMaterial(newMaterial);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+    }
+  }, [onSaveMaterial]);
+
+  const debouncedSave = useCallback(() => {
+    setHasUnsavedChanges(true);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      saveContent();
+    }, 1000); // Save after 1 second of no typing
+  }, [saveContent]);
+
+  // Clean up timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      // Save any pending changes on unmount
+      saveContent();
+    };
+  }, [saveContent]);
+
+  // Handle input in contentEditable
+  const handleInput = useCallback(() => {
+    debouncedSave();
+  }, [debouncedSave]);
+
+  // Handle text selection for highlights
   const handleMouseUp = useCallback(() => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed) {
@@ -156,12 +128,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     });
   }, []);
 
-  // Add highlight with current selected color
+  // Add highlight
   const addHighlight = useCallback((color: HighlightColor) => {
     if (!selectionInfo) return;
 
-    const material = cleanMarkdown(topic.material);
-    const startOffset = material.indexOf(selectionInfo.text);
+    const content = contentRef.current?.innerText || topic.material;
+    const startOffset = content.indexOf(selectionInfo.text);
 
     if (startOffset === -1) return;
 
@@ -181,12 +153,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     setSelectionInfo(null);
     window.getSelection()?.removeAllRanges();
   }, [selectionInfo, highlights, topic.material, onSaveHighlights]);
-
-  // Quick highlight with selected color from toolbar
-  const quickHighlight = useCallback(() => {
-    if (!selectionInfo) return;
-    addHighlight(selectedColor);
-  }, [selectionInfo, selectedColor, addHighlight]);
 
   // Remove highlight
   const removeHighlight = (id: string) => {
@@ -246,7 +212,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         throw new Error(data.error || 'Грешка');
       }
 
-      // Save the tip to the highlight
       const updatedHighlights = highlights.map(h =>
         h.id === hl.id ? { ...h, encodingTip: data.tip } : h
       );
@@ -260,7 +225,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
-  // Fetch encoding coach (one-time per topic)
+  // Fetch encoding coach
   const fetchEncodingCoach = async () => {
     if (encodingCoach) {
       setShowCoach(true);
@@ -304,95 +269,64 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
-  // Edit mode functions
-  const startEditing = () => {
-    setEditedMaterial(topic.material);
-    setIsEditing(true);
-    setHasUnsavedChanges(false);
-    // Focus textarea after render
-    setTimeout(() => textareaRef.current?.focus(), 100);
-  };
-
-  const cancelEditing = () => {
-    if (hasUnsavedChanges) {
-      if (!confirm('Имаш незапазени промени. Сигурен ли си?')) return;
-    }
-    setIsEditing(false);
-    setEditedMaterial(topic.material);
-    setHasUnsavedChanges(false);
-  };
-
-  const saveEditing = () => {
-    onSaveMaterial(editedMaterial);
-    setIsEditing(false);
-    setHasUnsavedChanges(false);
-  };
-
-  const handleMaterialChange = (value: string) => {
-    setEditedMaterial(value);
-    setHasUnsavedChanges(value !== topic.material);
-  };
-
-  // Render content with highlights
-  const renderContent = () => {
-    const cleanedMaterial = cleanMarkdown(topic.material);
-    let html = parseMarkdown(cleanedMaterial);
-
-    // Apply highlights by simple string replacement
-    for (const hl of highlights) {
-      const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
-      const bgColor = colorConfig?.bg || '#fef08a';
-
-      // Simple replacement - find the text and wrap it
-      // Use split/join to handle it safely
-      const parts = html.split(hl.text);
-      if (parts.length > 1) {
-        html = parts[0] + `<span style="background-color: ${bgColor}; padding: 1px 4px; border-radius: 4px; box-decoration-break: clone;">${hl.text}</span>` + parts.slice(1).join(hl.text);
-      }
-    }
-
-    return html;
-  };
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
-      const target = e.target as HTMLElement;
-      const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
-
       if (e.key === 'Escape') {
-        if (isEditing) {
-          cancelEditing();
-        } else if (selectionInfo) {
+        if (selectionInfo) {
           setSelectionInfo(null);
           window.getSelection()?.removeAllRanges();
         } else {
+          // Save before closing
+          saveContent();
           onClose();
         }
       }
 
-      // E to edit (when not typing)
-      if (e.key === 'e' && !isTyping && !isEditing) {
+      // Ctrl+S to force save
+      if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        startEditing();
-      }
-
-      // Ctrl+S to save (when editing)
-      if (e.key === 's' && (e.ctrlKey || e.metaKey) && isEditing) {
-        e.preventDefault();
-        saveEditing();
+        saveContent();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, selectionInfo, isEditing, hasUnsavedChanges]);
+  }, [onClose, selectionInfo, saveContent]);
 
-  const handleContentClick = () => {
-    if (selectionInfo && window.getSelection()?.isCollapsed) {
-      setSelectionInfo(null);
-    }
+  // Handle paste - strip formatting
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }, []);
+
+  // Simple markdown parsing for display
+  const parseMarkdownSimple = (text: string): string => {
+    let html = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Headers
+    html = html.replace(/^### (.+)$/gm, '<h3 class="text-lg font-bold text-stone-800 mt-4 mb-2">$1</h3>');
+    html = html.replace(/^## (.+)$/gm, '<h2 class="text-xl font-bold text-stone-800 mt-5 mb-3">$1</h2>');
+    html = html.replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold text-stone-900 mt-6 mb-4">$1</h1>');
+
+    // Bold and italic
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-stone-900">$1</strong>');
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    // Lists
+    html = html.replace(/^[-•] (.+)$/gm, '<li class="ml-4">$1</li>');
+    html = html.replace(/^(\d+)\. (.+)$/gm, '<li class="ml-4">$2</li>');
+
+    // Line breaks to paragraphs
+    html = html.replace(/\n\n/g, '</p><p class="mb-3">');
+    html = '<p class="mb-3">' + html + '</p>';
+    html = html.replace(/<p class="mb-3"><\/p>/g, '');
+
+    return html;
   };
 
   return (
@@ -406,7 +340,10 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       <header className="flex-shrink-0 bg-white border-b border-stone-200 shadow-sm">
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={onClose} className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors">
+            <button
+              onClick={() => { saveContent(); onClose(); }}
+              className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors"
+            >
               <ChevronLeft size={20} />
               <span className="font-medium hidden sm:inline">Назад</span>
             </button>
@@ -418,6 +355,15 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Save status */}
+            <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400">
+              {hasUnsavedChanges ? (
+                <span className="text-amber-600">Записване...</span>
+              ) : lastSaved ? (
+                <span>Запазено</span>
+              ) : null}
+            </div>
+
             {/* Encoding Coach Button */}
             <button
               onClick={fetchEncodingCoach}
@@ -427,7 +373,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                   ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
                   : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
               } disabled:opacity-50`}
-              title={encodingCoach ? 'Виж стратегията' : 'Получи стратегия за учене (1 път)'}
+              title={encodingCoach ? 'Виж стратегията' : 'Получи стратегия за учене'}
             >
               {loadingCoach ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -439,35 +385,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               </span>
             </button>
 
-            {/* Edit Button */}
-            {isEditing ? (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={saveEditing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-all"
-                >
-                  <Save size={16} />
-                  <span className="hidden sm:inline">Запази</span>
-                </button>
-                <button
-                  onClick={cancelEditing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg font-medium text-sm transition-all"
-                >
-                  <X size={16} />
-                  <span className="hidden sm:inline">Откажи</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={startEditing}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg font-medium text-sm transition-all"
-                title="Редактирай материала"
-              >
-                <Edit3 size={16} />
-                <span className="hidden sm:inline">Редактирай</span>
-              </button>
-            )}
-
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
@@ -475,17 +392,21 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             >
               {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
             </button>
-            <button onClick={onClose} className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors" title="Затвори (Esc)">
+            <button
+              onClick={() => { saveContent(); onClose(); }}
+              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+              title="Затвори (Esc)"
+            >
               <X size={20} />
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main layout: Left toolbar + Content + Right sidebar */}
+      {/* Main layout */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* LEFT TOOLBAR - Formatting & Highlighting */}
+        {/* LEFT TOOLBAR */}
         <aside className="w-16 flex-shrink-0 bg-white border-r border-stone-200 flex flex-col items-center py-4 gap-2">
           {/* Font size */}
           <div className="flex flex-col items-center gap-1 pb-3 border-b border-stone-200 w-full">
@@ -505,7 +426,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             </button>
           </div>
 
-          {/* Highlight colors - using inline styles to prevent Tailwind purge */}
+          {/* Highlight colors */}
           <div className="flex flex-col items-center gap-2 py-3 border-b border-stone-200 w-full">
             <Highlighter size={16} className="text-stone-400 mb-1" />
             {HIGHLIGHT_COLORS.map(({ color, bg }) => (
@@ -524,7 +445,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             ))}
           </div>
 
-          {/* Highlight count - no delete all button, delete individual from sidebar */}
           {highlights.length > 0 && (
             <div className="flex flex-col items-center py-2">
               <span className="text-xs text-stone-400">{highlights.length}</span>
@@ -533,72 +453,50 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           )}
         </aside>
 
-        {/* CENTER - Content area */}
+        {/* CENTER - Editable Content */}
         <div
           ref={containerRef}
-          className="flex-1 overflow-y-auto"
-          style={{ backgroundColor: isEditing ? '#f5f5f4' : '#fafaf9' }}
+          className="flex-1 overflow-y-auto bg-[#fafaf9]"
         >
-          {isEditing ? (
-            /* Edit Mode */
-            <div className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
-              {hasUnsavedChanges && (
-                <div className="mb-4 px-3 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 text-sm flex items-center gap-2">
-                  <span>⚠️</span>
-                  <span>Имаш незапазени промени</span>
-                </div>
-              )}
-              <textarea
-                ref={textareaRef}
-                value={editedMaterial}
-                onChange={(e) => handleMaterialChange(e.target.value)}
-                className="w-full min-h-[70vh] p-6 bg-white border border-stone-300 rounded-xl text-stone-800 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 resize-none font-mono"
-                style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
-                placeholder="Въведи материал тук..."
-              />
-              <p className="mt-2 text-xs text-stone-500 text-center">
-                Използвай Markdown: # заглавие, **bold**, *italic*, - списък
-              </p>
-            </div>
-          ) : (
-            /* Read Mode */
-            <article
-              ref={contentRef}
-              className="max-w-4xl mx-auto px-8 sm:px-16 py-8"
-              onMouseUp={handleMouseUp}
-              onClick={handleContentClick}
-            >
-              {topic.materialImages && topic.materialImages.length > 0 && (
-                <div className="mb-8 space-y-4">
-                  {topic.materialImages.map((img, idx) => (
-                    <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
-                  ))}
-                </div>
-              )}
+          <article className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
+            {/* Images */}
+            {topic.materialImages && topic.materialImages.length > 0 && (
+              <div className="mb-8 space-y-4">
+                {topic.materialImages.map((img, idx) => (
+                  <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
+                ))}
+              </div>
+            )}
 
-              <div
-                className="max-w-none text-stone-800 selection:bg-amber-200
-                  [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-6 [&_h1]:mt-8
-                  [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-stone-900 [&_h2]:mb-4 [&_h2]:mt-6
-                  [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-stone-900 [&_h3]:mb-3 [&_h3]:mt-4
-                  [&_p]:text-stone-700 [&_p]:leading-relaxed [&_p]:mb-4
-                  [&_strong]:text-stone-900 [&_strong]:font-semibold
-                  [&_em]:italic
-                  [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
-                  [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
-                  [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4
-                  [&_.highlight-text]:text-stone-900"
-                style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
-                dangerouslySetInnerHTML={{ __html: renderContent() }}
-              />
-            </article>
-          )}
+            {/* Editable content - Notion style */}
+            <div
+              ref={contentRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleInput}
+              onMouseUp={handleMouseUp}
+              onPaste={handlePaste}
+              className="min-h-[60vh] outline-none text-stone-800 leading-relaxed
+                focus:outline-none
+                [&:empty]:before:content-['Започни_да_пишеш...'] [&:empty]:before:text-stone-400
+                selection:bg-amber-200"
+              style={{
+                fontSize: `${fontSize}px`,
+                lineHeight: 1.8,
+                whiteSpace: 'pre-wrap'
+              }}
+              dangerouslySetInnerHTML={{ __html: topic.material || '' }}
+            />
+
+            <p className="mt-8 text-xs text-stone-400 text-center">
+              Кликни и пиши директно. Промените се запазват автоматично.
+            </p>
+          </article>
         </div>
 
-        {/* RIGHT SIDEBAR - Highlights list & Notes */}
+        {/* RIGHT SIDEBAR */}
         {showSidebar && (
           <aside className="w-80 flex-shrink-0 bg-white border-l border-stone-200 flex flex-col overflow-hidden">
-            {/* Highlights Section */}
             <div className="border-b border-stone-200">
               <div className="px-4 py-3 bg-stone-50 border-b border-stone-100">
                 <h3 className="text-sm font-medium text-stone-700 flex items-center gap-2">
@@ -616,7 +514,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                     {highlights.map(hl => {
                       const colorConfig = HIGHLIGHT_COLORS.find(c => c.color === hl.color);
                       const bgColor = colorConfig?.bg || '#fef08a';
-                      const isEditing = editingNoteId === hl.id;
+                      const isEditingNote = editingNoteId === hl.id;
 
                       return (
                         <div
@@ -624,7 +522,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                           className="rounded-lg border border-stone-200 hover:border-stone-300 transition-colors overflow-hidden"
                           style={{ backgroundColor: bgColor + '20' }}
                         >
-                          {/* Highlight text */}
                           <div className="flex items-start gap-2 p-2">
                             <div
                               className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
@@ -639,10 +536,8 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                             </button>
                           </div>
 
-                          {/* Note & Tip section */}
                           <div className="px-2 pb-2 space-y-1.5">
-                            {/* Note */}
-                            {isEditing ? (
+                            {isEditingNote ? (
                               <div className="flex gap-1">
                                 <input
                                   type="text"
@@ -653,16 +548,10 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                                   className="flex-1 px-2 py-1 text-sm bg-white border border-stone-300 rounded focus:outline-none focus:border-amber-500"
                                   autoFocus
                                 />
-                                <button
-                                  onClick={saveNote}
-                                  className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded transition-colors"
-                                >
+                                <button onClick={saveNote} className="px-2 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded transition-colors">
                                   <Check size={14} />
                                 </button>
-                                <button
-                                  onClick={() => { setEditingNoteId(null); setNoteText(''); }}
-                                  className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-600 rounded transition-colors"
-                                >
+                                <button onClick={() => { setEditingNoteId(null); setNoteText(''); }} className="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-600 rounded transition-colors">
                                   <X size={14} />
                                 </button>
                               </div>
@@ -688,7 +577,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                               </button>
                             )}
 
-                            {/* Encoding Tip */}
                             {hl.encodingTip ? (
                               <div className="px-2 py-1.5 text-xs bg-purple-50 border border-purple-200 rounded">
                                 <div className="flex items-center gap-1 text-purple-600 font-medium mb-1">
@@ -727,11 +615,10 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               </div>
             </div>
 
-            {/* Tip */}
             {highlights.length > 0 && (
               <div className="p-3 border-t border-stone-200">
                 <p className="text-xs text-stone-400 text-center">
-                  💡 Кликни на highlight за да добавиш бележка
+                  Кликни на highlight за бележка
                 </p>
               </div>
             )}
@@ -796,32 +683,15 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                   <Lightbulb size={24} />
                   <h2 className="text-lg font-bold">Как да уча тази тема?</h2>
                 </div>
-                <button
-                  onClick={() => setShowCoach(false)}
-                  className="text-white/80 hover:text-white transition-colors"
-                >
+                <button onClick={() => setShowCoach(false)} className="text-white/80 hover:text-white transition-colors">
                   <X size={20} />
                 </button>
               </div>
               <p className="text-white/80 text-sm mt-1">{topic.name}</p>
             </div>
             <div className="p-6 max-h-[60vh] overflow-y-auto">
-              <div
-                className="prose prose-sm max-w-none text-stone-700
-                  [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-3 [&_h1]:mt-4
-                  [&_h2]:text-lg [&_h2]:font-bold [&_h2]:text-stone-800 [&_h2]:mb-2 [&_h2]:mt-3
-                  [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-stone-800 [&_h3]:mb-2 [&_h3]:mt-2
-                  [&_p]:text-stone-600 [&_p]:mb-2 [&_p]:leading-relaxed
-                  [&_strong]:text-stone-800
-                  [&_li]:text-stone-600 [&_li]:mb-1
-                  [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-2
-                  [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-2"
-                dangerouslySetInnerHTML={{ __html: parseMarkdown(encodingCoach) }}
-              />
-              <div className="mt-4 pt-4 border-t border-stone-200">
-                <p className="text-xs text-stone-400 text-center">
-                  💡 Този съвет е генериран веднъж за темата
-                </p>
+              <div className="prose prose-sm max-w-none text-stone-700 whitespace-pre-wrap">
+                {encodingCoach}
               </div>
             </div>
           </div>

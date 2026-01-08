@@ -106,6 +106,8 @@ function QuizContent() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
+  const [openHint, setOpenHint] = useState<string | null>(null);
+  const [openHintLoading, setOpenHintLoading] = useState(false);
 
   // Preview screen state
   const [showPreview, setShowPreview] = useState(false);
@@ -524,6 +526,39 @@ function QuizContent() {
     setHintLoading(false);
   };
 
+  // Request structural hint for open questions
+  const requestOpenHint = async () => {
+    const currentQuestion = quizState.questions[quizState.currentIndex];
+    if (!currentQuestion || currentQuestion.type !== 'open') return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return;
+
+    setOpenHintLoading(true);
+    try {
+      const response = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 'open_hint',
+          question: currentQuestion.question,
+          bloomLevel: currentQuestion.bloomLevel || 3,
+          concept: currentQuestion.concept
+        })
+      });
+
+      const result = await response.json();
+      if (result.hint) {
+        setOpenHint(result.hint);
+        if (result.usage) incrementApiCalls(result.usage.cost);
+      }
+    } catch {
+      // Silently fail
+    }
+    setOpenHintLoading(false);
+  };
+
   const evaluateFreeRecall = async () => {
     if (!freeRecallText.trim() || !topic?.material) return;
 
@@ -629,6 +664,7 @@ function QuizContent() {
       }));
       setSelectedAnswer(null);
       setOpenAnswer('');
+      setOpenHint(null);
       setShowExplanation(false);
       // Start timer for next question
       setQuestionStartTime(Date.now());
@@ -1165,8 +1201,11 @@ function QuizContent() {
   if (freeRecallEvaluation) {
     return (
       <div className="min-h-screen p-6 space-y-6">
-        <Link href="/quiz" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm">
-          <ArrowLeft size={16} /> Назад
+        <Link
+          href={subjectId && topicId ? `/subjects/${subjectId}/topics/${topicId}` : '/quiz'}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> {subjectId && topicId ? 'Към темата' : 'Назад'}
         </Link>
 
         <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-3xl mx-auto">
@@ -1248,10 +1287,21 @@ function QuizContent() {
     const grade = getGradeFromScore(score, quizState.questions.length);
     const percentage = Math.round((score / quizState.questions.length) * 100);
 
+    // Count wrong answers accurately for Anki export and analysis buttons
+    const wrongCount = quizState.questions.filter((q, i) => {
+      const openEval = openEvaluations[i];
+      return q.type === 'open'
+        ? (!openEval || openEval.score < 0.7)
+        : quizState.answers[i] !== q.correctAnswer;
+    }).length;
+
     return (
       <div className="min-h-screen p-6 space-y-6">
-        <Link href="/quiz" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm">
-          <ArrowLeft size={16} /> Назад
+        <Link
+          href={subjectId && topicId ? `/subjects/${subjectId}/topics/${topicId}` : '/quiz'}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> {subjectId && topicId ? 'Към темата' : 'Назад'}
         </Link>
 
         <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-2xl mx-auto text-center">
@@ -1306,7 +1356,7 @@ function QuizContent() {
           </div>
 
           {/* Wrong answers detail */}
-          {quizState.questions.length - Math.round(score) > 0 && (
+          {wrongCount > 0 && (
             <div className="w-full max-w-2xl mx-auto mb-6">
               <details className="group">
                 <summary className="cursor-pointer text-sm text-orange-400 font-mono mb-2 hover:text-orange-300 transition-colors flex items-center justify-center gap-2">
@@ -1400,7 +1450,7 @@ function QuizContent() {
               <RefreshCw size={20} /> Нов тест
             </button>
             {/* Drill Weakness button - only show if there were wrong answers */}
-            {quizState.questions.length - Math.round(score) > 0 && (
+            {wrongCount > 0 && (
               <button
                 onClick={() => {
                   handleSaveGrade(); // Save first to record wrong answers
@@ -1422,7 +1472,7 @@ function QuizContent() {
               </button>
             )}
             {/* Anki Export button - only show if there were wrong answers */}
-            {quizState.questions.length - Math.round(score) > 0 && (
+            {wrongCount > 0 && (
               <button
                 onClick={prepareAnkiCards}
                 className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
@@ -1434,7 +1484,7 @@ function QuizContent() {
           </div>
 
           {/* AI Mistake Analysis Section */}
-          {quizState.questions.length - Math.round(score) > 0 && (
+          {wrongCount > 0 && (
             <div className="mt-8 w-full max-w-2xl mx-auto">
               {!mistakeAnalysis && !isAnalyzingMistakes && (
                 <button
@@ -1869,6 +1919,36 @@ function QuizContent() {
                     ? '💡 Препоръчително: 3-5 изречения за пълен отговор'
                     : '📝 Препоръчително: 2-3 изречения'}
               </p>
+
+              {/* Hint button and display for open questions */}
+              {!showExplanation && (
+                <div className="mt-3">
+                  {openHint ? (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-xs text-amber-400 font-mono font-semibold mb-2">Подсказка:</p>
+                      <p className="text-sm text-amber-200 font-mono">{openHint}</p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={requestOpenHint}
+                      disabled={openHintLoading}
+                      className="px-4 py-2 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-sm font-mono rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {openHintLoading ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          Зареждане...
+                        </>
+                      ) : (
+                        <>
+                          <Lightbulb size={14} />
+                          Подсказка
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

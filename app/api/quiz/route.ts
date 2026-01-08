@@ -112,6 +112,13 @@ export async function POST(request: Request) {
       return handleAnalyzeMistakes(anthropic, mistakes, topic, subject);
     }
 
+    if (mode === 'open_hint') {
+      // Generate structural hint for open questions (what to include, not the answer)
+      const { question, bloomLevel: qBloomLevel, concept } = body;
+      return handleOpenHint(anthropic, question, qBloomLevel || 3, concept);
+    }
+
+
     if (!material) {
       return NextResponse.json({ error: 'Missing material' }, { status: 400 });
     }
@@ -769,10 +776,12 @@ Return ONLY a valid JSON array:
 IMPORTANT:
 - Questions must be in Bulgarian
 - Focus on clinically relevant concepts
-- For "open" questions correctAnswer length depends on Bloom level:
-  * Bloom 1-2: 2-3 sentences (basic recall/understanding)
-  * Bloom 3-4: 3-5 sentences (application/analysis)
-  * Bloom 5-6: 5-8 sentences (evaluation/creation) - MUST be detailed!
+- CRITICAL: For "open" questions, correctAnswer MUST MATCH the length the student sees:
+  * Bloom 1-2: EXACTLY 2-3 sentences (this is what student sees as recommended)
+  * Bloom 3-4: EXACTLY 3-5 sentences (this is what student sees as recommended)
+  * Bloom 5-6: EXACTLY 5-8 sentences (this is what student sees as recommended)
+  DO NOT exceed these limits! The student sees "Препоръчително: X изречения" and your answer must match.
+  If your answer is longer, the student feels inadequate. COUNT YOUR SENTENCES!
 - Explanations should be educational
 - Return ONLY the JSON array
 ${questionCount ? `
@@ -956,6 +965,67 @@ Pattern types: "conceptual_gap" (не разбира концепция), "detai
 
   return NextResponse.json({
     analysis,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
+}
+
+
+async function handleOpenHint(
+  anthropic: Anthropic,
+  question: string,
+  bloomLevel: number,
+  concept?: string
+) {
+  const bloomGuidance: Record<number, string> = {
+    1: 'Кажи какви ФАКТИ трябва да включи (определения, термини)',
+    2: 'Кажи какви КОНЦЕПЦИИ трябва да обясни (връзки, значения)',
+    3: 'Кажи какво ПРИЛОЖЕНИЕ да покаже (стъпки, процедури)',
+    4: 'Кажи какъв АНАЛИЗ да направи (сравнения, причинно-следствени връзки)',
+    5: 'Кажи какво да ОЦЕНИ/КРИТИКУВА (аргументи за/против, съждения)',
+    6: 'Кажи какво да СЪЗДАДЕ/ПРЕДЛОЖИ (нов план, протокол, решение)'
+  };
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001', // Haiku for speed and cost
+    max_tokens: 400,
+    messages: [{
+      role: 'user',
+      content: `Ти си помощник на студент по медицина. Студентът вижда този отворен въпрос и иска НАСОКА какво да включи в отговора, БЕЗ да му даваш самия отговор.
+
+ВЪПРОС: ${question}
+${concept ? `КОНЦЕПЦИЯ: ${concept}` : ''}
+BLOOM НИВО: ${bloomLevel} - ${bloomGuidance[bloomLevel] || bloomGuidance[3]}
+
+Дай СТРУКТУРНА НАСОКА (не отговор!):
+- Какви АСПЕКТИ да покрие? (3-5 точки)
+- Как да СТРУКТУРИРА отговора?
+- Какво НЕ трябва да пропуска?
+
+ВАЖНО:
+- НЕ давай самия отговор!
+- НЕ давай конкретни факти/дефиниции
+- Само ОРИЕНТИРАЙ какво да включи
+- Отговори на български
+- Бъди кратък (макс 4-5 реда)
+
+Формат:
+"Включи: [аспект1], [аспект2], [аспект3]
+Структура: [препоръка]
+Не забравяй: [важен елемент]"`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  const hint = textContent?.type === 'text' ? textContent.text.trim() : '';
+
+  const cost = (response.usage.input_tokens * 0.8 + response.usage.output_tokens * 4) / 1000000;
+
+  return NextResponse.json({
+    hint,
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

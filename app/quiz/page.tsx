@@ -148,6 +148,14 @@ function QuizContent() {
   const [mistakeAnalysis, setMistakeAnalysis] = useState<MistakeAnalysis | null>(null);
   const [isAnalyzingMistakes, setIsAnalyzingMistakes] = useState(false);
 
+  // Grade save state - prevents duplicate saves and shows feedback
+  const [gradeSaved, setGradeSaved] = useState(false);
+  const [isSavingGrade, setIsSavingGrade] = useState(false);
+
+  // Anki preview modal state
+  const [showAnkiPreview, setShowAnkiPreview] = useState(false);
+  const [ankiCards, setAnkiCards] = useState<Array<{ front: string; back: string; tag: string }>>([]);
+  const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const MAX_HINTS = 3;
 
   const subject = data.subjects.find(s => s.id === subjectId);
@@ -753,19 +761,35 @@ function QuizContent() {
       });
 
       const result = await response.json();
-      if (result.analysis) {
+      if (result.error) {
+        console.error("Mistake analysis error:", result.error);
+        setMistakeAnalysis({
+          summary: "Грешка при анализа: " + result.error,
+          weakConcepts: [],
+          patterns: [],
+          recommendations: [],
+          priorityFocus: null
+        });
+      } else if (result.analysis) {
         setMistakeAnalysis(result.analysis);
         if (result.usage) incrementApiCalls(result.usage.cost);
       }
-    } catch {
-      // Silently fail - analysis is optional
+    } catch (err) {
+      console.error("Mistake analysis fetch error:", err);
+      setMistakeAnalysis({
+        summary: "Мрежова грешка при анализа. Провери интернет връзката.",
+        weakConcepts: [],
+        patterns: [],
+        recommendations: [],
+        priorityFocus: null
+      });
     }
     setIsAnalyzingMistakes(false);
   };
 
-  // Generate and download Anki-compatible flashcards from mistakes
-  const generateAnkiCards = () => {
-    const cards: string[] = [];
+  // Prepare Anki cards for preview (not download)
+  const prepareAnkiCards = () => {
+    const cards: Array<{ front: string; back: string; tag: string }> = [];
 
     quizState.questions.forEach((q, i) => {
       const userAnswer = quizState.answers[i];
@@ -778,19 +802,19 @@ function QuizContent() {
 
       if (!isWrong) return;
 
-      // Front: Question + context
-      // Back: Correct answer + explanation
-      const front = q.question.replace(/\t/g, ' ').replace(/\n/g, '<br>');
-      let back = q.correctAnswer.replace(/\t/g, ' ').replace(/\n/g, '<br>');
+      // Front: Question (clean text, no HTML)
+      const front = q.question.replace(/\t/g, ' ').replace(/\n/g, ' ');
 
+      // Back: Correct answer + explanation (clean text)
+      let back = q.correctAnswer.replace(/\t/g, ' ').replace(/\n/g, ' ');
       if (q.explanation) {
-        back += `<br><br><i>${q.explanation.replace(/\t/g, ' ').replace(/\n/g, '<br>')}</i>`;
+        back += '\n\n' + q.explanation.replace(/\t/g, ' ').replace(/\n/g, ' ');
       }
 
-      // Add concept as tag (third column)
+      // Tag from concept
       const tag = q.concept ? q.concept.replace(/\s+/g, '_') : 'General';
 
-      cards.push(`${front}\t${back}\t${tag}`);
+      cards.push({ front, back, tag });
     });
 
     if (cards.length === 0) {
@@ -798,8 +822,19 @@ function QuizContent() {
       return;
     }
 
-    // Create and download TSV file
-    const content = cards.join('\n');
+    setAnkiCards(cards);
+    setShowAnkiPreview(true);
+    setEditingCardIndex(null);
+  };
+
+  // Export Anki cards to TSV file
+  const exportAnkiCards = () => {
+    if (ankiCards.length === 0) return;
+
+    const content = ankiCards.map(card =>
+      `${card.front.replace(/\t/g, ' ')}\t${card.back.replace(/\t/g, ' ').replace(/\n/g, '<br>')}\t${card.tag}`
+    ).join('\n');
+
     const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
@@ -810,10 +845,28 @@ function QuizContent() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+
+    setShowAnkiPreview(false);
   };
 
+  // Update a single Anki card
+  const updateAnkiCard = (index: number, field: 'front' | 'back' | 'tag', value: string) => {
+    setAnkiCards(prev => prev.map((card, i) =>
+      i === index ? { ...card, [field]: value } : card
+    ));
+  };
+
+  // Delete an Anki card
+  const deleteAnkiCard = (index: number) => {
+    setAnkiCards(prev => prev.filter((_, i) => i !== index));
+    setEditingCardIndex(null);
+  };
+
+
   const handleSaveGrade = () => {
-    if (!subjectId || !topicId || !topic) return;
+    // Prevent duplicate saves
+    if (gradeSaved || isSavingGrade || !subjectId || !topicId || !topic) return;
+    setIsSavingGrade(true);
     const score = calculateScore();
     const grade = getGradeFromScore(score, quizState.questions.length);
     const percentage = (score / quizState.questions.length) * 100;
@@ -962,6 +1015,9 @@ function QuizContent() {
       quizHistory: [...(topic.quizHistory || []), quizResult],
       wrongAnswers: mergedWrongAnswers
     });
+    // Mark as saved and show feedback
+    setGradeSaved(true);
+    setIsSavingGrade(false);
   };
 
   const handleSaveFreeRecallGrade = () => {
@@ -1323,9 +1379,16 @@ function QuizContent() {
           <div className="flex flex-wrap gap-3 justify-center">
             <button
               onClick={handleSaveGrade}
-              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg font-mono"
+              disabled={gradeSaved || isSavingGrade}
+              className={`flex items-center gap-2 px-6 py-3 font-semibold rounded-lg font-mono transition-all ${gradeSaved ? "bg-green-800 text-green-200 cursor-default" : isSavingGrade ? "bg-slate-600 text-slate-300 cursor-wait" : "bg-gradient-to-r from-green-600 to-emerald-600 text-white hover:from-green-700 hover:to-emerald-700"}`}
             >
-              <CheckCircle size={20} /> Запази
+              {isSavingGrade ? (
+                <><RefreshCw size={20} className="animate-spin" /> Запазване...</>
+              ) : gradeSaved ? (
+                <><CheckCircle size={20} /> Запазено!</>
+              ) : (
+                <><CheckCircle size={20} /> Запази</>
+              )}
             </button>
             <button
               onClick={() => {
@@ -1361,7 +1424,7 @@ function QuizContent() {
             {/* Anki Export button - only show if there were wrong answers */}
             {quizState.questions.length - Math.round(score) > 0 && (
               <button
-                onClick={generateAnkiCards}
+                onClick={prepareAnkiCards}
                 className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
                 title="Изтегли грешките като Anki карти (TSV формат)"
               >
@@ -1554,6 +1617,108 @@ function QuizContent() {
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-mono text-sm hover:bg-red-500"
                 >
                   Напусни
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Anki Preview Modal */}
+        {showAnkiPreview && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-cyan-500/30 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-cyan-400 font-mono flex items-center gap-2">
+                  <Download size={20} /> Anki Preview - {ankiCards.length} карти
+                </h3>
+                <button
+                  onClick={() => setShowAnkiPreview(false)}
+                  className="text-slate-400 hover:text-slate-200 text-xl"
+                >
+                  &times;
+                </button>
+              </div>
+
+              <p className="text-sm text-slate-400 font-mono mb-4">
+                Прегледай и редактирай картите преди експорт. Кликни върху карта за редакция.
+              </p>
+
+              <div className="space-y-3 mb-6">
+                {ankiCards.map((card, index) => (
+                  <div
+                    key={index}
+                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                      editingCardIndex === index
+                        ? 'border-cyan-500 bg-slate-700/50'
+                        : 'border-slate-600 hover:border-slate-500 bg-slate-800/50'
+                    }`}
+                    onClick={() => setEditingCardIndex(editingCardIndex === index ? null : index)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <span className="text-cyan-400 font-mono text-sm font-bold">{index + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        {editingCardIndex === index ? (
+                          <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                            <div>
+                              <label className="text-xs text-slate-400 font-mono">Front (Въпрос):</label>
+                              <textarea
+                                value={card.front}
+                                onChange={(e) => updateAnkiCard(index, 'front', e.target.value)}
+                                className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
+                                rows={2}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-400 font-mono">Back (Отговор):</label>
+                              <textarea
+                                value={card.back}
+                                onChange={(e) => updateAnkiCard(index, 'back', e.target.value)}
+                                className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
+                                rows={4}
+                              />
+                            </div>
+                            <div className="flex gap-3">
+                              <div className="flex-1">
+                                <label className="text-xs text-slate-400 font-mono">Tag:</label>
+                                <input
+                                  value={card.tag}
+                                  onChange={(e) => updateAnkiCard(index, 'tag', e.target.value)}
+                                  className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
+                                />
+                              </div>
+                              <button
+                                onClick={() => deleteAnkiCard(index)}
+                                className="self-end px-3 py-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 text-sm font-mono"
+                              >
+                                Изтрий
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <p className="text-slate-200 font-mono text-sm line-clamp-2">{card.front}</p>
+                            <p className="text-slate-400 font-mono text-xs mt-1 line-clamp-2">{card.back}</p>
+                            <span className="inline-block mt-2 px-2 py-0.5 bg-slate-700 text-cyan-400 text-xs rounded font-mono">{card.tag}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowAnkiPreview(false)}
+                  className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg font-mono text-sm hover:bg-slate-600"
+                >
+                  Отказ
+                </button>
+                <button
+                  onClick={exportAnkiCards}
+                  className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-mono text-sm hover:from-cyan-700 hover:to-blue-700 flex items-center gap-2"
+                >
+                  <Download size={16} /> Експорт ({ankiCards.length} карти)
                 </button>
               </div>
             </div>

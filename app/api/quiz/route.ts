@@ -909,22 +909,48 @@ Pattern types: "conceptual_gap" (не разбира концепция), "detai
   }
 
   let responseText = textContent.text.trim();
+  // Clean up markdown code blocks and other formatting
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // Remove any text before the first { and after the last }
+  const firstBrace = responseText.indexOf('{');
+  const lastBrace = responseText.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    responseText = responseText.substring(firstBrace, lastBrace + 1);
+  }
+  // Fix common JSON issues
+  responseText = responseText
+    .replace(/,\s*}/g, '}')  // Remove trailing commas before }
+    .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
+    .replace(/[\x00-\x1F\x7F]/g, ' '); // Remove control characters
 
   let analysis;
   try {
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
-  } catch {
-    // Fallback structure if parsing fails
+    analysis = JSON.parse(responseText);
+    // Validate required fields exist
+    if (!analysis.summary || !analysis.weakConcepts) {
+      throw new Error('Missing required fields');
+    }
+  } catch (parseError) {
+    console.error('JSON parse error in analyze_mistakes:', parseError);
+    console.error('Raw response (first 500 chars):', responseText.substring(0, 500));
+    // Build a more helpful fallback using the raw response
+    const extractedConcepts = mistakes.map(m => m.concept || 'Обща концепция').filter((v, i, a) => a.indexOf(v) === i);
     analysis = {
-      summary: 'Анализът не можа да се генерира правилно.',
-      weakConcepts: mistakes.map(m => m.concept || 'Обща концепция').filter((v, i, a) => a.indexOf(v) === i),
-      patterns: [],
-      recommendations: [{ priority: 'high', action: 'Прегледай грешките внимателно', reason: 'За да разбереш къде грешиш' }],
-      priorityFocus: 'Преговор на материала'
+      summary: 'AI анализът не можа да се парсне. Основни проблемни области: ' + extractedConcepts.slice(0, 3).join(', '),
+      weakConcepts: extractedConcepts,
+      patterns: [{
+        type: 'review_needed',
+        description: 'Прегледай грешките ръчно за по-добро разбиране',
+        frequency: 'N/A'
+      }],
+      recommendations: [
+        { priority: 'high', action: 'Прегледай отделните грешки по-горе', reason: 'Всяка грешка показва конкретен пропуск' },
+        { priority: 'medium', action: 'Фокусирай се върху: ' + extractedConcepts[0], reason: 'Тази концепция се среща в грешките' }
+      ],
+      priorityFocus: extractedConcepts[0] || 'Преговор на материала'
     };
   }
+
 
   const cost = (response.usage.input_tokens * 0.8 + response.usage.output_tokens * 4) / 1000000;
 

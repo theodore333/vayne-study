@@ -339,10 +339,15 @@ export async function POST(request: Request) {
     // Handle DOCX files - extract text first, then process with Claude
     if (isDOCX) {
       console.log('[EXTRACT-Q] Processing DOCX file...');
+      console.log('[EXTRACT-Q] Buffer size:', buffer.length, 'bytes');
       try {
-        const result = await mammoth.extractRawText({ arrayBuffer: fileBuffer });
+        // Use Node.js Buffer instead of ArrayBuffer for better compatibility
+        const result = await mammoth.extractRawText({ buffer: buffer });
         const docxText = result.value;
         console.log('[EXTRACT-Q] DOCX text extracted, length:', docxText.length);
+        if (result.messages && result.messages.length > 0) {
+          console.log('[EXTRACT-Q] DOCX warnings:', result.messages);
+        }
 
         if (!docxText || docxText.trim().length < 50) {
           return new Response(JSON.stringify({
@@ -394,9 +399,21 @@ export async function POST(request: Request) {
 
       } catch (docxError) {
         console.error('[EXTRACT-Q] DOCX extraction failed:', docxError);
+        const errorMsg = docxError instanceof Error ? docxError.message : String(docxError);
+
+        // Provide helpful error messages based on common issues
+        let userMessage = 'Грешка при обработка на Word документа';
+        if (errorMsg.includes('Could not find file')) {
+          userMessage = 'Файлът не е валиден Word документ (.docx)';
+        } else if (errorMsg.includes('End of data')) {
+          userMessage = 'Файлът е повреден или е стар .doc формат. Запази като .docx и опитай отново.';
+        } else if (errorMsg.includes('encrypted')) {
+          userMessage = 'Файлът е защитен с парола. Премахни защитата и опитай отново.';
+        }
+
         return new Response(JSON.stringify({
-          error: 'Грешка при обработка на Word документа',
-          details: docxError instanceof Error ? docxError.message : 'Unknown error'
+          error: userMessage,
+          details: errorMsg
         }), { status: 500, headers: { 'Content-Type': 'application/json' } });
       }
     }

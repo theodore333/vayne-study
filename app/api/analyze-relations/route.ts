@@ -17,16 +17,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Нужни са поне 3 теми за анализ' }, { status: 400 });
     }
 
+    // Limit topics to prevent AI confusion with too much data
+    const MAX_TOPICS = 60;
+    const limitedTopics = topics.length > MAX_TOPICS ? topics.slice(0, MAX_TOPICS) : topics;
+    const wasLimited = topics.length > MAX_TOPICS;
+
+    if (wasLimited) {
+      console.log(`[ANALYZE-RELATIONS] Limited from ${topics.length} to ${MAX_TOPICS} topics`);
+    }
+
     if (!subjectName) {
       return NextResponse.json({ error: 'Missing subject name' }, { status: 400 });
     }
 
-    console.log('[ANALYZE-RELATIONS] Subject:', subjectName, 'Topics:', topics.length);
+    console.log('[ANALYZE-RELATIONS] Subject:', subjectName, 'Topics:', limitedTopics.length, wasLimited ? '(limited)' : '');
 
     const anthropic = new Anthropic({ apiKey });
 
     // Create topic list for prompt
-    const topicList = topics.map((t: { number: number; name: string }) =>
+    const topicList = limitedTopics.map((t: { number: number; name: string }) =>
       `${t.number}. ${t.name}`
     ).join('\n');
 
@@ -135,6 +144,7 @@ ${topicList}
       clusters: parsed.clusters || {},
       relations: parsed.relations || [],
       prerequisites: parsed.prerequisites || [],
+      warning: wasLimited ? `Анализирани са първите ${MAX_TOPICS} теми от общо ${topics.length}` : undefined,
       usage: {
         inputTokens,
         outputTokens,

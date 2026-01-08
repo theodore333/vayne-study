@@ -296,7 +296,7 @@ export default function TimerPage() {
         osc.frequency.value = freq;
         osc.type = 'sine';
         gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.3, startTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
         osc.start(startTime);
         osc.stop(startTime + duration);

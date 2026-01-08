@@ -26,7 +26,9 @@ export default function FloatingTimer() {
   // Pomodoro state from localStorage
   const [pomodoroState, setPomodoroState] = useState<PomodoroState | null>(null);
   const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(0);
-  const [hasPlayedSound, setHasPlayedSound] = useState(false);
+
+  // Use ref instead of state to prevent race condition with multiple intervals
+  const hasPlayedSoundRef = useRef(false);
 
   // Audio ref
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -59,7 +61,7 @@ export default function FloatingTimer() {
         osc.frequency.value = freq;
         osc.type = 'sine';
         gain.gain.setValueAtTime(0, startTime);
-        gain.gain.linearRampToValueAtTime(0.4, startTime + 0.05);
+        gain.gain.linearRampToValueAtTime(0.15, startTime + 0.05);
         gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
         osc.start(startTime);
         osc.stop(startTime + duration);
@@ -106,7 +108,7 @@ export default function FloatingTimer() {
       // Skip if on timer page - timer page handles its own state
       if (actuallyOnTimerPage) {
         setPomodoroState(null);
-        setHasPlayedSound(false);
+        hasPlayedSoundRef.current = false;
         return;
       }
 
@@ -127,9 +129,9 @@ export default function FloatingTimer() {
           setPomodoroTimeLeft(remaining);
 
           // If timer expired while on other pages, play sound (but NOT on timer page)
-          if (state.endTime <= now && !hasPlayedSound && !actuallyOnTimerPage) {
+          if (state.endTime <= now && !hasPlayedSoundRef.current && !actuallyOnTimerPage) {
             playSound();
-            setHasPlayedSound(true);
+            hasPlayedSoundRef.current = true;
 
             const phaseLabel = state.phase === 'work'
               ? `Pomodoro #${state.count + 1} завърши!`
@@ -154,12 +156,12 @@ export default function FloatingTimer() {
     // Check every 500ms for changes
     const interval = setInterval(checkPomodoroState, 500);
     return () => clearInterval(interval);
-  }, [hasPlayedSound, playSound, showNotification, isTimerPage]);
+  }, [playSound, showNotification, isTimerPage]);
 
   // Update pomodoro countdown
   useEffect(() => {
     if (!pomodoroState || isTimerPage) {
-      setHasPlayedSound(false);
+      hasPlayedSoundRef.current = false;
       return;
     }
 
@@ -168,10 +170,10 @@ export default function FloatingTimer() {
       const remaining = Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000));
       setPomodoroTimeLeft(remaining);
 
-      if (remaining <= 0 && !hasPlayedSound && !isTimerPage) {
+      if (remaining <= 0 && !hasPlayedSoundRef.current && !isTimerPage) {
         // Play sound and show notification when timer ends (not on timer page)
         playSound();
-        setHasPlayedSound(true);
+        hasPlayedSoundRef.current = true;
 
         const phaseLabel = pomodoroState.phase === 'work'
           ? `Pomodoro #${pomodoroState.count + 1} завърши!`
@@ -188,7 +190,7 @@ export default function FloatingTimer() {
     updateTimer();
     const interval = setInterval(updateTimer, 100);
     return () => clearInterval(interval);
-  }, [pomodoroState, hasPlayedSound, playSound, showNotification, isTimerPage]);
+  }, [pomodoroState, playSound, showNotification, isTimerPage]);
 
   // Handle visibility change - play sound if timer expired while hidden (not on timer page)
   useEffect(() => {
@@ -197,9 +199,9 @@ export default function FloatingTimer() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && pomodoroState && !isTimerPage) {
         const now = Date.now();
-        if (pomodoroState.endTime <= now && !hasPlayedSound) {
+        if (pomodoroState.endTime <= now && !hasPlayedSoundRef.current) {
           playSound();
-          setHasPlayedSound(true);
+          hasPlayedSoundRef.current = true;
 
           const phaseLabel = pomodoroState.phase === 'work'
             ? `Pomodoro #${pomodoroState.count + 1} завърши!`
@@ -211,7 +213,7 @@ export default function FloatingTimer() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [pomodoroState, hasPlayedSound, playSound, showNotification, isTimerPage]);
+  }, [pomodoroState, playSound, showNotification, isTimerPage]);
 
   // Normal timer tick
   useEffect(() => {

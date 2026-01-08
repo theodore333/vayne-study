@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, ReactNode } from 'react';
-import { Plus, TrendingUp, AlertTriangle, BookOpen, Target, Calendar } from 'lucide-react';
+import { useState, useEffect, ReactNode } from 'react';
+import { Plus, TrendingUp, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, calculateEffectiveHours } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
+import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
 
 // Component prop types
 interface StatsGridProps {
@@ -51,6 +52,32 @@ interface AlertsSectionProps {
 export default function Dashboard() {
   const { data, isLoading } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
+  const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
+  const [ankiLoading, setAnkiLoading] = useState(false);
+
+  // Fetch Anki stats if enabled
+  useEffect(() => {
+    const ankiEnabled = localStorage.getItem('anki-enabled');
+    if (ankiEnabled === 'true') {
+      refreshAnkiStats();
+    }
+  }, []);
+
+  const refreshAnkiStats = async () => {
+    setAnkiLoading(true);
+    try {
+      const connected = await checkAnkiConnect();
+      if (connected) {
+        const stats = await getCollectionStats();
+        setAnkiStats(stats);
+      } else {
+        setAnkiStats(null);
+      }
+    } catch {
+      setAnkiStats(null);
+    }
+    setAnkiLoading(false);
+  };
 
   if (isLoading) {
     return (
@@ -75,6 +102,7 @@ export default function Dashboard() {
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
       <StatsGrid subjects={data.subjects} totalTopics={totalTopics} effectiveHours={effectiveHours} alertsCount={alerts.length} />
+      {ankiStats && <AnkiWidget stats={ankiStats} onRefresh={refreshAnkiStats} loading={ankiLoading} />}
       <StatusOverview statusCounts={statusCounts} totalTopics={totalTopics} />
       <SubjectsSection subjects={data.subjects} onAddClick={() => setShowAddSubject(true)} />
       {alerts.length > 0 && <AlertsSection alerts={alerts} />}
@@ -137,6 +165,52 @@ function StatusOverview({ statusCounts, totalTopics }: StatusOverviewProps) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+interface AnkiWidgetProps {
+  stats: CollectionStats;
+  onRefresh: () => void;
+  loading: boolean;
+}
+
+function AnkiWidget({ stats, onRefresh, loading }: AnkiWidgetProps) {
+  return (
+    <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-blue-500/30">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-blue-500/20">
+            <Layers size={20} className="text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki</h3>
+            <p className="text-xs text-slate-500 font-mono">Due карти днес</p>
+          </div>
+        </div>
+        <button
+          onClick={onRefresh}
+          disabled={loading}
+          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+          title="Обнови"
+        >
+          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-4">
+        <div className="text-center">
+          <div className="text-3xl font-bold font-mono text-blue-400">{stats.dueToday}</div>
+          <div className="text-xs text-slate-500 font-mono">Due</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-bold font-mono text-cyan-400">{stats.newToday}</div>
+          <div className="text-xs text-slate-500 font-mono">New</div>
+        </div>
+        <div className="text-center">
+          <div className="text-3xl font-bold font-mono text-slate-400">{stats.totalCards.toLocaleString()}</div>
+          <div className="text-xs text-slate-500 font-mono">Total</div>
+        </div>
       </div>
     </div>
   );

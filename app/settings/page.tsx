@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus } from '@/lib/types';
+import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
 
 interface ImportResult {
   matched: number;
@@ -30,6 +31,11 @@ export default function SettingsPage() {
   const [csvPreview, setCsvPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [columnMapping, setColumnMapping] = useState<{ name: string; status: string }>({ name: '', status: '' });
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+
+  // Anki state
+  const [ankiConnected, setAnkiConnected] = useState<boolean | null>(null);
+  const [ankiChecking, setAnkiChecking] = useState(false);
+  const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -289,6 +295,37 @@ export default function SettingsPage() {
     }
   };
 
+  // Anki connection check
+  const checkAnki = async () => {
+    setAnkiChecking(true);
+    try {
+      const connected = await checkAnkiConnect();
+      setAnkiConnected(connected);
+
+      if (connected) {
+        const stats = await getCollectionStats();
+        setAnkiStats(stats);
+        localStorage.setItem('anki-enabled', 'true');
+      } else {
+        setAnkiStats(null);
+        localStorage.removeItem('anki-enabled');
+      }
+    } catch {
+      setAnkiConnected(false);
+      setAnkiStats(null);
+      localStorage.removeItem('anki-enabled');
+    }
+    setAnkiChecking(false);
+  };
+
+  // Check Anki on mount if previously enabled
+  useEffect(() => {
+    const ankiEnabled = localStorage.getItem('anki-enabled');
+    if (ankiEnabled === 'true') {
+      checkAnki();
+    }
+  }, []);
+
   const isOverBudget = usageData.monthlyCost >= usageData.monthlyBudget;
   const budgetPercentage = Math.min((usageData.monthlyCost / usageData.monthlyBudget) * 100, 100);
 
@@ -527,6 +564,103 @@ export default function SettingsPage() {
               <span className="text-slate-400">зелено, готово</span>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* AnkiConnect Integration */}
+      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2 mb-4">
+          <Layers size={20} className="text-blue-400" />
+          Anki Интеграция
+        </h2>
+
+        <p className="text-sm text-slate-400 font-mono mb-4">
+          Свържи с Anki чрез AnkiConnect за да виждаш due карти в апа.
+        </p>
+
+        {/* Connection Status */}
+        <div className="flex items-center gap-4 mb-4">
+          <button
+            onClick={checkAnki}
+            disabled={ankiChecking}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white rounded-lg font-mono text-sm transition-colors"
+          >
+            {ankiChecking ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                Проверка...
+              </>
+            ) : (
+              <>
+                <RefreshCw size={16} />
+                {ankiConnected === null ? 'Свържи с Anki' : 'Провери връзката'}
+              </>
+            )}
+          </button>
+
+          {ankiConnected !== null && (
+            <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${
+              ankiConnected
+                ? 'bg-green-900/20 border border-green-800/30'
+                : 'bg-red-900/20 border border-red-800/30'
+            }`}>
+              {ankiConnected ? (
+                <>
+                  <CheckCircle size={16} className="text-green-400" />
+                  <span className="text-sm text-green-300 font-mono">Свързан</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle size={16} className="text-red-400" />
+                  <span className="text-sm text-red-300 font-mono">Не е свързан</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Anki Stats when connected */}
+        {ankiConnected && ankiStats && (
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="bg-slate-800/50 rounded-lg p-4">
+              <p className="text-xs text-slate-500 font-mono mb-1">Due карти</p>
+              <p className="text-2xl font-bold font-mono text-blue-400">
+                {ankiStats.dueToday}
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-4">
+              <p className="text-xs text-slate-500 font-mono mb-1">Нови карти</p>
+              <p className="text-2xl font-bold font-mono text-cyan-400">
+                {ankiStats.newToday}
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-4">
+              <p className="text-xs text-slate-500 font-mono mb-1">Общо карти</p>
+              <p className="text-2xl font-bold font-mono text-slate-300">
+                {ankiStats.totalCards.toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-4">
+              <p className="text-xs text-slate-500 font-mono mb-1">Тестета</p>
+              <p className="text-2xl font-bold font-mono text-slate-300">
+                {ankiStats.totalDecks}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Instructions */}
+        <div className="p-3 bg-slate-800/30 rounded-lg">
+          <p className="text-xs text-slate-500 font-mono mb-2">Как да свържеш:</p>
+          <ol className="text-xs text-slate-400 font-mono space-y-1 list-decimal list-inside">
+            <li>Инсталирай AnkiConnect в Anki (Tools → Add-ons → код: <code className="bg-slate-700 px-1 rounded">2055492159</code>)</li>
+            <li>Рестартирай Anki</li>
+            <li>Дръж Anki отворен на същия компютър</li>
+            <li>Натисни &quot;Свържи с Anki&quot;</li>
+          </ol>
+          <p className="text-xs text-amber-400/80 font-mono mt-2">
+            Работи само локално - Anki трябва да е пуснат.
+          </p>
         </div>
       </div>
 

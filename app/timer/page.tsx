@@ -181,21 +181,28 @@ export default function TimerPage() {
 
       const newCount = pendingCompletion.count + 1;
       setPomodoroCount(newCount);
+
+      // Long break after every N pomodoros
       const isLongBreak = newCount % settings.longBreakAfter === 0;
+      const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
 
-      setPomodoroPhase(isLongBreak ? 'longBreak' : 'shortBreak');
+      console.log(`[Pending] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}`);
+
+      setPomodoroPhase(nextPhase);
       setPomodoroTimeLeft(breakDuration * 60);
+      setIsPaused(false);
 
       // Show notification that we recorded the missed pomodoro
       showNotification(
         `Pomodoro #${newCount} записан!`,
-        'Таймерът изтече докато беше в друг таб'
+        isLongBreak ? 'Време за ДЪЛГА почивка!' : 'Таймерът изтече докато беше в друг таб'
       );
     } else {
       // Break ended
       setPomodoroPhase('work');
       setPomodoroTimeLeft(settings.workDuration * 60);
+      setIsPaused(false);
     }
 
     setPendingCompletion(null);
@@ -232,6 +239,7 @@ export default function TimerPage() {
     playSound();
     setPomodoroEndTime(null);
     setIsRunning(false);
+    setIsPaused(false); // Clear paused state on completion
 
     if (pomodoroPhase === 'work') {
       // Record completed work session
@@ -239,21 +247,29 @@ export default function TimerPage() {
 
       const newCount = pomodoroCount + 1;
       setPomodoroCount(newCount);
+
+      // Long break after every N pomodoros (e.g., 4th, 8th, 12th...)
       const isLongBreak = newCount % settings.longBreakAfter === 0;
+      const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
+
+      console.log(`[Pomodoro] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}`);
 
       // Show notification
       showNotification(
         `Pomodoro #${newCount} завърши!`,
-        isLongBreak ? `Време за дълга почивка (${breakDuration} мин)` : `Време за почивка (${breakDuration} мин)`
+        isLongBreak ? `Време за ДЪЛГА почивка (${breakDuration} мин)` : `Време за почивка (${breakDuration} мин)`
       );
 
-      setPomodoroPhase(isLongBreak ? 'longBreak' : 'shortBreak');
+      // Set next phase and time
+      setPomodoroPhase(nextPhase);
       setPomodoroTimeLeft(breakDuration * 60);
 
       if (settings.autoStartBreaks) {
-        setPomodoroEndTime(Date.now() + breakDuration * 60 * 1000);
-        setIsRunning(true);
+        setTimeout(() => {
+          setPomodoroEndTime(Date.now() + breakDuration * 60 * 1000);
+          setIsRunning(true);
+        }, 100);
       }
     } else {
       // Show notification for break end
@@ -263,8 +279,10 @@ export default function TimerPage() {
       setPomodoroTimeLeft(settings.workDuration * 60);
 
       if (settings.autoStartWork) {
-        setPomodoroEndTime(Date.now() + settings.workDuration * 60 * 1000);
-        setIsRunning(true);
+        setTimeout(() => {
+          setPomodoroEndTime(Date.now() + settings.workDuration * 60 * 1000);
+          setIsRunning(true);
+        }, 100);
       }
     }
   }, [pomodoroPhase, pomodoroCount, settings, playSound, showNotification, addPomodoroSession, selectedSubject, selectedTopic]);
@@ -347,12 +365,21 @@ export default function TimerPage() {
           ? settings.shortBreakDuration * 60
           : settings.longBreakDuration * 60;
 
-      const timeWorked = fullDuration - pomodoroTimeLeft;
+      // Get actual remaining time - if timer is running, calculate from endTime
+      let actualRemaining = pomodoroTimeLeft;
+      if (isRunning && pomodoroEndTime) {
+        actualRemaining = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
+      }
+
+      const timeWorked = fullDuration - actualRemaining;
       const minutesWorked = Math.floor(timeWorked / 60);
+
+      console.log(`[Pomodoro Stop] Phase: ${pomodoroPhase}, Full: ${fullDuration}s, Remaining: ${actualRemaining}s, Worked: ${timeWorked}s (${minutesWorked}m)`);
 
       // Record partial pomodoro if it was a work phase and at least 1 minute worked
       if (pomodoroPhase === 'work' && minutesWorked >= 1) {
         addPomodoroSession(minutesWorked, selectedSubject || undefined, selectedTopic);
+        console.log(`[Pomodoro Stop] Recorded ${minutesWorked} minutes`);
       }
 
       setIsRunning(false);

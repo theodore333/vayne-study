@@ -66,7 +66,7 @@ export default function AddQuestionModal({
 
   const updateOption = (index: number, value: string) => {
     const newOptions = [...options];
-    newOptions[index] = value;
+    newOptions[index] = value.slice(0, 500);
     setOptions(newOptions);
   };
 
@@ -183,8 +183,9 @@ export default function AddQuestionModal({
               <input
                 type="text"
                 value={newBankName}
-                onChange={(e) => setNewBankName(e.target.value)}
+                onChange={(e) => setNewBankName(e.target.value.slice(0, 100))}
                 placeholder="Име на новия сборник (optional)"
+                maxLength={100}
                 className="w-full mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
               />
             )}
@@ -197,11 +198,15 @@ export default function AddQuestionModal({
             </label>
             <textarea
               value={questionText}
-              onChange={(e) => setQuestionText(e.target.value)}
+              onChange={(e) => setQuestionText(e.target.value.slice(0, 2000))}
               placeholder="Напиши въпроса тук..."
               rows={3}
+              maxLength={2000}
               className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500 resize-none"
             />
+            {questionText.length >= 1800 && (
+              <p className="text-xs text-amber-400 mt-1 font-mono">{2000 - questionText.length} символа остават</p>
+            )}
           </div>
 
           {/* Options */}
@@ -283,9 +288,10 @@ export default function AddQuestionModal({
             </label>
             <textarea
               value={explanation}
-              onChange={(e) => setExplanation(e.target.value)}
+              onChange={(e) => setExplanation(e.target.value.slice(0, 1000))}
               placeholder="Защо този отговор е верен..."
               rows={2}
+              maxLength={1000}
               className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500 resize-none"
             />
           </div>

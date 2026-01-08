@@ -6,6 +6,53 @@ import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
 
+// Storage error types
+export type StorageError = 'quota_exceeded' | 'unknown_error' | null;
+
+// Callback for storage errors - can be set by context
+let storageErrorCallback: ((error: StorageError, details?: string) => void) | null = null;
+
+export function setStorageErrorCallback(callback: ((error: StorageError, details?: string) => void) | null): void {
+  storageErrorCallback = callback;
+}
+
+// Check if error is quota exceeded
+function isQuotaExceededError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    // Different browsers use different names
+    return error.name === 'QuotaExceededError' ||
+           error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+           error.code === 22; // Legacy code
+  }
+  return false;
+}
+
+// Estimate current localStorage usage in bytes
+export function getStorageUsage(): { used: number; total: number; percentage: number } {
+  if (typeof window === 'undefined') return { used: 0, total: 5 * 1024 * 1024, percentage: 0 };
+
+  let total = 0;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key) {
+      const value = localStorage.getItem(key);
+      if (value) {
+        total += key.length + value.length;
+      }
+    }
+  }
+
+  // Convert to bytes (UTF-16 = 2 bytes per char)
+  const usedBytes = total * 2;
+  const totalBytes = 5 * 1024 * 1024; // ~5MB typical limit
+
+  return {
+    used: usedBytes,
+    total: totalBytes,
+    percentage: Math.round((usedBytes / totalBytes) * 100)
+  };
+}
+
 // Migration types for loading potentially incomplete/old data from localStorage
 interface LegacyTopic {
   id: string;
@@ -117,13 +164,20 @@ function loadMaterials(): Record<string, string> {
   }
 }
 
-function saveMaterials(materials: Record<string, string>): void {
-  if (typeof window === 'undefined') return;
+function saveMaterials(materials: Record<string, string>): StorageError {
+  if (typeof window === 'undefined') return null;
   try {
     const compressed = LZString.compress(JSON.stringify(materials));
     localStorage.setItem(MATERIALS_KEY, compressed);
+    return null;
   } catch (error) {
     console.error('Error saving materials:', error);
+    if (isQuotaExceededError(error)) {
+      storageErrorCallback?.('quota_exceeded', 'Материалите не могат да бъдат запазени - паметта е пълна');
+      return 'quota_exceeded';
+    }
+    storageErrorCallback?.('unknown_error', 'Грешка при запазване на материалите');
+    return 'unknown_error';
   }
 }
 
@@ -237,8 +291,13 @@ export function loadData(): AppData {
       }))
     }));
 
-    // Apply decay to all topics
-    data.subjects = applyDecayToSubjects(data.subjects);
+    // Apply decay to all topics - but only once per day
+    const lastDecayDate = localStorage.getItem('vayne-last-decay-date');
+    const today = getTodayString();
+    if (lastDecayDate !== today) {
+      data.subjects = applyDecayToSubjects(data.subjects);
+      localStorage.setItem('vayne-last-decay-date', today);
+    }
 
     // Load materials from separate storage and merge into topics
     const materials = loadMaterials();
@@ -252,7 +311,6 @@ export function loadData(): AppData {
     }));
 
     // Migrate dailyStatus - remove old fields, add holiday
-    const today = getTodayString();
     if (data.dailyStatus.date !== today || data.dailyStatus.holiday === undefined) {
       data.dailyStatus = {
         date: today,
@@ -279,8 +337,8 @@ export function loadData(): AppData {
   }
 }
 
-export function saveData(data: AppData): void {
-  if (typeof window === 'undefined') return;
+export function saveData(data: AppData): StorageError {
+  if (typeof window === 'undefined') return null;
 
   try {
     // Extract materials from topics and save separately
@@ -307,7 +365,10 @@ export function saveData(data: AppData): void {
     };
 
     // Save materials separately (always compressed)
-    saveMaterials(materials);
+    const materialsError = saveMaterials(materials);
+    if (materialsError) {
+      return materialsError;
+    }
 
     // Compress and save main data
     const jsonString = JSON.stringify(dataToSave);
@@ -321,8 +382,16 @@ export function saveData(data: AppData): void {
       localStorage.setItem(STORAGE_KEY, jsonString);
       localStorage.setItem(COMPRESSED_FLAG, 'false');
     }
+
+    return null;
   } catch (error) {
     console.error('Error saving data:', error);
+    if (isQuotaExceededError(error)) {
+      storageErrorCallback?.('quota_exceeded', 'Данните не могат да бъдат запазени - паметта е пълна. Опитай да изтриеш неизползвани материали.');
+      return 'quota_exceeded';
+    }
+    storageErrorCallback?.('unknown_error', 'Грешка при запазване на данните');
+    return 'unknown_error';
   }
 }
 
@@ -331,4 +400,5 @@ export function clearData(): void {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(MATERIALS_KEY);
   localStorage.removeItem(COMPRESSED_FLAG);
+  localStorage.removeItem('vayne-last-decay-date');
 }

@@ -10,7 +10,7 @@ import Underline from '@tiptap/extension-underline';
 import {
   X, Minus, Plus, BookOpen, ChevronUp, ChevronLeft, PanelRightClose, PanelRight,
   Type, Lightbulb, Loader2, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
-  Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote
+  Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote, Wand2
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
@@ -141,6 +141,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showCoach, setShowCoach] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isFormatting, setIsFormatting] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -288,6 +289,63 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       alert(error instanceof Error ? error.message : 'Грешка при генериране');
     } finally {
       setLoadingCoach(false);
+    }
+  };
+
+  // Format text with AI
+  const formatTextWithAI = async () => {
+    if (!editor) return;
+
+    const currentText = htmlToMarkdown(editor.getHTML());
+    if (!currentText.trim()) {
+      alert('Няма текст за форматиране');
+      return;
+    }
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      alert('Добави API ключ в Settings');
+      return;
+    }
+
+    setIsFormatting(true);
+
+    try {
+      const response = await fetch('/api/format-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: currentText,
+          apiKey
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Грешка при форматиране');
+      }
+
+      // Update editor with formatted text
+      const formattedHtml = markdownToHtml(data.formattedText);
+      editor.commands.setContent(formattedHtml);
+
+      // Trigger save
+      setHasUnsavedChanges(true);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => {
+        onSaveMaterial(data.formattedText);
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+      }, 500);
+
+    } catch (error) {
+      console.error('Format error:', error);
+      alert(error instanceof Error ? error.message : 'Грешка при форматиране');
+    } finally {
+      setIsFormatting(false);
     }
   };
 
@@ -515,6 +573,23 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               <Plus size={14} />
             </button>
           </div>
+
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
+          {/* AI Format */}
+          <button
+            onClick={formatTextWithAI}
+            disabled={isFormatting}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            title="Форматирай текста с AI (подрежда параграфи, без да променя съдържанието)"
+          >
+            {isFormatting ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : (
+              <Wand2 size={18} />
+            )}
+            <span>{isFormatting ? 'Форматиране...' : 'AI Формат'}</span>
+          </button>
         </div>
       </header>
 
@@ -526,7 +601,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         >
           {/* Images */}
           {topic.materialImages && topic.materialImages.length > 0 && (
-            <div className="max-w-4xl mx-auto px-8 sm:px-16 pt-8">
+            <div className="px-6 pt-6">
               <div className="space-y-4">
                 {topic.materialImages.map((img, idx) => (
                   <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
@@ -536,7 +611,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           )}
 
           {/* Editor */}
-          <article className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
+          <article className="px-6 py-6 max-w-none">
             <style jsx global>{`
               .ProseMirror {
                 font-family: 'Georgia', 'Charter', serif;

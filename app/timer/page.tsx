@@ -21,6 +21,8 @@ export default function TimerPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [showRating, setShowRating] = useState(false);
   const [distractionNote, setDistractionNote] = useState('');
+  const [normalTimerPausedAt, setNormalTimerPausedAt] = useState<number | null>(null); // For normal timer pause
+  const [showStopConfirm, setShowStopConfirm] = useState(false); // Confirmation before stopping pomodoro
 
   // Mode state
   const [timerMode, setTimerMode] = useState<TimerMode>('pomodoro');
@@ -52,7 +54,7 @@ export default function TimerPage() {
   const activeSession = data.timerSessions.find(s => s.endTime === null);
 
   // Track if we need to complete a missed pomodoro (expired while tab closed)
-  const [pendingCompletion, setPendingCompletion] = useState<{ phase: PomodoroPhase; count: number } | null>(null);
+  const [pendingCompletion, setPendingCompletion] = useState<{ phase: PomodoroPhase; count: number; duration: number } | null>(null);
   const [isPaused, setIsPaused] = useState(false); // Track if timer is paused vs stopped
 
   // Restore Pomodoro state from localStorage on mount
@@ -70,13 +72,19 @@ export default function TimerPage() {
         setPomodoroCount(state.count || 0);
         setTimerMode('pomodoro');
 
-        if (state.endTime && state.endTime > now) {
-          // Timer is still running
+        // Add 1 second margin to avoid race conditions with nearly-expired timers
+        // If timer has less than 1 second left, treat it as expired
+        const EXPIRY_MARGIN = 1000; // 1 second
+
+        if (state.endTime && state.endTime > now + EXPIRY_MARGIN) {
+          // Timer is still running with enough time left
           setPomodoroEndTime(state.endTime);
           setIsRunning(true);
-        } else if (state.endTime && state.endTime <= now) {
-          // Timer expired while tab was closed - mark for completion
-          setPendingCompletion({ phase: state.phase, count: state.count || 0 });
+        } else if (state.endTime && state.endTime <= now + EXPIRY_MARGIN) {
+          // Timer expired (or nearly expired) while tab was closed - mark for completion (no sound)
+          // Use saved duration if available, otherwise fall back to current settings
+          const duration = state.duration || (state.phase === 'work' ? 25 : state.phase === 'shortBreak' ? 5 : 15);
+          setPendingCompletion({ phase: state.phase, count: state.count || 0, duration });
           setPomodoroEndTime(null);
           setIsRunning(false);
         } else if (state.pausedTimeLeft && state.pausedTimeLeft > 0) {
@@ -98,16 +106,24 @@ export default function TimerPage() {
     if (!initialized || typeof window === 'undefined') return;
 
     if (timerMode === 'pomodoro') {
+      // Calculate duration based on phase
+      const phaseDuration = pomodoroPhase === 'work'
+        ? settings.workDuration
+        : pomodoroPhase === 'shortBreak'
+          ? settings.shortBreakDuration
+          : settings.longBreakDuration;
+
       const state = {
         phase: pomodoroPhase,
         count: pomodoroCount,
         endTime: isRunning ? pomodoroEndTime : null, // Only save endTime if running
         pausedTimeLeft: isPaused ? pomodoroTimeLeft : null, // Save remaining time if paused
+        duration: phaseDuration, // Save the duration so we know what was recorded
         savedAt: Date.now()
       };
       localStorage.setItem('pomodoro_state', JSON.stringify(state));
     }
-  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized]);
+  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized, settings]);
 
   // Initialize pomodoro time (only if not restored from localStorage and not paused)
   useEffect(() => {
@@ -123,27 +139,39 @@ export default function TimerPage() {
     }
   }, [timerMode, pomodoroPhase, settings, isRunning, pomodoroEndTime, initialized, pendingCompletion, isPaused]);
 
-  // Restore active session
+  // Restore active session - if there's an active session, switch to normal mode and restore it
   useEffect(() => {
     if (activeSession) {
+      // If there's an active normal timer session, switch to normal mode and restore
+      if (timerMode !== 'normal') {
+        setTimerMode('normal');
+      }
       setIsRunning(true);
       setSelectedSubject(activeSession.subjectId);
-      setSelectedTopic(activeSession.topicId);
+      setSelectedTopic(activeSession.topicId || null);
+      // Calculate and set elapsed time immediately
+      const start = new Date(activeSession.startTime).getTime();
+      const now = Date.now();
+      setElapsed(Math.floor((now - start) / 1000));
     }
-  }, [activeSession]);
+  }, [activeSession]); // Removed timerMode from deps to avoid loop
 
   // Normal timer tick
   useEffect(() => {
-    if (!isRunning || timerMode !== 'normal' || !activeSession) return;
+    if (!initialized || !isRunning || timerMode !== 'normal' || !activeSession) return;
 
-    const interval = setInterval(() => {
+    // Update elapsed immediately
+    const updateElapsed = () => {
       const start = new Date(activeSession.startTime).getTime();
       const now = new Date().getTime();
       setElapsed(Math.floor((now - start) / 1000));
-    }, 1000);
+    };
+
+    updateElapsed();
+    const interval = setInterval(updateElapsed, 1000);
 
     return () => clearInterval(interval);
-  }, [isRunning, timerMode, activeSession]);
+  }, [initialized, isRunning, timerMode, activeSession]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -151,6 +179,45 @@ export default function TimerPage() {
       Notification.requestPermission();
     }
   }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      // Space: Start/Pause
+      if (e.code === 'Space' && !showRating && !showManualEntry && !showStopConfirm && activeTab === 'timer') {
+        e.preventDefault();
+        if (isRunning) {
+          handlePause();
+        } else {
+          handleStart();
+        }
+      }
+
+      // Escape: Close modals or stop timer
+      if (e.code === 'Escape') {
+        if (showStopConfirm) {
+          setShowStopConfirm(false);
+        } else if (showManualEntry) {
+          setShowManualEntry(false);
+        } else if (showRating) {
+          // Don't close rating modal with Escape - user must choose
+        }
+      }
+
+      // R: Reset (only when not running)
+      if (e.code === 'KeyR' && !isRunning && !showRating && !showManualEntry && activeTab === 'timer') {
+        handleReset();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRunning, showRating, showManualEntry, showStopConfirm, activeTab]);
 
   const showNotification = useCallback((title: string, body: string) => {
     if (typeof window === 'undefined') return;
@@ -176,8 +243,8 @@ export default function TimerPage() {
 
     // Complete the missed pomodoro
     if (pendingCompletion.phase === 'work') {
-      // Record the completed work session
-      addPomodoroSession(settings.workDuration, selectedSubject || undefined, selectedTopic);
+      // Record the completed work session with the SAVED duration (not current settings)
+      addPomodoroSession(pendingCompletion.duration, selectedSubject || undefined, selectedTopic);
 
       const newCount = pendingCompletion.count + 1;
       setPomodoroCount(newCount);
@@ -187,7 +254,7 @@ export default function TimerPage() {
       const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
 
-      console.log(`[Pending] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}`);
+      console.log(`[Pending] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}, duration: ${pendingCompletion.duration}m`);
 
       setPomodoroPhase(nextPhase);
       setPomodoroTimeLeft(breakDuration * 60);
@@ -195,7 +262,7 @@ export default function TimerPage() {
 
       // Show notification that we recorded the missed pomodoro
       showNotification(
-        `Pomodoro #${newCount} записан!`,
+        `Pomodoro #${newCount} записан! (${pendingCompletion.duration}м)`,
         isLongBreak ? 'Време за ДЪЛГА почивка!' : 'Таймерът изтече докато беше в друг таб'
       );
     } else {
@@ -208,13 +275,19 @@ export default function TimerPage() {
     setPendingCompletion(null);
   }, [initialized, pendingCompletion, settings, addPomodoroSession, selectedSubject, selectedTopic, showNotification]);
 
-  const playSound = useCallback(() => {
+  const playSound = useCallback(async () => {
     if (!settings.soundEnabled) return;
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
       const ctx = audioContextRef.current;
+
+      // Resume context if suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
       const playTone = (freq: number, startTime: number, duration: number) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -232,7 +305,9 @@ export default function TimerPage() {
       playTone(523.25, now, 0.3);
       playTone(659.25, now + 0.15, 0.3);
       playTone(783.99, now + 0.3, 0.4);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Audio playback error:', e);
+    }
   }, [settings.soundEnabled]);
 
   const handlePomodoroComplete = useCallback(() => {
@@ -288,11 +363,12 @@ export default function TimerPage() {
   }, [pomodoroPhase, pomodoroCount, settings, playSound, showNotification, addPomodoroSession, selectedSubject, selectedTopic]);
 
   // Handle visibility change - catch expired timers when tab becomes visible
+  // Only run after initialization to prevent double-handling of expired timers
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !initialized) return;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && pomodoroEndTime && timerMode === 'pomodoro') {
+      if (document.visibilityState === 'visible' && pomodoroEndTime && timerMode === 'pomodoro' && isRunning) {
         const now = Date.now();
         if (pomodoroEndTime <= now) {
           // Timer expired while tab was hidden - trigger completion
@@ -303,11 +379,12 @@ export default function TimerPage() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [pomodoroEndTime, timerMode, handlePomodoroComplete]);
+  }, [initialized, pomodoroEndTime, timerMode, isRunning, handlePomodoroComplete]);
 
   // Pomodoro timer tick - uses actual time to survive background throttling
+  // IMPORTANT: Only run after initialization to prevent sound on page load for expired timers
   useEffect(() => {
-    if (!isRunning || timerMode !== 'pomodoro' || !pomodoroEndTime) return;
+    if (!initialized || !isRunning || timerMode !== 'pomodoro' || !pomodoroEndTime) return;
 
     const updateTimer = () => {
       const now = Date.now();
@@ -326,12 +403,19 @@ export default function TimerPage() {
     const interval = setInterval(updateTimer, 100);
 
     return () => clearInterval(interval);
-  }, [isRunning, timerMode, pomodoroEndTime, handlePomodoroComplete]);
+  }, [initialized, isRunning, timerMode, pomodoroEndTime, handlePomodoroComplete]);
 
   const handleStart = () => {
     if (timerMode === 'normal') {
-      if (!selectedSubject) return;
-      startTimer(selectedSubject, selectedTopic);
+      // If resuming from pause (activeSession exists), just continue
+      if (activeSession && isPaused) {
+        setIsPaused(false);
+        setNormalTimerPausedAt(null);
+      } else if (!activeSession) {
+        // Start new session - subject is optional, use 'general' as fallback
+        startTimer(selectedSubject || 'general', selectedTopic);
+        setElapsed(0);
+      }
     }
     if (timerMode === 'pomodoro') {
       // Set end time based on current remaining time
@@ -344,51 +428,81 @@ export default function TimerPage() {
       setIsPaused(false); // Clear paused state when starting
     }
     setIsRunning(true);
-    setElapsed(0);
   };
 
   const handlePause = () => {
-    // pomodoroTimeLeft is already updated by the timer tick, so just stop
-    setPomodoroEndTime(null);
-    setIsRunning(false);
-    setIsPaused(true); // Mark as paused to preserve remaining time
+    if (timerMode === 'pomodoro') {
+      // pomodoroTimeLeft is already updated by the timer tick, so just stop
+      setPomodoroEndTime(null);
+      setIsRunning(false);
+      setIsPaused(true); // Mark as paused to preserve remaining time
+    } else {
+      // Normal timer pause - store the current elapsed time
+      setNormalTimerPausedAt(elapsed);
+      setIsRunning(false);
+      setIsPaused(true);
+    }
   };
 
   const handleStop = () => {
     if (timerMode === 'normal') {
+      setNormalTimerPausedAt(null);
+      setIsPaused(false);
       setShowRating(true);
     } else {
-      // Calculate time worked before stopping
+      // Show confirmation for pomodoro if timer has been running for more than 30 seconds
       const fullDuration = pomodoroPhase === 'work'
         ? settings.workDuration * 60
         : pomodoroPhase === 'shortBreak'
           ? settings.shortBreakDuration * 60
           : settings.longBreakDuration * 60;
 
-      // Get actual remaining time - if timer is running, calculate from endTime
       let actualRemaining = pomodoroTimeLeft;
       if (isRunning && pomodoroEndTime) {
         actualRemaining = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
       }
 
       const timeWorked = fullDuration - actualRemaining;
-      const minutesWorked = Math.floor(timeWorked / 60);
-
-      console.log(`[Pomodoro Stop] Phase: ${pomodoroPhase}, Full: ${fullDuration}s, Remaining: ${actualRemaining}s, Worked: ${timeWorked}s (${minutesWorked}m)`);
-
-      // Record partial pomodoro if it was a work phase and at least 1 minute worked
-      if (pomodoroPhase === 'work' && minutesWorked >= 1) {
-        addPomodoroSession(minutesWorked, selectedSubject || undefined, selectedTopic);
-        console.log(`[Pomodoro Stop] Recorded ${minutesWorked} minutes`);
+      if (timeWorked > 30 && pomodoroPhase === 'work') {
+        setShowStopConfirm(true);
+      } else {
+        confirmPomodoroStop();
       }
-
-      setIsRunning(false);
-      setPomodoroEndTime(null);
-      setIsPaused(false);
-      setPomodoroPhase('work');
-      setPomodoroTimeLeft(settings.workDuration * 60);
-      // Don't reset pomodoroCount - keep the completed count
     }
+  };
+
+  const confirmPomodoroStop = () => {
+    // Calculate time worked before stopping
+    const fullDuration = pomodoroPhase === 'work'
+      ? settings.workDuration * 60
+      : pomodoroPhase === 'shortBreak'
+        ? settings.shortBreakDuration * 60
+        : settings.longBreakDuration * 60;
+
+    // Get actual remaining time - if timer is running, calculate from endTime
+    let actualRemaining = pomodoroTimeLeft;
+    if (isRunning && pomodoroEndTime) {
+      actualRemaining = Math.max(0, Math.ceil((pomodoroEndTime - Date.now()) / 1000));
+    }
+
+    const timeWorked = fullDuration - actualRemaining;
+    const minutesWorked = Math.floor(timeWorked / 60);
+
+    console.log(`[Pomodoro Stop] Phase: ${pomodoroPhase}, Full: ${fullDuration}s, Remaining: ${actualRemaining}s, Worked: ${timeWorked}s (${minutesWorked}m)`);
+
+    // Record partial pomodoro if it was a work phase and at least 1 minute worked
+    if (pomodoroPhase === 'work' && minutesWorked >= 1) {
+      addPomodoroSession(minutesWorked, selectedSubject || undefined, selectedTopic);
+      console.log(`[Pomodoro Stop] Recorded ${minutesWorked} minutes`);
+    }
+
+    setIsRunning(false);
+    setPomodoroEndTime(null);
+    setIsPaused(false);
+    setPomodoroPhase('work');
+    setPomodoroTimeLeft(settings.workDuration * 60);
+    setShowStopConfirm(false);
+    // Don't reset pomodoroCount - keep the completed count
   };
 
   const handleRatingSubmit = (rating: number | null) => {
@@ -404,6 +518,7 @@ export default function TimerPage() {
     setPomodoroTimeLeft(settings.workDuration * 60);
     setPomodoroEndTime(null);
     setIsRunning(false);
+    setIsPaused(false);
   };
 
   const handleReset = () => {
@@ -414,6 +529,8 @@ export default function TimerPage() {
     setPomodoroTimeLeft(settings.workDuration * 60);
     setPomodoroCount(0);
     setElapsed(0);
+    setNormalTimerPausedAt(null);
+    setSelectedTopic(null); // Reset topic on mode change/reset
   };
 
   const formatTime = (seconds: number) => {
@@ -484,24 +601,40 @@ export default function TimerPage() {
       sessionMinutes = sessSessions.reduce((acc, s) => acc + s.duration, 0);
     }
 
-    // Streak
+    // Streak - count consecutive days with study sessions
     const dates = new Set(data.timerSessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0]));
     let streak = 0;
     const checkDate = new Date();
-    while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
-      if (dates.has(dateStr)) {
-        streak++;
+
+    // First check today
+    const todayStr = checkDate.toISOString().split('T')[0];
+    if (dates.has(todayStr)) {
+      streak = 1;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      // If no session today, check if yesterday had a session (streak can still continue)
+      checkDate.setDate(checkDate.getDate() - 1);
+      const yesterdayStr = checkDate.toISOString().split('T')[0];
+      if (!dates.has(yesterdayStr)) {
+        // No session today or yesterday - streak is 0
+        streak = 0;
+      } else {
+        streak = 1;
         checkDate.setDate(checkDate.getDate() - 1);
-      } else if (streak === 0) {
-        checkDate.setDate(checkDate.getDate() - 1);
-        if (dates.has(checkDate.toISOString().split('T')[0])) {
+      }
+    }
+
+    // Count backwards from the starting point
+    if (streak > 0) {
+      while (true) {
+        const dateStr = checkDate.toISOString().split('T')[0];
+        if (dates.has(dateStr)) {
           streak++;
           checkDate.setDate(checkDate.getDate() - 1);
-          continue;
+        } else {
+          break;
         }
-        break;
-      } else break;
+      }
     }
 
     // By subject this month
@@ -605,8 +738,16 @@ export default function TimerPage() {
           {/* Mode Selector */}
           <div className="flex gap-2">
             <button
-              onClick={() => { setTimerMode('pomodoro'); handleReset(); }}
-              className={`flex-1 py-3 px-4 rounded-xl font-mono text-sm transition-all ${
+              onClick={() => {
+                // Stop active normal session if switching to pomodoro
+                if (activeSession && timerMode === 'normal') {
+                  stopTimerWithNote(null, 'Превключих на Pomodoro');
+                }
+                setTimerMode('pomodoro');
+                handleReset();
+              }}
+              disabled={isRunning && timerMode === 'pomodoro'}
+              className={`flex-1 py-3 px-4 rounded-xl font-mono text-sm transition-all disabled:opacity-50 ${
                 timerMode === 'pomodoro'
                   ? 'bg-cyan-500/20 border-2 border-cyan-500 text-cyan-400'
                   : 'bg-slate-800/50 border-2 border-slate-700 text-slate-400 hover:border-slate-600'
@@ -616,8 +757,14 @@ export default function TimerPage() {
               Pomodoro
             </button>
             <button
-              onClick={() => { setTimerMode('normal'); handleReset(); }}
-              className={`flex-1 py-3 px-4 rounded-xl font-mono text-sm transition-all ${
+              onClick={() => {
+                // Don't switch if pomodoro timer is running
+                if (isRunning && timerMode === 'pomodoro') return;
+                setTimerMode('normal');
+                handleReset();
+              }}
+              disabled={isRunning && timerMode === 'pomodoro'}
+              className={`flex-1 py-3 px-4 rounded-xl font-mono text-sm transition-all disabled:opacity-50 ${
                 timerMode === 'normal'
                   ? 'bg-purple-500/20 border-2 border-purple-500 text-purple-400'
                   : 'bg-slate-800/50 border-2 border-slate-700 text-slate-400 hover:border-slate-600'
@@ -641,25 +788,37 @@ export default function TimerPage() {
                 <div>
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Работа (мин)</label>
                   <input type="number" value={settings.workDuration}
-                    onChange={(e) => updatePomodoroSettings({ workDuration: parseInt(e.target.value) || 25 })}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val >= 1 && val <= 120) updatePomodoroSettings({ workDuration: val });
+                    }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="120" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Кратка почивка</label>
                   <input type="number" value={settings.shortBreakDuration}
-                    onChange={(e) => updatePomodoroSettings({ shortBreakDuration: parseInt(e.target.value) || 5 })}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val >= 1 && val <= 30) updatePomodoroSettings({ shortBreakDuration: val });
+                    }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="30" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Дълга почивка</label>
                   <input type="number" value={settings.longBreakDuration}
-                    onChange={(e) => updatePomodoroSettings({ longBreakDuration: parseInt(e.target.value) || 15 })}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val >= 1 && val <= 60) updatePomodoroSettings({ longBreakDuration: val });
+                    }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="60" />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Дълга след # цикъла</label>
                   <input type="number" value={settings.longBreakAfter}
-                    onChange={(e) => updatePomodoroSettings({ longBreakAfter: parseInt(e.target.value) || 4 })}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      if (val >= 1 && val <= 10) updatePomodoroSettings({ longBreakAfter: val });
+                    }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="10" />
                 </div>
               </div>
@@ -843,13 +1002,15 @@ export default function TimerPage() {
 
               <div className="flex items-center justify-center gap-4">
                 {!isRunning ? (
-                  <button onClick={handleStart} disabled={timerMode === 'normal' && !selectedSubject}
-                    className={`flex items-center gap-3 px-8 py-4 text-white font-semibold rounded-xl transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed ${
+                  <button onClick={handleStart}
+                    className={`flex items-center gap-3 px-8 py-4 text-white font-semibold rounded-xl transition-all font-mono ${
                       timerMode === 'pomodoro' ? 'bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500'
                       : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
                     }`}>
                     <Play size={24} />
-                    {pomodoroPhase !== 'work' ? 'Почивка' : 'Започни'}
+                    {isPaused ? 'Продължи' :
+                     pomodoroPhase === 'shortBreak' ? 'Кратка почивка' :
+                     pomodoroPhase === 'longBreak' ? 'Дълга почивка' : 'Започни'}
                   </button>
                 ) : (
                   <>
@@ -870,11 +1031,15 @@ export default function TimerPage() {
                   </>
                 )}
                 {(pomodoroCount > 0 || elapsed > 0) && !isRunning && (
-                  <button onClick={handleReset} className="p-4 bg-slate-800 text-slate-400 rounded-xl hover:bg-slate-700 hover:text-slate-200 transition-all">
+                  <button onClick={handleReset} className="p-4 bg-slate-800 text-slate-400 rounded-xl hover:bg-slate-700 hover:text-slate-200 transition-all" title="Нулирай (R)">
                     <RotateCcw size={20} />
                   </button>
                 )}
               </div>
+              {/* Keyboard shortcut hint */}
+              <p className="text-xs text-slate-600 font-mono mt-4 text-center">
+                Space: старт/пауза • R: нулирай • Esc: затвори
+              </p>
             </div>
           </div>
 
@@ -927,6 +1092,17 @@ export default function TimerPage() {
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {data.timerSessions.filter(s => s.endTime !== null).slice().reverse().slice(0, 50).map(session => {
                   const subject = data.subjects.find(s => s.id === session.subjectId);
+                  // Handle special subject IDs
+                  const getSubjectDisplay = () => {
+                    if (subject) return { name: subject.name, color: subject.color };
+                    switch (session.subjectId) {
+                      case 'general': return { name: 'Общо учене', color: '#6366f1' };
+                      case 'manual': return { name: 'Ръчно добавено', color: '#22c55e' };
+                      case 'pomodoro': return { name: 'Pomodoro', color: '#06b6d4' };
+                      default: return { name: 'Неизвестен', color: '#666' };
+                    }
+                  };
+                  const subjectDisplay = getSubjectDisplay();
                   const sessionDate = new Date(session.startTime);
                   const isToday = session.startTime.startsWith(stats.today);
                   const dateStr = isToday ? sessionDate.toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' })
@@ -934,9 +1110,9 @@ export default function TimerPage() {
                   return (
                     <div key={session.id} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject?.color || '#666' }} />
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectDisplay.color }} />
                         <div>
-                          <span className="text-slate-200 font-mono text-sm">{subject?.name || 'Неизвестен'}</span>
+                          <span className="text-slate-200 font-mono text-sm">{subjectDisplay.name}</span>
                           {session.distractionNote && (
                             <p className="text-xs text-slate-500 font-mono mt-0.5 max-w-xs truncate" title={session.distractionNote}>
                               💭 {session.distractionNote}
@@ -1022,18 +1198,29 @@ export default function TimerPage() {
                 .sort((a, b) => b[1] - a[1])
                 .map(([subjectId, minutes]) => {
                   const subject = data.subjects.find(s => s.id === subjectId);
+                  // Handle special subject IDs
+                  const getSubjectDisplay = () => {
+                    if (subject) return { name: subject.name, color: subject.color };
+                    switch (subjectId) {
+                      case 'general': return { name: 'Общо учене', color: '#6366f1' };
+                      case 'manual': return { name: 'Ръчно добавено', color: '#22c55e' };
+                      case 'pomodoro': return { name: 'Pomodoro', color: '#06b6d4' };
+                      default: return { name: 'Неизвестен', color: '#666' };
+                    }
+                  };
+                  const subjectDisplay = getSubjectDisplay();
                   const percentage = stats.monthMinutes > 0 ? (minutes / stats.monthMinutes) * 100 : 0;
                   return (
                     <div key={subjectId}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject?.color || '#666' }} />
-                          <span className="text-sm text-slate-300 font-mono">{subject?.name || 'Неизвестен'}</span>
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectDisplay.color }} />
+                          <span className="text-sm text-slate-300 font-mono">{subjectDisplay.name}</span>
                         </div>
                         <span className="text-sm text-slate-400 font-mono">{formatMinutes(minutes)}</span>
                       </div>
                       <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, backgroundColor: subject?.color || '#666' }} />
+                        <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, backgroundColor: subjectDisplay.color }} />
                       </div>
                     </div>
                   );
@@ -1183,7 +1370,7 @@ export default function TimerPage() {
                 onClick={() => {
                   const totalMinutes = manualHours * 60 + manualMinutes;
                   if (totalMinutes > 0) {
-                    addPomodoroSession(totalMinutes, manualSubject || 'manual', null);
+                    addPomodoroSession(totalMinutes, manualSubject || 'manual', null, manualNote.trim() || undefined);
                     setShowManualEntry(false);
                     setManualHours(0);
                     setManualMinutes(30);
@@ -1195,6 +1382,34 @@ export default function TimerPage() {
                 className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-semibold rounded-xl transition-colors font-mono disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Добави {manualHours > 0 ? `${manualHours}ч ` : ''}{manualMinutes}м
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stop Confirmation Modal */}
+      {showStopConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowStopConfirm(false)} />
+          <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="text-lg font-semibold text-slate-100 mb-2 font-mono text-center">Спри Pomodoro?</h3>
+            <p className="text-sm text-slate-400 mb-4 text-center font-mono">
+              Имаш {Math.floor((settings.workDuration * 60 - pomodoroTimeLeft) / 60)} минути работа.
+              {Math.floor((settings.workDuration * 60 - pomodoroTimeLeft) / 60) >= 1 && ' Ще бъдат записани.'}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowStopConfirm(false)}
+                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 font-semibold rounded-xl transition-colors font-mono"
+              >
+                Отказ
+              </button>
+              <button
+                onClick={confirmPomodoroStop}
+                className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white font-semibold rounded-xl transition-colors font-mono"
+              >
+                Спри
               </button>
             </div>
           </div>

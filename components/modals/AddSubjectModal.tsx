@@ -63,11 +63,15 @@ export default function AddSubjectModal({ onClose }: Props) {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value.slice(0, 100))}
               placeholder="напр. Анатомия"
               autoFocus
+              maxLength={100}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono"
             />
+            {name.length >= 90 && (
+              <p className="text-xs text-amber-400 mt-1 font-mono">{100 - name.length} символа остават</p>
+            )}
           </div>
 
           {/* Color */}
@@ -132,8 +136,12 @@ export default function AddSubjectModal({ onClose }: Props) {
               type="date"
               value={examDate}
               onChange={(e) => setExamDate(e.target.value)}
+              min={new Date().toISOString().split('T')[0]}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
             />
+            {examDate && new Date(examDate) < new Date(new Date().toDateString()) && (
+              <p className="text-xs text-red-400 mt-1 font-mono">⚠️ Датата е в миналото</p>
+            )}
           </div>
 
           {/* Exam Format */}
@@ -144,13 +152,15 @@ export default function AddSubjectModal({ onClose }: Props) {
             </label>
             <textarea
               value={examFormat}
-              onChange={(e) => setExamFormat(e.target.value)}
+              onChange={(e) => setExamFormat(e.target.value.slice(0, 500))}
               placeholder="напр. 20 тестови въпроса, 2 казуса, 1 есе"
               rows={2}
+              maxLength={500}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"
             />
             <p className="text-xs text-slate-500 mt-1 font-mono">
               AI ще генерира quiz въпроси в този формат
+              {examFormat.length >= 450 && <span className="text-amber-400 ml-2">({500 - examFormat.length} символа остават)</span>}
             </p>
           </div>
 

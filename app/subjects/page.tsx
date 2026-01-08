@@ -9,6 +9,7 @@ import { TopicStatus, Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
 import ImportFileModal from '@/components/modals/ImportFileModal';
+import ConfirmDialog from '@/components/modals/ConfirmDialog';
 import Link from 'next/link';
 
 function LoadingFallback() {
@@ -58,6 +59,9 @@ function SubjectsContent() {
   // Bulk edit mode
   const [bulkEditMode, setBulkEditMode] = useState(false);
   const [selectedTopicsForBulk, setSelectedTopicsForBulk] = useState<string[]>([]);
+
+  // Delete confirmation
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Analyze relations state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -384,9 +388,13 @@ function SubjectsContent() {
                             type="date"
                             value={editExamDate}
                             onChange={(e) => setEditExamDate(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
                             className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm text-slate-100 font-mono"
                             placeholder="Дата на изпит"
                           />
+                          {editExamDate && new Date(editExamDate) < new Date(new Date().toDateString()) && (
+                            <p className="text-xs text-red-400 font-mono">⚠️ Датата е в миналото</p>
+                          )}
                           <textarea
                             value={editExamFormat}
                             onChange={(e) => setEditExamFormat(e.target.value)}
@@ -529,7 +537,7 @@ function SubjectsContent() {
                       )}
                     </button>
                     <button
-                      onClick={() => { if (confirm("Изтрий предмета?")) { deleteSubject(selectedSubject.id); setSelectedSubjectId(null); } }}
+                      onClick={() => setShowDeleteConfirm(true)}
                       className="flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors font-mono text-sm"
                     >
                       <Trash2 size={16} />
@@ -936,6 +944,22 @@ function SubjectsContent() {
           subjectId={selectedSubjectId}
           subjectName={selectedSubject.name}
           onClose={() => setShowAIImport(false)}
+        />
+      )}
+
+      {/* Delete Subject Confirmation */}
+      {selectedSubject && (
+        <ConfirmDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={() => {
+            deleteSubject(selectedSubject.id);
+            setSelectedSubjectId(null);
+          }}
+          title="Изтрий предмет"
+          message={`Сигурен ли си, че искаш да изтриеш "${selectedSubject.name}"? Всички теми, материали и прогрес ще бъдат загубени.`}
+          confirmText="Изтрий"
+          variant="danger"
         />
       )}
     </div>

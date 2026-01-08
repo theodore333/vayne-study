@@ -117,6 +117,30 @@ function QuizContent() {
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
 
+  // Validation state - detect when params don't match existing data
+  const [invalidParamsWarning, setInvalidParamsWarning] = useState<string | null>(null);
+
+  // Validate search params on mount
+  useEffect(() => {
+    if (subjectId && !subject) {
+      setInvalidParamsWarning(`Предмет с ID "${subjectId}" не съществува.`);
+    } else if (subjectId && topicId && !topic) {
+      setInvalidParamsWarning(`Тема с ID "${topicId}" не съществува в предмет "${subject?.name}".`);
+    } else if (isMultiMode && topicsParam) {
+      const invalidTopics = topicsParam.split(',').filter(pair => {
+        const [subjId, topId] = pair.split(':');
+        const subj = data.subjects.find(s => s.id === subjId);
+        const top = subj?.topics.find(t => t.id === topId);
+        return !subj || !top;
+      });
+      if (invalidTopics.length > 0) {
+        setInvalidParamsWarning(`${invalidTopics.length} невалидни теми бяха пропуснати.`);
+      }
+    } else {
+      setInvalidParamsWarning(null);
+    }
+  }, [subjectId, topicId, subject, topic, isMultiMode, topicsParam, data.subjects]);
+
   // Initialize custom bloom level from topic
   useEffect(() => {
     if (topic?.currentBloomLevel) {
@@ -585,24 +609,28 @@ function QuizContent() {
     quizState.questions.forEach((q, i) => {
       const userAnswer = quizState.answers[i];
       const concept = q.concept || 'General';
-      const isCorrect = (q.type === 'multiple_choice' || q.type === 'case_study')
-        ? userAnswer === q.correctAnswer
-        : false; // Open questions are considered for review
 
-      if (isCorrect) {
-        masteredConcepts.add(concept);
-      } else if (userAnswer !== null) {
-        newWrongAnswers.push({
-          question: q.question,
-          userAnswer: userAnswer,
-          correctAnswer: q.correctAnswer,
-          concept: concept,
-          bloomLevel: q.bloomLevel || 1,
-          date: new Date().toISOString(),
-          drillCount: 0,
-          timeSpent: questionTimes[i] || 0
-        });
+      // Only track MCQ and case study questions for wrong answers
+      // Open questions can't be reliably verified as wrong
+      if (q.type === 'multiple_choice' || q.type === 'case_study') {
+        const isCorrect = userAnswer === q.correctAnswer;
+
+        if (isCorrect) {
+          masteredConcepts.add(concept);
+        } else if (userAnswer !== null) {
+          newWrongAnswers.push({
+            question: q.question,
+            userAnswer: userAnswer,
+            correctAnswer: q.correctAnswer,
+            concept: concept,
+            bloomLevel: q.bloomLevel || 1,
+            date: new Date().toISOString(),
+            drillCount: 0,
+            timeSpent: questionTimes[i] || 0
+          });
+        }
       }
+      // For open questions, just track as "reviewed" but don't count as mastered or wrong
     });
 
     // Handle wrong answers based on mode
@@ -763,6 +791,17 @@ function QuizContent() {
           </p>
         </div>
 
+        {/* Invalid params warning */}
+        {invalidParamsWarning && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start gap-3">
+            <AlertCircle size={18} className="text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-amber-200 font-mono">{invalidParamsWarning}</p>
+              <p className="text-xs text-amber-400/60 font-mono mt-1">Избери валидна тема от списъка по-долу.</p>
+            </div>
+          </div>
+        )}
+
         <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 font-mono">
             Избери тема за тест
@@ -874,7 +913,10 @@ function QuizContent() {
               <CheckCircle size={20} /> Запази
             </button>
             <button
-              onClick={resetQuiz}
+              onClick={() => {
+                handleSaveFreeRecallGrade(); // Auto-save before reset
+                resetQuiz();
+              }}
               className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-slate-200 font-semibold rounded-lg hover:bg-slate-600 transition-all font-mono"
             >
               <RefreshCw size={20} /> Отново
@@ -949,7 +991,10 @@ function QuizContent() {
               <CheckCircle size={20} /> Запази
             </button>
             <button
-              onClick={resetQuiz}
+              onClick={() => {
+                handleSaveGrade(); // Auto-save before reset to preserve wrong answers
+                resetQuiz();
+              }}
               className="flex items-center gap-2 px-6 py-3 bg-slate-700 text-slate-200 font-semibold rounded-lg font-mono"
             >
               <RefreshCw size={20} /> Нов тест

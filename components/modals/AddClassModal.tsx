@@ -126,8 +126,9 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
             <input
               type="text"
               value={room}
-              onChange={(e) => setRoom(e.target.value)}
+              onChange={(e) => setRoom(e.target.value.slice(0, 50))}
               placeholder="напр. 305"
+              maxLength={50}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 font-mono"
             />
           </div>

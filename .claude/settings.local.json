@@ -14,7 +14,12 @@
       "Bash(npx tsc --noEmit)",
       "Bash(timeout /t 5)",
       "Bash(git push:*)",
-      "Bash(npm i:*)"
+      "Bash(npm i:*)",
+      "Bash(timeout:*)",
+      "Bash(ping:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(npm install:*)"
     ]
   }
 }

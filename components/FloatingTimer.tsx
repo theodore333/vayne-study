@@ -32,7 +32,14 @@ export default function FloatingTimer() {
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // Play notification sound
+  // IMPORTANT: Check pathname directly to avoid race conditions during navigation
   const playSound = useCallback(() => {
+    // Double-check we're not on timer page (race condition prevention)
+    if (typeof window !== 'undefined' && window.location.pathname === '/timer') {
+      console.log('[FloatingTimer] Blocked sound - on timer page');
+      return;
+    }
+
     try {
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -87,22 +94,40 @@ export default function FloatingTimer() {
   const isTimerPage = pathname === '/timer';
 
   // Load pomodoro state from localStorage
+  // IMPORTANT: Don't handle expiry on timer page - let the timer page handle it
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // Skip everything if on timer page - check both React state and actual location
+    // This prevents race conditions during navigation
+    const actuallyOnTimerPage = isTimerPage || window.location.pathname === '/timer';
+
     const checkPomodoroState = () => {
+      // Skip if on timer page - timer page handles its own state
+      if (actuallyOnTimerPage) {
+        setPomodoroState(null);
+        setHasPlayedSound(false);
+        return;
+      }
+
       try {
         const saved = localStorage.getItem('pomodoro_state');
         if (saved) {
           const state = JSON.parse(saved) as PomodoroState;
           const now = Date.now();
-          // Always set state if it exists - let the countdown effect handle expiration
+
+          // Only track timers that have endTime (are running)
+          if (!state.endTime) {
+            setPomodoroState(null);
+            return;
+          }
+
           setPomodoroState(state);
           const remaining = Math.max(0, Math.ceil((state.endTime - now) / 1000));
           setPomodoroTimeLeft(remaining);
 
-          // If timer just expired and we haven't played sound yet, play it now
-          if (state.endTime <= now && !hasPlayedSound) {
+          // If timer expired while on other pages, play sound (but NOT on timer page)
+          if (state.endTime <= now && !hasPlayedSound && !actuallyOnTimerPage) {
             playSound();
             setHasPlayedSound(true);
 
@@ -115,9 +140,7 @@ export default function FloatingTimer() {
 
             showNotification(phaseLabel, phaseBody);
 
-            // Clear localStorage after playing sound
-            localStorage.removeItem('pomodoro_state');
-            setPomodoroState(null);
+            // Don't clear localStorage - let timer page handle state transitions
           }
         } else {
           setPomodoroState(null);
@@ -131,11 +154,11 @@ export default function FloatingTimer() {
     // Check every 500ms for changes
     const interval = setInterval(checkPomodoroState, 500);
     return () => clearInterval(interval);
-  }, [hasPlayedSound, playSound, showNotification]);
+  }, [hasPlayedSound, playSound, showNotification, isTimerPage]);
 
   // Update pomodoro countdown
   useEffect(() => {
-    if (!pomodoroState) {
+    if (!pomodoroState || isTimerPage) {
       setHasPlayedSound(false);
       return;
     }
@@ -145,8 +168,8 @@ export default function FloatingTimer() {
       const remaining = Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000));
       setPomodoroTimeLeft(remaining);
 
-      if (remaining <= 0 && !hasPlayedSound) {
-        // Play sound and show notification when timer ends
+      if (remaining <= 0 && !hasPlayedSound && !isTimerPage) {
+        // Play sound and show notification when timer ends (not on timer page)
         playSound();
         setHasPlayedSound(true);
 
@@ -165,14 +188,14 @@ export default function FloatingTimer() {
     updateTimer();
     const interval = setInterval(updateTimer, 100);
     return () => clearInterval(interval);
-  }, [pomodoroState, hasPlayedSound, playSound, showNotification]);
+  }, [pomodoroState, hasPlayedSound, playSound, showNotification, isTimerPage]);
 
-  // Handle visibility change - play sound if timer expired while hidden
+  // Handle visibility change - play sound if timer expired while hidden (not on timer page)
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || isTimerPage) return;
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && pomodoroState) {
+      if (document.visibilityState === 'visible' && pomodoroState && !isTimerPage) {
         const now = Date.now();
         if (pomodoroState.endTime <= now && !hasPlayedSound) {
           playSound();
@@ -188,7 +211,7 @@ export default function FloatingTimer() {
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [pomodoroState, hasPlayedSound, playSound, showNotification]);
+  }, [pomodoroState, hasPlayedSound, playSound, showNotification, isTimerPage]);
 
   // Normal timer tick
   useEffect(() => {

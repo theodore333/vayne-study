@@ -5,6 +5,7 @@ import { AppProvider } from "@/lib/context";
 import Sidebar from "@/components/Sidebar";
 import MainContent from "@/components/MainContent";
 import FloatingTimer from "@/components/FloatingTimer";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -25,11 +26,13 @@ export default function RootLayout({
     <html lang="bg">
       <body className={`${geistMono.variable} antialiased`}>
         <AppProvider>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <MainContent>{children}</MainContent>
-          </div>
-          <FloatingTimer />
+          <ErrorBoundary>
+            <div className="flex min-h-screen">
+              <Sidebar />
+              <MainContent>{children}</MainContent>
+            </div>
+            <FloatingTimer />
+          </ErrorBoundary>
         </AppProvider>
       </body>
     </html>

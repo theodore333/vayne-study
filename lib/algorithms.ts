@@ -173,12 +173,38 @@ export function applyDecay(topic: Topic): Topic {
   if (topic.status === 'gray') return topic;
 
   const daysSinceReview = getDaysSince(topic.lastReview);
-  const rules = DECAY_RULES[topic.status];
+  let currentStatus: TopicStatus = topic.status;
+  let totalDecayDays = 0;
 
-  for (const rule of rules) {
-    if (daysSinceReview >= rule.days) {
-      return { ...topic, status: rule.newStatus };
+  // Apply decay iteratively - topic can fall multiple levels if enough time passed
+  // This handles cases like: green topic not reviewed for 40 days should become gray
+  // (green → yellow after 10d, yellow → orange after 7d, orange → gray after 12d)
+  while (currentStatus !== 'gray') {
+    const decayStatus = currentStatus as 'green' | 'yellow' | 'orange';
+    const rules = DECAY_RULES[decayStatus];
+    if (!rules || rules.length === 0) break;
+
+    // Sort rules by days descending to check longest threshold first
+    const sortedRules = [...rules].sort((a, b) => b.days - a.days);
+
+    let decayed = false;
+    for (const rule of sortedRules) {
+      // Check if remaining days since review exceed this threshold
+      const remainingDays = daysSinceReview - totalDecayDays;
+      if (remainingDays >= rule.days) {
+        totalDecayDays += rule.days;
+        currentStatus = rule.newStatus;
+        decayed = true;
+        break;
+      }
     }
+
+    // If no decay rule matched, stop
+    if (!decayed) break;
+  }
+
+  if (currentStatus !== topic.status) {
+    return { ...topic, status: currentStatus };
   }
 
   return topic;
@@ -281,10 +307,12 @@ export function calculateDailyTopics(
 
     const examDate = new Date(subject.examDate);
     examDate.setHours(0, 0, 0, 0);
-    const daysLeft = Math.max(1, Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+    const rawDaysLeft = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Skip past exams
-    if (daysLeft < 0) continue;
+    // Skip past exams (including today - exam day)
+    if (rawDaysLeft <= 0) continue;
+
+    const daysLeft = rawDaysLeft;
 
     // Count non-green topics
     const remainingTopics = subject.topics.filter(t => t.status !== 'green').length;

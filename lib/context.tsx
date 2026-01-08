@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize } from './types';
-import { loadData, saveData } from './storage';
+import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
@@ -43,7 +43,7 @@ interface AppContextType {
   // Timer operations
   startTimer: (subjectId: string, topicId: string | null) => void;
   stopTimer: (rating: number | null) => void;
-  addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null) => void;
+  addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string) => void;
 
   // GPA operations
   addSemesterGrade: (grade: Omit<SemesterGrade, 'id'>) => void;
@@ -78,6 +78,11 @@ interface AppContextType {
   // UI State
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // Storage
+  storageError: { error: StorageError; message?: string } | null;
+  clearStorageError: () => void;
+  getStorageUsage: () => { used: number; total: number; percentage: number };
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -142,6 +147,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
+  const [storageError, setStorageError] = useState<{ error: StorageError; message?: string } | null>(null);
+
+  // Set up storage error callback
+  useEffect(() => {
+    setStorageErrorCallback((error, message) => {
+      if (error) {
+        setStorageError({ error, message });
+      }
+    });
+    return () => setStorageErrorCallback(null);
+  }, []);
+
+  const clearStorageError = useCallback(() => {
+    setStorageError(null);
+  }, []);
 
   // Load sidebar state from localStorage
   useEffect(() => {
@@ -231,11 +251,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const deleteSubject = useCallback((id: string) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.filter(s => s.id !== id),
-      schedule: prev.schedule.filter(c => c.subjectId !== id)
-    }));
+    updateData(prev => {
+      // Find the subject to calculate stats to decrement
+      const subjectToDelete = prev.subjects.find(s => s.id === id);
+      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
+
+      if (subjectToDelete) {
+        subjectToDelete.topics.forEach(topic => {
+          if (topic.status !== 'gray') statsDecrements.topicsCompleted++;
+          if (topic.status === 'green') statsDecrements.greenTopics++;
+          statsDecrements.quizzesTaken += topic.quizCount || 0;
+        });
+      }
+
+      const currentStats = prev.userProgress?.stats || {
+        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
+      };
+
+      return {
+        ...prev,
+        subjects: prev.subjects.filter(s => s.id !== id),
+        schedule: prev.schedule.filter(c => c.subjectId !== id),
+        userProgress: {
+          ...prev.userProgress,
+          stats: {
+            ...currentStats,
+            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
+            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
+            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
+          }
+        }
+      };
+    });
   }, [updateData]);
 
   // Topic operations
@@ -269,17 +316,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const deleteTopic = useCallback((subjectId: string, topicId: string) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => {
-        if (s.id !== subjectId) return s;
-        const filtered = s.topics.filter(t => t.id !== topicId);
-        return {
-          ...s,
-          topics: filtered.map((t, i) => ({ ...t, number: i + 1 }))
-        };
-      })
-    }));
+    updateData(prev => {
+      // Find the topic to calculate stats to decrement
+      const subject = prev.subjects.find(s => s.id === subjectId);
+      const topicToDelete = subject?.topics.find(t => t.id === topicId);
+      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
+
+      if (topicToDelete) {
+        if (topicToDelete.status !== 'gray') statsDecrements.topicsCompleted = 1;
+        if (topicToDelete.status === 'green') statsDecrements.greenTopics = 1;
+        statsDecrements.quizzesTaken = topicToDelete.quizCount || 0;
+      }
+
+      const currentStats = prev.userProgress?.stats || {
+        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
+      };
+
+      return {
+        ...prev,
+        subjects: prev.subjects.map(s => {
+          if (s.id !== subjectId) return s;
+          const filtered = s.topics.filter(t => t.id !== topicId);
+          return {
+            ...s,
+            topics: filtered.map((t, i) => ({ ...t, number: i + 1 }))
+          };
+        }),
+        userProgress: {
+          ...prev.userProgress,
+          stats: {
+            ...currentStats,
+            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
+            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
+            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
+          }
+        }
+      };
+    });
   }, [updateData]);
 
   const setTopicStatus = useCallback((subjectId: string, topicId: string, status: TopicStatus) => {
@@ -292,13 +365,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (topic) oldStatus = topic.status;
       }
 
-      // Calculate XP
+      // Update combo FIRST to get correct multiplier
       const progress = prev.userProgress || defaultUserProgress;
-      const comboMultiplier = getComboMultiplier(progress.combo.count);
+      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      // Use the NEW combo count for multiplier (after checking if it expired)
+      const comboMultiplier = getComboMultiplier(newCombo.count);
       const xpEarned = calculateTopicXp(oldStatus, status, comboMultiplier);
 
-      // Update combo and XP
-      const newCombo = xpEarned > 0 ? updateCombo(progress.combo.lastActionTime, progress.combo.count) : progress.combo;
+      // Keep original combo if no XP earned (status didn't improve)
+      const finalCombo = xpEarned > 0 ? newCombo : progress.combo;
       const newXp = progress.xp + xpEarned;
       const newLevel = calculateLevel(newXp);
 
@@ -316,7 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         xp: newXp,
         level: newLevel,
         totalXpEarned: progress.totalXpEarned + xpEarned,
-        combo: newCombo,
+        combo: finalCombo,
         stats: newStats
       };
 
@@ -361,10 +436,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (topic) oldStatus = topic.status;
       }
 
+      // Update combo FIRST to get correct multiplier
+      const progress = prev.userProgress || defaultUserProgress;
+      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      const comboMultiplier = getComboMultiplier(newCombo.count);
+
       // Calculate quiz XP (convert grade 2-6 to score 0-100)
       const score = Math.round(((grade - 2) / 4) * 100);
-      const progress = prev.userProgress || defaultUserProgress;
-      const comboMultiplier = getComboMultiplier(progress.combo.count);
       const quizXp = calculateQuizXp(score, comboMultiplier);
 
       // Update subjects
@@ -376,13 +454,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (t.id !== topicId) return t;
             const newGrades = [...t.grades, grade];
             const avgGrade = newGrades.reduce((a, b) => a + b, 0) / newGrades.length;
+            const newQuizCount = t.quizCount + 1;
+
+            // Calculate new Bloom level based on performance
+            // Advance if: avgGrade >= 5.0 AND quizCount >= 2 for current level
+            // Bloom levels: 1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create
+            let newBloomLevel = t.currentBloomLevel || 1;
+            const quizzesAtCurrentLevel = newQuizCount; // In future, could track per-level
+            if (avgGrade >= 5.0 && quizzesAtCurrentLevel >= 2 && newBloomLevel < 6) {
+              // Check if last 2 grades are good (>= 5)
+              const recentGrades = newGrades.slice(-2);
+              const recentAvg = recentGrades.reduce((a, b) => a + b, 0) / recentGrades.length;
+              if (recentAvg >= 5.0) {
+                newBloomLevel = Math.min(6, newBloomLevel + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+              }
+            }
+
             return {
               ...t,
               grades: newGrades,
               avgGrade: Math.round(avgGrade * 100) / 100,
-              quizCount: t.quizCount + 1,
+              quizCount: newQuizCount,
               status: gradeToStatus(avgGrade),
-              lastReview: new Date().toISOString()
+              lastReview: new Date().toISOString(),
+              currentBloomLevel: newBloomLevel
             };
           })
         };
@@ -395,8 +490,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const totalXp = quizXp + topicXp;
 
-      // Update combo and XP
-      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      // XP calculation (combo already updated at top of function)
       const newXp = progress.xp + totalXp;
       const newLevel = calculateLevel(newXp);
 
@@ -614,7 +708,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   // Add completed Pomodoro session directly
-  const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null) => {
+  const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string) => {
     const endTime = new Date();
     const startTime = new Date(endTime.getTime() - durationMinutes * 60 * 1000);
 
@@ -625,7 +719,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       duration: durationMinutes,
-      rating: null
+      rating: null,
+      distractionNote: note || undefined
     };
 
     updateData(prev => ({
@@ -674,14 +769,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Usage tracking
   const incrementApiCalls = useCallback((cost: number) => {
-    updateData(prev => ({
-      ...prev,
-      usageData: {
-        ...prev.usageData,
-        dailyCalls: prev.usageData.dailyCalls + 1,
-        monthlyCost: Math.round((prev.usageData.monthlyCost + cost) * 1000000) / 1000000
-      }
-    }));
+    updateData(prev => {
+      const today = getTodayString();
+      const lastReset = prev.usageData.lastReset;
+      const lastResetDate = new Date(lastReset);
+      const todayDate = new Date(today);
+
+      // Check if we need to reset (new month or new day for daily calls)
+      const isNewMonth = lastResetDate.getMonth() !== todayDate.getMonth() ||
+                         lastResetDate.getFullYear() !== todayDate.getFullYear();
+      const isNewDay = lastReset !== today;
+
+      return {
+        ...prev,
+        usageData: {
+          ...prev.usageData,
+          dailyCalls: isNewDay ? 1 : prev.usageData.dailyCalls + 1,
+          monthlyCost: isNewMonth ? cost : Math.round((prev.usageData.monthlyCost + cost) * 1000000) / 1000000,
+          lastReset: today
+        }
+      };
+    });
   }, [updateData]);
 
   const updateUsageBudget = useCallback((budget: number) => {
@@ -909,7 +1017,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       newAchievements,
       clearNewAchievements,
       sidebarCollapsed,
-      setSidebarCollapsed
+      setSidebarCollapsed,
+      storageError,
+      clearStorageError,
+      getStorageUsage
     }}>
       {children}
     </AppContext.Provider>

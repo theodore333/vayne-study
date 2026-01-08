@@ -6,6 +6,7 @@ import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine } from 'lu
 import Link from 'next/link';
 import ImportQuestionsModal from '@/components/modals/ImportQuestionsModal';
 import AddQuestionModal from '@/components/modals/AddQuestionModal';
+import ConfirmDialog from '@/components/modals/ConfirmDialog';
 
 export default function QuestionBankPage() {
   const { data, deleteQuestionBank } = useApp();
@@ -14,6 +15,7 @@ export default function QuestionBankPage() {
   );
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [deletingBank, setDeletingBank] = useState<{ id: string; name: string } | null>(null);
 
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
   const subjectBanks = (data.questionBanks || []).filter(b => b.subjectId === selectedSubjectId);
@@ -234,11 +236,7 @@ export default function QuestionBankPage() {
                               </Link>
 
                               <button
-                                onClick={() => {
-                                  if (confirm(`Изтрий "${bank.name}"?`)) {
-                                    deleteQuestionBank(bank.id);
-                                  }
-                                }}
+                                onClick={() => setDeletingBank({ id: bank.id, name: bank.name })}
                                 className="p-2 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors"
                                 title="Изтрий"
                               >
@@ -282,6 +280,21 @@ export default function QuestionBankPage() {
           onClose={() => setShowAddModal(false)}
         />
       )}
+
+      {/* Delete Bank Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deletingBank}
+        onClose={() => setDeletingBank(null)}
+        onConfirm={() => {
+          if (deletingBank) {
+            deleteQuestionBank(deletingBank.id);
+          }
+        }}
+        title="Изтрий сборник"
+        message={deletingBank ? `Сигурен ли си, че искаш да изтриеш "${deletingBank.name}"? Всички въпроси в сборника ще бъдат загубени.` : ''}
+        confirmText="Изтрий"
+        variant="danger"
+      />
     </div>
   );
 }

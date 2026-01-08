@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Square, Clock, Minimize2, Maximize2, Brain, Coffee, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { usePathname } from 'next/navigation';
@@ -26,6 +26,59 @@ export default function FloatingTimer() {
   // Pomodoro state from localStorage
   const [pomodoroState, setPomodoroState] = useState<PomodoroState | null>(null);
   const [pomodoroTimeLeft, setPomodoroTimeLeft] = useState(0);
+  const [hasPlayedSound, setHasPlayedSound] = useState(false);
+
+  // Audio ref
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Play notification sound
+  const playSound = useCallback(() => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+
+      // Resume context if suspended (browser autoplay policy)
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const playTone = (freq: number, startTime: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.4, startTime + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
+
+      const now = ctx.currentTime;
+      // Pleasant chime: C5 -> E5 -> G5
+      playTone(523.25, now, 0.3);
+      playTone(659.25, now + 0.15, 0.3);
+      playTone(783.99, now + 0.3, 0.5);
+    } catch (e) {
+      console.log('Audio not available');
+    }
+  }, []);
+
+  // Show browser notification
+  const showNotification = useCallback((title: string, body: string) => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: '/favicon.ico',
+        tag: 'pomodoro-timer',
+        requireInteraction: true
+      });
+    }
+  }, []);
 
   // Find active normal session
   const activeSession = data.timerSessions.find(s => s.endTime === null);
@@ -65,14 +118,29 @@ export default function FloatingTimer() {
 
   // Update pomodoro countdown
   useEffect(() => {
-    if (!pomodoroState) return;
+    if (!pomodoroState) {
+      setHasPlayedSound(false);
+      return;
+    }
 
     const updateTimer = () => {
       const now = Date.now();
       const remaining = Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000));
       setPomodoroTimeLeft(remaining);
 
-      if (remaining <= 0) {
+      if (remaining <= 0 && !hasPlayedSound) {
+        // Play sound and show notification when timer ends
+        playSound();
+        setHasPlayedSound(true);
+
+        const phaseLabel = pomodoroState.phase === 'work'
+          ? `Pomodoro #${pomodoroState.count + 1} завърши!`
+          : 'Почивката свърши!';
+        const phaseBody = pomodoroState.phase === 'work'
+          ? 'Време за почивка!'
+          : 'Време за работа!';
+
+        showNotification(phaseLabel, phaseBody);
         setPomodoroState(null);
       }
     };
@@ -80,7 +148,30 @@ export default function FloatingTimer() {
     updateTimer();
     const interval = setInterval(updateTimer, 100);
     return () => clearInterval(interval);
-  }, [pomodoroState]);
+  }, [pomodoroState, hasPlayedSound, playSound, showNotification]);
+
+  // Handle visibility change - play sound if timer expired while hidden
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && pomodoroState) {
+        const now = Date.now();
+        if (pomodoroState.endTime <= now && !hasPlayedSound) {
+          playSound();
+          setHasPlayedSound(true);
+
+          const phaseLabel = pomodoroState.phase === 'work'
+            ? `Pomodoro #${pomodoroState.count + 1} завърши!`
+            : 'Почивката свърши!';
+          showNotification(phaseLabel, 'Таймерът приключи докато беше минимизиран');
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [pomodoroState, hasPlayedSound, playSound, showNotification]);
 
   // Normal timer tick
   useEffect(() => {

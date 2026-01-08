@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { PDFParse } from 'pdf-parse';
+import mammoth from 'mammoth';
 
 // See CLAUDE_CONTEXT.md for correct model IDs
 
@@ -328,6 +329,78 @@ export async function POST(request: Request) {
       topics = [];
       topicIds = [];
     }
+
+    // Check for DOCX files
+    const isDOCX = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                   file.type === 'application/msword' ||
+                   file.name.endsWith('.docx') ||
+                   file.name.endsWith('.doc');
+
+    // Handle DOCX files - extract text first, then process with Claude
+    if (isDOCX) {
+      console.log('[EXTRACT-Q] Processing DOCX file...');
+      try {
+        const result = await mammoth.extractRawText({ arrayBuffer: fileBuffer });
+        const docxText = result.value;
+        console.log('[EXTRACT-Q] DOCX text extracted, length:', docxText.length);
+
+        if (!docxText || docxText.trim().length < 50) {
+          return new Response(JSON.stringify({
+            error: 'Word документът е празен или съдържа само изображения. Опитай с PDF.',
+            details: 'mammoth не може да извлече текст от документи с вградени изображения'
+          }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        }
+
+        // Use the text extraction function (same as chunked PDF)
+        const extractionResult = await extractQuestionsFromText(
+          anthropic,
+          docxText,
+          subjectName,
+          topics,
+          `Word документ: ${file.name}`
+        );
+
+        // Transform results - use topic IDs instead of names
+        const questions = (extractionResult.questions || []).map((q) => ({
+          type: q.type || 'mcq',
+          text: q.text || '',
+          options: q.options || null,
+          correctAnswer: q.correctAnswer || '',
+          explanation: q.explanation || '',
+          linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
+            ? [topicIds[q.linkedTopicIndex - 1]]
+            : [],
+          caseId: q.caseId || null,
+          stats: { attempts: 0, correct: 0 }
+        }));
+
+        const cost = (extractionResult.inputTokens * 0.003 + extractionResult.outputTokens * 0.015) / 1000;
+
+        console.log(`[EXTRACT-Q] DOCX extraction complete: ${questions.length} questions`);
+
+        return new Response(JSON.stringify({
+          questions,
+          cases: extractionResult.cases || [],
+          wasDocx: true,
+          usage: {
+            inputTokens: extractionResult.inputTokens,
+            outputTokens: extractionResult.outputTokens,
+            cost: Math.round(cost * 1000000) / 1000000
+          }
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+      } catch (docxError) {
+        console.error('[EXTRACT-Q] DOCX extraction failed:', docxError);
+        return new Response(JSON.stringify({
+          error: 'Грешка при обработка на Word документа',
+          details: docxError instanceof Error ? docxError.message : 'Unknown error'
+        }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
+
 
     // Analyze PDF - check if we should use chunking
     let pdfAnalysis: PDFAnalysis | null = null;

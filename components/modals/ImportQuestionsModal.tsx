@@ -465,7 +465,7 @@ export default function ImportQuestionsModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,image/*"
+                accept=".pdf,.docx,.doc,image/*"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -481,7 +481,7 @@ export default function ImportQuestionsModal({
                 </div>
               ) : (
                 <div>
-                  <p className="text-slate-400 font-medium">Качи PDF със сборник</p>
+                  <p className="text-slate-400 font-medium">Качи PDF или Word документ</p>
                   <p className="text-sm text-slate-500 font-mono">
                     Тестове, казуси, изпитни въпроси
                   </p>
@@ -530,7 +530,7 @@ export default function ImportQuestionsModal({
                 <input
                   ref={multiFileInputRef}
                   type="file"
-                  accept=".pdf,image/*"
+                  accept=".pdf,.docx,.doc,image/*"
                   multiple
                   onChange={handleMultiFileChange}
                   className="hidden"

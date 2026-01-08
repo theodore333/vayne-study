@@ -294,6 +294,12 @@ export default function TopicDetailPage() {
     updateTopic(subjectId, topicId, { encodingCoach });
   };
 
+  // Handle saving material from ReaderMode
+  const handleSaveMaterialFromReader = (newMaterial: string) => {
+    setMaterial(newMaterial);
+    updateTopicMaterial(subjectId, topicId, newMaterial);
+  };
+
   // ReaderMode needs the full topic with current material
   const topicForReader = { ...topic, material };
 
@@ -307,6 +313,7 @@ export default function TopicDetailPage() {
           onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
           onSaveEncodingCoach={handleSaveEncodingCoach}
+          onSaveMaterial={handleSaveMaterialFromReader}
         />
       )}
 

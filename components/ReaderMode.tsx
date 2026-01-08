@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2 } from 'lucide-react';
+import { X, Minus, Plus, BookOpen, Highlighter, Trash2, ChevronUp, ChevronLeft, PanelRightClose, PanelRight, Type, MessageSquare, Check, Lightbulb, Loader2, Edit3, Save } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 
 interface ReaderModeProps {
@@ -10,6 +10,7 @@ interface ReaderModeProps {
   onClose: () => void;
   onSaveHighlights: (highlights: TextHighlight[]) => void;
   onSaveEncodingCoach: (coach: string) => void;
+  onSaveMaterial: (material: string) => void;
 }
 
 type HighlightColor = 'yellow' | 'green' | 'blue' | 'pink';
@@ -94,7 +95,7 @@ function parseMarkdown(text: string): string {
   return html;
 }
 
-export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveEncodingCoach }: ReaderModeProps) {
+export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveEncodingCoach, onSaveMaterial }: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
   const [highlights, setHighlights] = useState<TextHighlight[]>(topic.highlights || []);
   const [selectedColor, setSelectedColor] = useState<HighlightColor>('yellow');
@@ -107,8 +108,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [encodingCoach, setEncodingCoach] = useState<string | null>(topic.encodingCoach || null);
   const [loadingCoach, setLoadingCoach] = useState(false);
   const [showCoach, setShowCoach] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedMaterial, setEditedMaterial] = useState(topic.material);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Handle scroll progress
   useEffect(() => {
@@ -299,6 +304,35 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
+  // Edit mode functions
+  const startEditing = () => {
+    setEditedMaterial(topic.material);
+    setIsEditing(true);
+    setHasUnsavedChanges(false);
+    // Focus textarea after render
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  };
+
+  const cancelEditing = () => {
+    if (hasUnsavedChanges) {
+      if (!confirm('Имаш незапазени промени. Сигурен ли си?')) return;
+    }
+    setIsEditing(false);
+    setEditedMaterial(topic.material);
+    setHasUnsavedChanges(false);
+  };
+
+  const saveEditing = () => {
+    onSaveMaterial(editedMaterial);
+    setIsEditing(false);
+    setHasUnsavedChanges(false);
+  };
+
+  const handleMaterialChange = (value: string) => {
+    setEditedMaterial(value);
+    setHasUnsavedChanges(value !== topic.material);
+  };
+
   // Render content with highlights
   const renderContent = () => {
     const cleanedMaterial = cleanMarkdown(topic.material);
@@ -387,6 +421,35 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               </span>
             </button>
 
+            {/* Edit Button */}
+            {isEditing ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={saveEditing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-all"
+                >
+                  <Save size={16} />
+                  <span className="hidden sm:inline">Запази</span>
+                </button>
+                <button
+                  onClick={cancelEditing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg font-medium text-sm transition-all"
+                >
+                  <X size={16} />
+                  <span className="hidden sm:inline">Откажи</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={startEditing}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-lg font-medium text-sm transition-all"
+                title="Редактирай материала"
+              >
+                <Edit3 size={16} />
+                <span className="hidden sm:inline">Редактирай</span>
+              </button>
+            )}
+
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
@@ -456,38 +519,62 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         <div
           ref={containerRef}
           className="flex-1 overflow-y-auto"
-          style={{ backgroundColor: '#fafaf9' }}
+          style={{ backgroundColor: isEditing ? '#f5f5f4' : '#fafaf9' }}
         >
-          <article
-            ref={contentRef}
-            className="max-w-4xl mx-auto px-8 sm:px-16 py-8"
-            onMouseUp={handleMouseUp}
-            onClick={handleContentClick}
-          >
-            {topic.materialImages && topic.materialImages.length > 0 && (
-              <div className="mb-8 space-y-4">
-                {topic.materialImages.map((img, idx) => (
-                  <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
-                ))}
-              </div>
-            )}
+          {isEditing ? (
+            /* Edit Mode */
+            <div className="max-w-4xl mx-auto px-8 sm:px-16 py-8">
+              {hasUnsavedChanges && (
+                <div className="mb-4 px-3 py-2 bg-amber-100 border border-amber-300 rounded-lg text-amber-800 text-sm flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>Имаш незапазени промени</span>
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                value={editedMaterial}
+                onChange={(e) => handleMaterialChange(e.target.value)}
+                className="w-full min-h-[70vh] p-6 bg-white border border-stone-300 rounded-xl text-stone-800 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 resize-none font-mono"
+                style={{ fontSize: `${fontSize}px`, lineHeight: 1.6 }}
+                placeholder="Въведи материал тук..."
+              />
+              <p className="mt-2 text-xs text-stone-500 text-center">
+                Използвай Markdown: # заглавие, **bold**, *italic*, - списък
+              </p>
+            </div>
+          ) : (
+            /* Read Mode */
+            <article
+              ref={contentRef}
+              className="max-w-4xl mx-auto px-8 sm:px-16 py-8"
+              onMouseUp={handleMouseUp}
+              onClick={handleContentClick}
+            >
+              {topic.materialImages && topic.materialImages.length > 0 && (
+                <div className="mb-8 space-y-4">
+                  {topic.materialImages.map((img, idx) => (
+                    <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
+                  ))}
+                </div>
+              )}
 
-            <div
-              className="max-w-none text-stone-800 selection:bg-amber-200
-                [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-6 [&_h1]:mt-8
-                [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-stone-900 [&_h2]:mb-4 [&_h2]:mt-6
-                [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-stone-900 [&_h3]:mb-3 [&_h3]:mt-4
-                [&_p]:text-stone-700 [&_p]:leading-relaxed [&_p]:mb-4
-                [&_strong]:text-stone-900 [&_strong]:font-semibold
-                [&_em]:italic
-                [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
-                [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
-                [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4
-                [&_.highlight-text]:text-stone-900"
-              style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
-              dangerouslySetInnerHTML={{ __html: renderContent() }}
-            />
-          </article>
+              <div
+                className="max-w-none text-stone-800 selection:bg-amber-200
+                  [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-6 [&_h1]:mt-8
+                  [&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-stone-900 [&_h2]:mb-4 [&_h2]:mt-6
+                  [&_h3]:text-xl [&_h3]:font-bold [&_h3]:text-stone-900 [&_h3]:mb-3 [&_h3]:mt-4
+                  [&_p]:text-stone-700 [&_p]:leading-relaxed [&_p]:mb-4
+                  [&_strong]:text-stone-900 [&_strong]:font-semibold
+                  [&_em]:italic
+                  [&_li]:text-stone-700 [&_li]:mb-1 [&_li]:ml-4
+                  [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-4
+                  [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-4
+                  [&_.highlight-text]:text-stone-900"
+                style={{ fontSize: `${fontSize}px`, lineHeight: 1.8, color: '#292524' }}
+                dangerouslySetInnerHTML={{ __html: renderContent() }}
+              />
+            </article>
+          )}
         </div>
 
         {/* RIGHT SIDEBAR - Highlights list & Notes */}

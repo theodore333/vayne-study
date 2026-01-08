@@ -1,20 +1,19 @@
 'use client';
 
 import { useState, useEffect, ReactNode } from 'react';
-import { Plus, TrendingUp, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw } from 'lucide-react';
+import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, calculateEffectiveHours } from '@/lib/algorithms';
+import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
-import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
+import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 
 // Component prop types
 interface StatsGridProps {
   subjects: Subject[];
   totalTopics: number;
-  effectiveHours: number;
   alertsCount: number;
 }
 
@@ -68,7 +67,8 @@ export default function Dashboard() {
     try {
       const connected = await checkAnkiConnect();
       if (connected) {
-        const stats = await getCollectionStats();
+        const selectedDecks = getSelectedDecks();
+        const stats = await getCollectionStats(selectedDecks.length > 0 ? selectedDecks : undefined);
         setAnkiStats(stats);
       } else {
         setAnkiStats(null);
@@ -88,7 +88,6 @@ export default function Dashboard() {
   }
 
   const alerts = getAlerts(data.subjects, data.schedule);
-  const effectiveHours = calculateEffectiveHours(data.dailyStatus);
   const totalTopics = data.subjects.reduce((sum, s) => sum + s.topics.length, 0);
   const statusCounts = data.subjects.reduce(
     (acc, subject) => {
@@ -101,7 +100,7 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
-      <StatsGrid subjects={data.subjects} totalTopics={totalTopics} effectiveHours={effectiveHours} alertsCount={alerts.length} />
+      <StatsGrid subjects={data.subjects} totalTopics={totalTopics} alertsCount={alerts.length} />
       {ankiStats && <AnkiWidget stats={ankiStats} onRefresh={refreshAnkiStats} loading={ankiLoading} />}
       <StatusOverview statusCounts={statusCounts} totalTopics={totalTopics} />
       <SubjectsSection subjects={data.subjects} onAddClick={() => setShowAddSubject(true)} />
@@ -125,12 +124,11 @@ function PageHeader({ onAddClick }: { onAddClick: () => void }) {
   );
 }
 
-function StatsGrid({ subjects, totalTopics, effectiveHours, alertsCount }: StatsGridProps) {
+function StatsGrid({ subjects, totalTopics, alertsCount }: StatsGridProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <StatCard icon={<BookOpen size={20} className="text-blue-400" />} bgColor="bg-blue-500/20" label="Предмети" value={subjects.length} />
       <StatCard icon={<Target size={20} className="text-purple-400" />} bgColor="bg-purple-500/20" label="Теми" value={totalTopics} />
-      <StatCard icon={<TrendingUp size={20} className="text-green-400" />} bgColor="bg-green-500/20" label="Ефективни часове" value={effectiveHours + "ч"} valueClass="text-green-400" />
       <StatCard icon={<AlertTriangle size={20} className="text-red-400" />} bgColor="bg-red-500/20" label="Известия" value={alertsCount} valueClass="text-red-400" />
     </div>
   );

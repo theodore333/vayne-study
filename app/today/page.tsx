@@ -9,7 +9,7 @@ import { LEVEL_THRESHOLDS } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import Link from 'next/link';
-import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
+import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 
 export default function TodayPage() {
   const { data, isLoading, newAchievements, clearNewAchievements, incrementApiCalls } = useApp();
@@ -40,7 +40,8 @@ export default function TodayPage() {
     try {
       const connected = await checkAnkiConnect();
       if (connected) {
-        const stats = await getCollectionStats();
+        const selectedDecks = getSelectedDecks();
+        const stats = await getCollectionStats(selectedDecks.length > 0 ? selectedDecks : undefined);
         setAnkiStats(stats);
       } else {
         setAnkiStats(null);

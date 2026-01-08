@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Link2, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -46,6 +46,10 @@ function SubjectsContent() {
 
   // Sidebar toggle
   const [sidebarHidden, setSidebarHidden] = useState(false);
+
+  // Sort subjects
+  type SortOption = 'exam' | 'name' | 'progress' | 'topics';
+  const [sortBy, setSortBy] = useState<SortOption>('exam');
 
   // Multi-topic quiz selection
   const [quizSelectMode, setQuizSelectMode] = useState(false);
@@ -231,6 +235,43 @@ function SubjectsContent() {
     }
   }, [searchParams, data.subjects]);
 
+  // Sort subjects
+  const sortSubjects = (subjects: Subject[]): Subject[] => {
+    return [...subjects].sort((a, b) => {
+      switch (sortBy) {
+        case 'exam': {
+          const daysA = getDaysUntil(a.examDate);
+          const daysB = getDaysUntil(b.examDate);
+          // Put subjects without exam dates at the end
+          if (daysA === Infinity && daysB === Infinity) return 0;
+          if (daysA === Infinity) return 1;
+          if (daysB === Infinity) return -1;
+          return daysA - daysB;
+        }
+        case 'name':
+          return a.name.localeCompare(b.name, 'bg');
+        case 'progress': {
+          const progressA = getSubjectProgress(a).percentage;
+          const progressB = getSubjectProgress(b).percentage;
+          return progressA - progressB; // Least progress first
+        }
+        case 'topics':
+          return b.topics.length - a.topics.length; // Most topics first
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const sortedSubjects = sortSubjects(data.subjects);
+
+  const sortOptions: { value: SortOption; label: string }[] = [
+    { value: 'exam', label: 'Изпит (най-скоро)' },
+    { value: 'name', label: 'Име (А-Я)' },
+    { value: 'progress', label: 'Прогрес (най-малко)' },
+    { value: 'topics', label: 'Теми (най-много)' }
+  ];
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -293,11 +334,26 @@ function SubjectsContent() {
                   <PanelLeftClose size={16} />
                 </button>
               </div>
-            {data.subjects.length === 0 ? (
+              {/* Sort dropdown */}
+              <div className="mb-3">
+                <div className="relative">
+                  <ArrowUpDown size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as SortOption)}
+                    className="w-full pl-8 pr-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-300 font-mono text-xs appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-blue-500"
+                  >
+                    {sortOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            {sortedSubjects.length === 0 ? (
               <p className="text-sm text-slate-500 font-mono">Няма предмети</p>
             ) : (
               <ul className="space-y-2">
-                {data.subjects.map(subject => {
+                {sortedSubjects.map(subject => {
                   const progress = getSubjectProgress(subject);
                   const daysUntil = getDaysUntil(subject.examDate);
                   const isSelected = selectedSubjectId === subject.id;

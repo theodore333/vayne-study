@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus } from '@/lib/types';
-import { checkAnkiConnect, getCollectionStats, CollectionStats } from '@/lib/anki';
+import { checkAnkiConnect, getCollectionStats, CollectionStats, getDeckNames, getSelectedDecks, saveSelectedDecks } from '@/lib/anki';
 
 interface ImportResult {
   matched: number;
@@ -36,6 +36,8 @@ export default function SettingsPage() {
   const [ankiConnected, setAnkiConnected] = useState<boolean | null>(null);
   const [ankiChecking, setAnkiChecking] = useState(false);
   const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
+  const [ankiDecks, setAnkiDecks] = useState<string[]>([]);
+  const [selectedAnkiDecks, setSelectedAnkiDecks] = useState<string[]>([]);
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -303,19 +305,51 @@ export default function SettingsPage() {
       setAnkiConnected(connected);
 
       if (connected) {
-        const stats = await getCollectionStats();
+        // Get all deck names
+        const decks = await getDeckNames();
+        // Filter only top-level decks (not subdecks)
+        const topLevelDecks = decks.filter(d => !d.includes('::'));
+        setAnkiDecks(topLevelDecks);
+
+        // Load saved selection
+        const saved = getSelectedDecks();
+        const validSaved = saved.filter(d => topLevelDecks.includes(d));
+        setSelectedAnkiDecks(validSaved.length > 0 ? validSaved : topLevelDecks);
+
+        // Get stats for selected decks
+        const decksToUse = validSaved.length > 0 ? validSaved : topLevelDecks;
+        const stats = await getCollectionStats(decksToUse);
         setAnkiStats(stats);
         localStorage.setItem('anki-enabled', 'true');
       } else {
         setAnkiStats(null);
+        setAnkiDecks([]);
         localStorage.removeItem('anki-enabled');
       }
     } catch {
       setAnkiConnected(false);
       setAnkiStats(null);
+      setAnkiDecks([]);
       localStorage.removeItem('anki-enabled');
     }
     setAnkiChecking(false);
+  };
+
+  // Toggle deck selection
+  const toggleDeck = async (deck: string) => {
+    const newSelection = selectedAnkiDecks.includes(deck)
+      ? selectedAnkiDecks.filter(d => d !== deck)
+      : [...selectedAnkiDecks, deck];
+
+    // Don't allow empty selection
+    if (newSelection.length === 0) return;
+
+    setSelectedAnkiDecks(newSelection);
+    saveSelectedDecks(newSelection);
+
+    // Refresh stats with new selection
+    const stats = await getCollectionStats(newSelection);
+    setAnkiStats(stats);
   };
 
   // Check Anki on mount if previously enabled
@@ -641,11 +675,34 @@ export default function SettingsPage() {
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-4">
-              <p className="text-xs text-slate-500 font-mono mb-1">Тестета</p>
+              <p className="text-xs text-slate-500 font-mono mb-1">Избрани тестета</p>
               <p className="text-2xl font-bold font-mono text-slate-300">
-                {ankiStats.totalDecks}
+                {selectedAnkiDecks.length}/{ankiDecks.length}
               </p>
             </div>
+          </div>
+        )}
+
+        {/* Deck Selection */}
+        {ankiConnected && ankiDecks.length > 0 && (
+          <div className="mb-4 p-4 bg-slate-800/30 rounded-lg">
+            <p className="text-sm text-slate-300 font-mono mb-3">Избери тестета за проследяване:</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {ankiDecks.map(deck => (
+                <label key={deck} className="flex items-center gap-3 cursor-pointer hover:bg-slate-700/30 p-2 rounded-lg transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={selectedAnkiDecks.includes(deck)}
+                    onChange={() => toggleDeck(deck)}
+                    className="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
+                  />
+                  <span className="text-sm text-slate-300 font-mono">{deck}</span>
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 font-mono mt-2">
+              Само избраните тестета ще се броят в статистиките.
+            </p>
           </div>
         )}
 

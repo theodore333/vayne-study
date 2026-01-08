@@ -131,16 +131,25 @@ export interface CollectionStats {
   newToday: number;
 }
 
-export async function getCollectionStats(): Promise<CollectionStats> {
+export async function getCollectionStats(selectedDecks?: string[]): Promise<CollectionStats> {
   try {
     const deckNames = await getDeckNames();
-    const allCards = await invoke<number[]>('findCards', { query: 'deck:*' });
-    const dueCards = await invoke<number[]>('findCards', { query: 'is:due' });
-    const newCards = await invoke<number[]>('findCards', { query: 'is:new' });
+
+    // If no decks selected, use all decks
+    const decksToUse = selectedDecks && selectedDecks.length > 0
+      ? selectedDecks
+      : deckNames;
+
+    // Build query for selected decks
+    const deckQuery = decksToUse.map(d => `"deck:${d}"`).join(' OR ');
+
+    const allCards = await invoke<number[]>('findCards', { query: deckQuery });
+    const dueCards = await invoke<number[]>('findCards', { query: `(${deckQuery}) is:due` });
+    const newCards = await invoke<number[]>('findCards', { query: `(${deckQuery}) is:new` });
 
     return {
       totalCards: allCards.length,
-      totalDecks: deckNames.filter(n => !n.includes('::')).length, // Only top-level decks
+      totalDecks: decksToUse.filter(n => !n.includes('::')).length,
       dueToday: dueCards.length,
       newToday: newCards.length
     };
@@ -152,6 +161,18 @@ export async function getCollectionStats(): Promise<CollectionStats> {
       newToday: 0
     };
   }
+}
+
+// Get selected decks from localStorage
+export function getSelectedDecks(): string[] {
+  if (typeof window === 'undefined') return [];
+  const stored = localStorage.getItem('anki-selected-decks');
+  return stored ? JSON.parse(stored) : [];
+}
+
+// Save selected decks to localStorage
+export function saveSelectedDecks(decks: string[]): void {
+  localStorage.setItem('anki-selected-decks', JSON.stringify(decks));
 }
 
 // Sync/refresh Anki (trigger sync if AnkiWeb configured)

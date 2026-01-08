@@ -13,7 +13,8 @@
       "Bash(wc:*)",
       "Bash(npx tsc --noEmit)",
       "Bash(timeout /t 5)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npm i:*)"
     ]
   }
 }

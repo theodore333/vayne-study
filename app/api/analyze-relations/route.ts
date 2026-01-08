@@ -84,21 +84,27 @@ ${topicList}
 
     // Parse JSON response
     let parsed;
+    let cleanedResponse = responseText;
+
+    // Remove markdown code blocks if present
+    cleanedResponse = cleanedResponse.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
     try {
       // Try direct parse first
-      parsed = JSON.parse(responseText);
+      parsed = JSON.parse(cleanedResponse);
     } catch {
       // Try to extract JSON from response if wrapped in text
-      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         try {
           parsed = JSON.parse(jsonMatch[0]);
-        } catch {
-          console.error('[ANALYZE-RELATIONS] Failed to parse JSON:', responseText.slice(0, 200));
+        } catch (e) {
+          console.error('[ANALYZE-RELATIONS] Failed to parse JSON:', cleanedResponse.slice(0, 500));
+          console.error('[ANALYZE-RELATIONS] Parse error:', e);
           return NextResponse.json({ error: 'Невалиден JSON отговор от AI' }, { status: 500 });
         }
       } else {
-        console.error('[ANALYZE-RELATIONS] No JSON found in response');
+        console.error('[ANALYZE-RELATIONS] No JSON found in response:', cleanedResponse.slice(0, 500));
         return NextResponse.json({ error: 'Не намерих JSON в отговора' }, { status: 500 });
       }
     }

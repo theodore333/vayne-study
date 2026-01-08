@@ -426,7 +426,7 @@ export function detectCrunchMode(subjects: Subject[]): CrunchModeStatus {
       tips.push('Използвай Quiz за затвърждаване, не за учене');
     } else if (hasCriticalExam) {
       reason = 'Изпит скоро + високо натоварване';
-      tips.push('Приоритизирай теми с prerequisites');
+      tips.push('Приоритизирай ключови теми');
       tips.push('Малките теми дават бързи победи');
       tips.push('Групирай свързани теми за ефективност');
     } else {
@@ -688,35 +688,10 @@ function selectTopicsWithRelations(
     // Add this topic
     selected.push(topic);
     selectedIds.add(topic.id);
-
-    // Try to add related topics if we have room
-    if (topic.relatedTopics && topic.relatedTopics.length > 0 && selected.length < maxCount) {
-      for (const relatedId of topic.relatedTopics) {
-        if (selected.length >= maxCount) break;
-        if (selectedIds.has(relatedId)) continue;
-
-        const relatedTopic = allTopics.find(t => t.id === relatedId);
-        if (relatedTopic && relatedTopic.status !== 'green') {
-          selected.push(relatedTopic);
-          selectedIds.add(relatedId);
-        }
-      }
-    }
   }
 
-  // Sort final selection to group related topics together
-  return selected.sort((a, b) => {
-    // Group by cluster first
-    if (a.cluster && b.cluster && a.cluster !== b.cluster) {
-      return a.cluster.localeCompare(b.cluster);
-    }
-    // Then by relation (if a is related to b, keep them together)
-    if (a.relatedTopics?.includes(b.id) || b.relatedTopics?.includes(a.id)) {
-      return 0;
-    }
-    // Finally by number
-    return a.number - b.number;
-  });
+  // Sort by topic number
+  return selected.sort((a, b) => a.number - b.number);
 }
 
 export function generateDailyPlan(
@@ -913,9 +888,6 @@ export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
       // Smart Scheduling fields
       size: null,
       sizeSetBy: null,
-      relatedTopics: [],
-      cluster: null,
-      prerequisites: [],
       // Gap Analysis
       wrongAnswers: [],
       // Reader Mode

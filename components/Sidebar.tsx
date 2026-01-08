@@ -58,6 +58,17 @@ export default function Sidebar() {
 
   const alerts = getAlerts(data.subjects, data.schedule).slice(0, 2);
 
+  // Sort subjects by exam date (nearest first) - matches default sorting in subjects page
+  const sortedSubjects = [...data.subjects].sort((a, b) => {
+    const daysA = getDaysUntil(a.examDate);
+    const daysB = getDaysUntil(b.examDate);
+    // Put subjects without exam dates at the end
+    if (daysA === Infinity && daysB === Infinity) return 0;
+    if (daysA === Infinity) return 1;
+    if (daysB === Infinity) return -1;
+    return daysA - daysB;
+  });
+
   // Collapsed sidebar
   if (sidebarCollapsed) {
     return (
@@ -103,7 +114,7 @@ export default function Sidebar() {
 
         {/* Subject colors */}
         <div className="flex-1 overflow-y-auto p-2">
-          {data.subjects.map(subject => (
+          {sortedSubjects.map(subject => (
             <Link
               key={subject.id}
               href={`/subjects?id=${subject.id}`}
@@ -182,11 +193,11 @@ export default function Sidebar() {
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 font-mono">
           Предмети
         </h3>
-        {data.subjects.length === 0 ? (
+        {sortedSubjects.length === 0 ? (
           <p className="text-sm text-slate-600 font-mono">Няма добавени предмети</p>
         ) : (
           <ul className="space-y-3">
-            {data.subjects.map(subject => {
+            {sortedSubjects.map(subject => {
               const progress = getSubjectProgress(subject);
               const daysUntil = getDaysUntil(subject.examDate);
               return (

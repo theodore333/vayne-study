@@ -253,9 +253,6 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         // Smart Scheduling fields
         size: null,
         sizeSetBy: null,
-        relatedTopics: [],
-        cluster: null,
-        prerequisites: [],
         // Gap Analysis
         wrongAnswers: [],
         // Reader Mode

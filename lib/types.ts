@@ -179,16 +179,10 @@ export interface Topic {
   // Smart Scheduling: Size classification
   size: TopicSize | null; // S/M/L classification
   sizeSetBy: 'ai' | 'user' | null; // Who set the size
-  // Smart Scheduling: Topic relations
-  relatedTopics: string[]; // IDs of related topics
-  cluster: string | null; // Group name (e.g., "Пулмология")
-  prerequisites: string[]; // IDs of prerequisite topics
   // Gap Analysis: Track wrong answers for drilling
   wrongAnswers: WrongAnswer[]; // Recent wrong answers for drill weakness mode
   // Reader Mode: Highlights
   highlights: TextHighlight[]; // Highlighted text passages
-  // Encoding Coach: One-time study strategy
-  encodingCoach?: string; // AI-generated study strategy (one per topic)
 }
 
 // Text highlight for reader mode
@@ -199,7 +193,6 @@ export interface TextHighlight {
   endOffset: number; // End character offset
   color: 'yellow' | 'green' | 'blue' | 'pink'; // Highlight color
   note?: string; // Optional note attached to this highlight
-  encodingTip?: string; // AI-generated memory tip for this highlight
   createdAt: string;
 }
 

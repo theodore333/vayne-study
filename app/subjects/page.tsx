@@ -217,8 +217,7 @@ function SubjectsContent() {
     const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
     const matchesSearch = searchQuery === '' ||
       topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      topic.number.toString().includes(searchQuery) ||
-      (topic.cluster && topic.cluster.toLowerCase().includes(searchQuery.toLowerCase()));
+      topic.number.toString().includes(searchQuery);
     return matchesStatus && matchesSize && matchesSearch;
   }) || [];
 
@@ -549,64 +548,6 @@ function SubjectsContent() {
                   </div>
                 </div>
 
-                {/* Clusters Overview */}
-                {(() => {
-                  const clusters = new Map<string, number>();
-                  selectedSubject.topics.forEach(t => {
-                    if (t.cluster) {
-                      clusters.set(t.cluster, (clusters.get(t.cluster) || 0) + 1);
-                    }
-                  });
-
-                  // Significant clusters (3+ topics)
-                  const significantClusters = Array.from(clusters.entries())
-                    .filter(([, count]) => count >= 3)
-                    .sort((a, b) => b[1] - a[1]);
-
-                  // Small clusters (< 3 topics) grouped as "Други"
-                  const smallClusters = Array.from(clusters.entries())
-                    .filter(([, count]) => count < 3);
-                  const othersCount = smallClusters.reduce((sum, [, count]) => sum + count, 0);
-
-                  if (significantClusters.length === 0 && othersCount === 0) return null;
-
-                  return (
-                    <div className="mt-4 flex flex-wrap gap-2 items-center">
-                      <span className="text-xs text-slate-500 font-mono mr-1">Клъстери:</span>
-                      {significantClusters.map(([name, count]) => (
-                        <button
-                          key={name}
-                          onClick={() => setSearchQuery(name)}
-                          className={`px-2 py-1 text-xs font-mono border rounded-lg transition-all ${
-                            searchQuery.toLowerCase() === name.toLowerCase()
-                              ? 'bg-cyan-500/30 text-cyan-300 border-cyan-400/50'
-                              : 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20'
-                          }`}
-                          title={`Филтрирай по ${name}`}
-                        >
-                          {name} ({count})
-                        </button>
-                      ))}
-                      {/* "Други" for small clusters */}
-                      {othersCount > 0 && (
-                        <span
-                          className="px-2 py-1 text-xs font-mono bg-slate-700/50 text-slate-400 border border-slate-600/30 rounded-lg"
-                          title={`Малки клъстери: ${smallClusters.map(([n, c]) => `${n} (${c})`).join(', ')}`}
-                        >
-                          Други ({othersCount})
-                        </span>
-                      )}
-                      {searchQuery && (
-                        <button
-                          onClick={() => setSearchQuery('')}
-                          className="px-2 py-1 text-xs font-mono bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600"
-                        >
-                          ✕ Изчисти
-                        </button>
-                      )}
-                    </div>
-                  );
-                })()}
               </div>
 
               {/* Topics List */}
@@ -719,31 +660,6 @@ function SubjectsContent() {
                                     {TOPIC_SIZE_CONFIG[topic.size].short}
                                   </span>
                                 )}
-                                {/* Cluster Badge */}
-                                {topic.cluster && (
-                                  <span
-                                    className="px-1.5 py-0.5 rounded text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                                    title={`Клъстер: ${topic.cluster}`}
-                                  >
-                                    {topic.cluster}
-                                  </span>
-                                )}
-                                {/* Prerequisites Indicator */}
-                                {topic.prerequisites && topic.prerequisites.length > 0 && (() => {
-                                  const prereqTopics = topic.prerequisites
-                                    .map(id => selectedSubject.topics.find(t => t.id === id))
-                                    .filter(Boolean);
-                                  const unmetPrereqs = prereqTopics.filter(t => t && t.status !== 'green' && t.status !== 'yellow');
-                                  if (unmetPrereqs.length === 0) return null;
-                                  return (
-                                    <span
-                                      className="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                                      title={`Първо научи: ${unmetPrereqs.map(t => t?.name).join(', ')}`}
-                                    >
-                                      ⚠️ {unmetPrereqs.length} prereq
-                                    </span>
-                                  );
-                                })()}
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} теста</span>}
                                 {(topic.readCount || 0) > 0 && (

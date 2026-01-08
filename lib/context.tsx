@@ -29,8 +29,6 @@ interface AppContextType {
   trackTopicRead: (subjectId: string, topicId: string) => void;
   // Smart Scheduling operations
   updateTopicSize: (subjectId: string, topicId: string, size: TopicSize | null, setBy: 'ai' | 'user') => void;
-  updateTopicRelations: (subjectId: string, topicId: string, updates: { relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }) => void;
-  batchUpdateTopicRelations: (subjectId: string, updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }>) => void;
 
   // Schedule operations
   addClass: (scheduleClass: Omit<ScheduleClass, 'id'>) => void;
@@ -427,6 +425,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const addGrade = useCallback((subjectId: string, topicId: string, grade: number) => {
+    // Validate grade is in Bulgarian scale (2-6)
+    const validGrade = Math.max(2, Math.min(6, grade));
+    if (grade !== validGrade) {
+      console.warn(`Invalid grade ${grade} clamped to ${validGrade}`);
+    }
+
     updateData(prev => {
       // Find old status for XP calculation
       let oldStatus: TopicStatus = 'gray';
@@ -442,7 +446,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const comboMultiplier = getComboMultiplier(newCombo.count);
 
       // Calculate quiz XP (convert grade 2-6 to score 0-100)
-      const score = Math.round(((grade - 2) / 4) * 100);
+      const score = Math.round(((validGrade - 2) / 4) * 100);
       const quizXp = calculateQuizXp(score, comboMultiplier);
 
       // Update subjects
@@ -452,20 +456,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s,
           topics: s.topics.map(t => {
             if (t.id !== topicId) return t;
-            const newGrades = [...t.grades, grade];
+            const newGrades = [...t.grades, validGrade];
             const avgGrade = newGrades.reduce((a, b) => a + b, 0) / newGrades.length;
             const newQuizCount = t.quizCount + 1;
 
             // Calculate new Bloom level based on performance
-            // Advance if: avgGrade >= 5.0 AND quizCount >= 2 for current level
+            // Advance ONLY if: 2+ quizzes AT CURRENT LEVEL with score >= 70%
             // Bloom levels: 1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create
             let newBloomLevel = t.currentBloomLevel || 1;
-            const quizzesAtCurrentLevel = newQuizCount; // In future, could track per-level
-            if (avgGrade >= 5.0 && quizzesAtCurrentLevel >= 2 && newBloomLevel < 6) {
-              // Check if last 2 grades are good (>= 5)
-              const recentGrades = newGrades.slice(-2);
-              const recentAvg = recentGrades.reduce((a, b) => a + b, 0) / recentGrades.length;
-              if (recentAvg >= 5.0) {
+
+            // Count quizzes AT the current Bloom level with good scores (>= 70%)
+            const quizHistory = t.quizHistory || [];
+            const quizzesAtCurrentLevel = quizHistory.filter(
+              q => q.bloomLevel === newBloomLevel && q.score >= 70
+            );
+
+            // Need at least 2 successful quizzes at current level to advance
+            // AND the average score at this level must be >= 75%
+            if (quizzesAtCurrentLevel.length >= 2 && newBloomLevel < 6) {
+              const avgScoreAtLevel = quizzesAtCurrentLevel.reduce((sum, q) => sum + q.score, 0) / quizzesAtCurrentLevel.length;
+              if (avgScoreAtLevel >= 75) {
                 newBloomLevel = Math.min(6, newBloomLevel + 1) as 1 | 2 | 3 | 4 | 5 | 6;
               }
             }
@@ -574,44 +584,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return {
           ...s,
           topics: s.topics.map(t => t.id === topicId ? { ...t, size, sizeSetBy: setBy } : t)
-        };
-      })
-    }));
-  }, [updateData]);
-
-  // Smart Scheduling: Update topic relations
-  const updateTopicRelations = useCallback((
-    subjectId: string,
-    topicId: string,
-    updates: { relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }
-  ) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => {
-        if (s.id !== subjectId) return s;
-        return {
-          ...s,
-          topics: s.topics.map(t => t.id === topicId ? { ...t, ...updates } : t)
-        };
-      })
-    }));
-  }, [updateData]);
-
-  // Smart Scheduling: Batch update topic relations (for analyze-relations API)
-  const batchUpdateTopicRelations = useCallback((
-    subjectId: string,
-    updates: Array<{ topicId: string; relatedTopics?: string[]; cluster?: string | null; prerequisites?: string[] }>
-  ) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.map(s => {
-        if (s.id !== subjectId) return s;
-        return {
-          ...s,
-          topics: s.topics.map(t => {
-            const update = updates.find(u => u.topicId === t.id);
-            return update ? { ...t, ...update } : t;
-          })
         };
       })
     }));
@@ -731,21 +703,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // GPA operations
   const addSemesterGrade = useCallback((grade: Omit<SemesterGrade, 'id'>) => {
+    // Validate grade is in Bulgarian scale (2-6)
+    const validGrade = Math.max(2, Math.min(6, grade.grade));
+    if (grade.grade !== validGrade) {
+      console.warn(`Invalid semester grade ${grade.grade} clamped to ${validGrade}`);
+    }
+
     updateData(prev => ({
       ...prev,
       gpaData: {
         ...prev.gpaData,
-        grades: [...prev.gpaData.grades, { ...grade, id: generateId() }]
+        grades: [...prev.gpaData.grades, { ...grade, grade: validGrade, id: generateId() }]
       }
     }));
   }, [updateData]);
 
   const updateSemesterGrade = useCallback((id: string, updates: Partial<SemesterGrade>) => {
+    // Validate grade if it's being updated
+    const validUpdates = { ...updates };
+    if (updates.grade !== undefined) {
+      validUpdates.grade = Math.max(2, Math.min(6, updates.grade));
+    }
+
     updateData(prev => ({
       ...prev,
       gpaData: {
         ...prev.gpaData,
-        grades: prev.gpaData.grades.map(g => g.id === id ? { ...g, ...updates } : g)
+        grades: prev.gpaData.grades.map(g => g.id === id ? { ...g, ...validUpdates } : g)
       }
     }));
   }, [updateData]);
@@ -989,8 +973,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateTopicMaterial,
       trackTopicRead,
       updateTopicSize,
-      updateTopicRelations,
-      batchUpdateTopicRelations,
       addClass,
       updateClass,
       deleteClass,

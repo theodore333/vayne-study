@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat } from 'lucide-react';
+import { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -30,6 +30,30 @@ interface FreeRecallEvaluation {
   suggestedNextStep: string;
 }
 
+interface OpenAnswerEvaluation {
+  score: number; // 0-1
+  isCorrect: boolean;
+  feedback: string;
+  keyPointsCovered: string[];
+  keyPointsMissed: string[];
+}
+
+interface MistakeAnalysis {
+  summary: string;
+  weakConcepts: string[];
+  patterns: Array<{
+    type: string;
+    description: string;
+    frequency: string;
+  }>;
+  recommendations: Array<{
+    priority: 'high' | 'medium' | 'low';
+    action: string;
+    reason: string;
+  }>;
+  priorityFocus: string | null;
+}
+
 interface QuizState {
   questions: Question[];
   currentIndex: number;
@@ -41,6 +65,7 @@ interface QuizState {
 
 function QuizContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const subjectId = searchParams.get('subject');
   const topicId = searchParams.get('topic');
   const isMultiMode = searchParams.get('multi') === 'true';
@@ -98,6 +123,10 @@ function QuizContent() {
   const [freeRecallEvaluation, setFreeRecallEvaluation] = useState<FreeRecallEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
 
+  // Open answer AI evaluation
+  const [openEvaluations, setOpenEvaluations] = useState<Record<number, OpenAnswerEvaluation>>({});
+  const [isEvaluatingOpen, setIsEvaluatingOpen] = useState(false);
+
   // Timer state
   const [quizStartTime, setQuizStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -109,8 +138,15 @@ function QuizContent() {
   // Early termination state
   const [showEarlyStopConfirm, setShowEarlyStopConfirm] = useState(false);
 
+  // Back navigation confirmation state
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
+
   // Question count warning
   const [countWarning, setCountWarning] = useState<string | null>(null);
+
+  // Mistake analysis state
+  const [mistakeAnalysis, setMistakeAnalysis] = useState<MistakeAnalysis | null>(null);
+  const [isAnalyzingMistakes, setIsAnalyzingMistakes] = useState(false);
 
   const MAX_HINTS = 3;
 
@@ -227,6 +263,24 @@ function QuizContent() {
 
     return () => clearInterval(interval);
   }, [quizStartTime, quizState.showResult]);
+
+  // Prevent accidental navigation away during active quiz
+  useEffect(() => {
+    // Only warn if quiz is in progress (has questions and not showing results)
+    const isQuizActive = quizState.questions.length > 0 && !quizState.showResult;
+
+    if (!isQuizActive) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers require returnValue to be set
+      e.returnValue = 'Имаш незавършен тест. Сигурен ли си, че искаш да напуснеш?';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [quizState.questions.length, quizState.showResult]);
 
   // Keyboard shortcuts for MCQ (1-4 or A-D to select, Enter to submit)
   useEffect(() => {
@@ -494,7 +548,7 @@ function QuizContent() {
     setIsEvaluating(false);
   };
 
-  const handleAnswer = () => {
+  const handleAnswer = async () => {
     const currentQuestion = quizState.questions[quizState.currentIndex];
     const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
       ? selectedAnswer
@@ -511,6 +565,40 @@ function QuizContent() {
         newTimes[quizState.currentIndex] = timeSpent;
         return newTimes;
       });
+    }
+
+    // For open questions, evaluate with AI
+    if (currentQuestion.type === 'open' && openAnswer.trim()) {
+      const apiKey = localStorage.getItem('claude-api-key');
+      if (apiKey) {
+        setIsEvaluatingOpen(true);
+        try {
+          const response = await fetch('/api/quiz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiKey,
+              mode: 'evaluate_open',
+              question: currentQuestion.question,
+              userAnswer: openAnswer,
+              correctAnswer: currentQuestion.correctAnswer,
+              bloomLevel: currentQuestion.bloomLevel || 3
+            })
+          });
+
+          const result = await response.json();
+          if (result.evaluation) {
+            setOpenEvaluations(prev => ({
+              ...prev,
+              [quizState.currentIndex]: result.evaluation
+            }));
+            if (result.usage) incrementApiCalls(result.usage.cost);
+          }
+        } catch {
+          // Fallback - show explanation without AI feedback
+        }
+        setIsEvaluatingOpen(false);
+      }
     }
 
     setShowExplanation(true);
@@ -578,7 +666,12 @@ function QuizContent() {
       if ((q.type === 'multiple_choice' || q.type === 'case_study') && quizState.answers[i] === q.correctAnswer) {
         correct++;
       } else if (q.type === 'open' && quizState.answers[i]) {
-        correct += 0.5;
+        // Use AI evaluation score if available, otherwise 0
+        const evaluation = openEvaluations[i];
+        if (evaluation) {
+          correct += evaluation.score; // 0-1 based on AI evaluation
+        }
+        // No automatic points - AI must evaluate
       }
     });
     return correct;
@@ -593,6 +686,132 @@ function QuizContent() {
     return 2;
   };
 
+  // Analyze mistakes using AI
+  const analyzeMistakes = async () => {
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!topic || !subject || !apiKey) return;
+
+    // Collect mistakes from the quiz
+    const mistakes: Array<{
+      question: string;
+      userAnswer: string;
+      correctAnswer: string;
+      concept?: string;
+      bloomLevel?: number;
+    }> = [];
+
+    quizState.questions.forEach((q, i) => {
+      const userAnswer = quizState.answers[i];
+
+      if (q.type === 'multiple_choice' || q.type === 'case_study') {
+        if (userAnswer !== q.correctAnswer) {
+          mistakes.push({
+            question: q.question,
+            userAnswer: userAnswer || '(без отговор)',
+            correctAnswer: q.correctAnswer,
+            concept: q.concept,
+            bloomLevel: q.bloomLevel
+          });
+        }
+      } else if (q.type === 'open') {
+        const evaluation = openEvaluations[i];
+        if (!evaluation || evaluation.score < 0.7) {
+          mistakes.push({
+            question: q.question,
+            userAnswer: userAnswer || '(без отговор)',
+            correctAnswer: q.correctAnswer,
+            concept: q.concept,
+            bloomLevel: q.bloomLevel
+          });
+        }
+      }
+    });
+
+    if (mistakes.length === 0) {
+      setMistakeAnalysis({
+        summary: 'Отлично представяне! Няма значителни грешки за анализ.',
+        weakConcepts: [],
+        patterns: [],
+        recommendations: [],
+        priorityFocus: null
+      });
+      return;
+    }
+
+    setIsAnalyzingMistakes(true);
+    try {
+      const response = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 'analyze_mistakes',
+          mistakes,
+          topicName: topic.name,
+          subjectName: subject.name
+        })
+      });
+
+      const result = await response.json();
+      if (result.analysis) {
+        setMistakeAnalysis(result.analysis);
+        if (result.usage) incrementApiCalls(result.usage.cost);
+      }
+    } catch {
+      // Silently fail - analysis is optional
+    }
+    setIsAnalyzingMistakes(false);
+  };
+
+  // Generate and download Anki-compatible flashcards from mistakes
+  const generateAnkiCards = () => {
+    const cards: string[] = [];
+
+    quizState.questions.forEach((q, i) => {
+      const userAnswer = quizState.answers[i];
+      const openEval = openEvaluations[i];
+
+      // Determine if wrong
+      const isWrong = q.type === 'open'
+        ? (!openEval || openEval.score < 0.7)
+        : userAnswer !== q.correctAnswer;
+
+      if (!isWrong) return;
+
+      // Front: Question + context
+      // Back: Correct answer + explanation
+      const front = q.question.replace(/\t/g, ' ').replace(/\n/g, '<br>');
+      let back = q.correctAnswer.replace(/\t/g, ' ').replace(/\n/g, '<br>');
+
+      if (q.explanation) {
+        back += `<br><br><i>${q.explanation.replace(/\t/g, ' ').replace(/\n/g, '<br>')}</i>`;
+      }
+
+      // Add concept as tag (third column)
+      const tag = q.concept ? q.concept.replace(/\s+/g, '_') : 'General';
+
+      cards.push(`${front}\t${back}\t${tag}`);
+    });
+
+    if (cards.length === 0) {
+      alert('Няма грешки за генериране на карти!');
+      return;
+    }
+
+    // Create and download TSV file
+    const content = cards.join('\n');
+    const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `anki-cards-${topic?.name || 'quiz'}-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleSaveGrade = () => {
     if (!subjectId || !topicId || !topic) return;
     const score = calculateScore();
@@ -600,7 +819,7 @@ function QuizContent() {
     const percentage = (score / quizState.questions.length) * 100;
 
     addGrade(subjectId, topicId, grade);
-    trackTopicRead(subjectId, topicId); // Track as read when quiz is completed
+    // Note: Don't track as "read" here - quizzes test knowledge, not reading
 
     // Collect wrong answers AND track correctly answered concepts
     const newWrongAnswers: WrongAnswer[] = [];
@@ -610,8 +829,7 @@ function QuizContent() {
       const userAnswer = quizState.answers[i];
       const concept = q.concept || 'General';
 
-      // Only track MCQ and case study questions for wrong answers
-      // Open questions can't be reliably verified as wrong
+      // Track MCQ/case_study based on exact match
       if (q.type === 'multiple_choice' || q.type === 'case_study') {
         const isCorrect = userAnswer === q.correctAnswer;
 
@@ -630,7 +848,27 @@ function QuizContent() {
           });
         }
       }
-      // For open questions, just track as "reviewed" but don't count as mastered or wrong
+      // Track open questions based on AI evaluation
+      else if (q.type === 'open') {
+        const evaluation = openEvaluations[i];
+        if (evaluation) {
+          if (evaluation.isCorrect || evaluation.score >= 0.7) {
+            masteredConcepts.add(concept);
+          } else if (userAnswer && userAnswer.trim()) {
+            // Track as wrong answer if AI score < 0.7
+            newWrongAnswers.push({
+              question: q.question,
+              userAnswer: userAnswer,
+              correctAnswer: q.correctAnswer,
+              concept: concept,
+              bloomLevel: q.bloomLevel || 1,
+              date: new Date().toISOString(),
+              drillCount: 0,
+              timeSpent: questionTimes[i] || 0
+            });
+          }
+        }
+      }
     });
 
     // Handle wrong answers based on mode
@@ -638,12 +876,20 @@ function QuizContent() {
     const existingWrongAnswers = topic.wrongAnswers || [];
 
     if (mode === 'drill_weakness') {
-      // For drill_weakness mode: increment drillCount on all existing wrong answers
-      // (they were all used to generate the drill questions)
-      mergedWrongAnswers = existingWrongAnswers.map(wa => ({
-        ...wa,
-        drillCount: wa.drillCount + 1
-      }));
+      // For drill_weakness mode: only increment drillCount for questions that were ACTUALLY in this quiz
+      // Get the concepts that were drilled (from the quiz questions)
+      const drilledConcepts = new Set(
+        quizState.questions.map(q => q.concept || 'General')
+      );
+
+      mergedWrongAnswers = existingWrongAnswers.map(wa => {
+        // Only increment if this wrong answer's concept was drilled in this quiz
+        const wasDrilled = drilledConcepts.has(wa.concept);
+        return {
+          ...wa,
+          drillCount: wasDrilled ? wa.drillCount + 1 : wa.drillCount
+        };
+      });
       // Also add any NEW wrong answers from this drill session
       if (newWrongAnswers.length > 0) {
         mergedWrongAnswers = [...newWrongAnswers, ...mergedWrongAnswers].slice(0, 20);
@@ -660,10 +906,13 @@ function QuizContent() {
       return !isMastered;
     });
 
-    // Determine new Bloom level
-    let newBloomLevel: BloomLevel = topic.currentBloomLevel || 1;
+    // Determine the Bloom level this quiz was taken AT (not new level - that's calculated by context.tsx)
+    // For assessment mode, find the highest level with >= 70%
+    // For other modes, use the topic's current bloom level (the level questions were generated for)
+    let quizBloomLevel: BloomLevel = (topic.currentBloomLevel || 1) as BloomLevel;
+
     if (mode === 'assessment') {
-      // Assessment: find highest level with >= 70%
+      // Assessment: find highest level with >= 70% using REAL scores
       const levelScores: Record<number, { correct: number; total: number }> = {};
       quizState.questions.forEach((q, i) => {
         const level = q.bloomLevel || 1;
@@ -671,36 +920,45 @@ function QuizContent() {
         levelScores[level].total++;
         if ((q.type === 'multiple_choice' || q.type === 'case_study') && quizState.answers[i] === q.correctAnswer) {
           levelScores[level].correct++;
-        } else if (q.type === 'open' && quizState.answers[i]) {
-          levelScores[level].correct += 0.5;
+        } else if (q.type === 'open') {
+          // Use actual AI evaluation score for open questions
+          const evaluation = openEvaluations[i];
+          if (evaluation) {
+            levelScores[level].correct += evaluation.score;
+          }
+          // No automatic points if no evaluation
         }
       });
 
-      newBloomLevel = 1;
+      quizBloomLevel = 1;
       for (let level = 1; level <= 6; level++) {
         const ls = levelScores[level];
         if (ls && ls.total > 0 && (ls.correct / ls.total) >= 0.7) {
-          newBloomLevel = level as BloomLevel;
-        } else break;
+          quizBloomLevel = level as BloomLevel;
+        } else if (ls && ls.total > 0) {
+          // Stop at first level that doesn't pass
+          break;
+        }
       }
-    } else if (percentage >= 75 && newBloomLevel < 6) {
-      newBloomLevel = Math.min(6, newBloomLevel + 1) as BloomLevel;
     }
+    // Note: We don't increment bloom level here anymore - context.tsx handles that
+    // based on quizHistory (needs 2+ successful quizzes at current level)
 
     // Get weight from preset (custom mode uses standard weight)
     const weight = mode === 'custom' ? 1.0 : QUIZ_LENGTH_PRESETS[quizLength].weight;
 
     const quizResult = {
       date: new Date().toISOString(),
-      bloomLevel: newBloomLevel,
+      bloomLevel: quizBloomLevel, // The level this quiz was taken at
       score: Math.round(percentage),
       questionsCount: quizState.questions.length,
       correctAnswers: Math.round(score),
       weight
     };
 
+    // Don't set currentBloomLevel directly - let context.tsx calculate it
+    // based on quizHistory (requires 2+ successful quizzes at current level to advance)
     updateTopic(subjectId, topicId, {
-      currentBloomLevel: newBloomLevel,
       quizHistory: [...(topic.quizHistory || []), quizResult],
       wrongAnswers: mergedWrongAnswers
     });
@@ -710,7 +968,7 @@ function QuizContent() {
     if (!subjectId || !topicId || !topic || !freeRecallEvaluation) return;
 
     addGrade(subjectId, topicId, freeRecallEvaluation.grade);
-    trackTopicRead(subjectId, topicId); // Track as read when free recall is completed
+    // Note: Don't track as "read" here - free recall tests knowledge, not reading
 
     // Free recall gets standard weight
     const quizResult = {
@@ -722,8 +980,8 @@ function QuizContent() {
       weight: 1.0
     };
 
+    // Don't set currentBloomLevel directly - let context.tsx calculate it
     updateTopic(subjectId, topicId, {
-      currentBloomLevel: freeRecallEvaluation.bloomLevel as BloomLevel,
       quizHistory: [...(topic.quizHistory || []), quizResult]
     });
   };
@@ -748,6 +1006,7 @@ function QuizContent() {
     setElapsedTime(0);
     setShowPreview(false);
     setSelectedTopics([]);
+    setOpenEvaluations({}); // Reset AI evaluations
   };
 
   // Toggle topic selection for multi-topic mode
@@ -958,10 +1217,24 @@ function QuizContent() {
                 const avgTime = Math.round(validTimes.reduce((a, b) => a + b, 0) / validTimes.length);
                 const maxTime = Math.max(...validTimes);
                 const slowestIndex = questionTimes.indexOf(maxTime);
+                const slowestQuestion = quizState.questions[slowestIndex];
+                const questionText = slowestQuestion?.question || '';
+                const truncatedText = questionText.length > 80
+                  ? questionText.substring(0, 80) + '...'
+                  : questionText;
                 return (
-                  <div className="flex flex-wrap gap-4 justify-center text-xs text-slate-500 font-mono">
-                    <span>⏱️ Средно: {avgTime}s/въпрос</span>
-                    <span className="text-amber-400">🐢 Най-бавен: Q{slowestIndex + 1} ({maxTime}s)</span>
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-4 justify-center text-xs text-slate-500 font-mono">
+                      <span>⏱️ Средно: {avgTime}s/въпрос</span>
+                      <span className="text-amber-400">🐢 Най-бавен: Q{slowestIndex + 1} ({maxTime}s)</span>
+                    </div>
+                    {truncatedText && (
+                      <div className="text-xs text-amber-300/70 font-mono px-4 py-2 bg-amber-500/5 rounded-lg border border-amber-500/20 max-w-md mx-auto">
+                        <span className="text-amber-400/50">„</span>
+                        {truncatedText}
+                        <span className="text-amber-400/50">"</span>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -976,11 +1249,75 @@ function QuizContent() {
             {grade.toFixed(2)}
           </div>
 
-          {/* Wrong answers count */}
+          {/* Wrong answers detail */}
           {quizState.questions.length - Math.round(score) > 0 && (
-            <p className="text-sm text-orange-400 font-mono mb-4">
-              {quizState.questions.length - Math.round(score)} грешни въпроса
-            </p>
+            <div className="w-full max-w-2xl mx-auto mb-6">
+              <details className="group">
+                <summary className="cursor-pointer text-sm text-orange-400 font-mono mb-2 hover:text-orange-300 transition-colors flex items-center justify-center gap-2">
+                  <XCircle size={16} />
+                  {quizState.questions.length - Math.round(score)} грешни въпроса
+                  <span className="text-xs text-slate-500">(цъкни за детайли)</span>
+                </summary>
+                <div className="mt-4 space-y-4 text-left">
+                  {quizState.questions.map((q, i) => {
+                    const userAnswer = quizState.answers[i];
+                    const openEval = openEvaluations[i];
+
+                    // Determine if wrong
+                    const isWrong = q.type === 'open'
+                      ? (!openEval || openEval.score < 0.7)
+                      : userAnswer !== q.correctAnswer;
+
+                    if (!isWrong) return null;
+
+                    return (
+                      <div key={i} className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
+                        <div className="flex items-start gap-2 mb-2">
+                          <span className="bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded font-mono">
+                            Q{i + 1}
+                          </span>
+                          <span className="text-xs text-slate-500 font-mono">
+                            {q.type === 'case_study' ? 'Казус' : q.type === 'open' ? 'Отворен' : 'Избор'}
+                          </span>
+                          {q.concept && (
+                            <span className="text-xs text-purple-400 font-mono ml-auto">
+                              {q.concept}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-sm text-slate-300 font-mono mb-3 leading-relaxed">
+                          {q.question}
+                        </p>
+
+                        <div className="grid gap-2 text-xs font-mono">
+                          <div className="bg-red-500/10 rounded p-2 border-l-2 border-red-500">
+                            <span className="text-red-400 font-semibold">Твой отговор: </span>
+                            <span className="text-red-300">{userAnswer || '(празен)'}</span>
+                          </div>
+                          <div className="bg-green-500/10 rounded p-2 border-l-2 border-green-500">
+                            <span className="text-green-400 font-semibold">Правилен: </span>
+                            <span className="text-green-300">{q.correctAnswer}</span>
+                          </div>
+                          {q.explanation && (
+                            <div className="bg-slate-700/50 rounded p-2 border-l-2 border-slate-500">
+                              <span className="text-slate-400 font-semibold">Обяснение: </span>
+                              <span className="text-slate-300">{q.explanation}</span>
+                            </div>
+                          )}
+                          {q.type === 'open' && openEval && (
+                            <div className="bg-purple-500/10 rounded p-2 border-l-2 border-purple-500">
+                              <span className="text-purple-400 font-semibold">AI оценка: </span>
+                              <span className="text-purple-300">{Math.round(openEval.score * 100)}% - {openEval.feedback}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            </div>
           )}
 
           <div className="flex flex-wrap gap-3 justify-center">
@@ -1021,7 +1358,133 @@ function QuizContent() {
                 <Repeat size={20} /> Drill Weakness
               </button>
             )}
+            {/* Anki Export button - only show if there were wrong answers */}
+            {quizState.questions.length - Math.round(score) > 0 && (
+              <button
+                onClick={generateAnkiCards}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
+                title="Изтегли грешките като Anki карти (TSV формат)"
+              >
+                <Download size={20} /> Anki Export
+              </button>
+            )}
           </div>
+
+          {/* AI Mistake Analysis Section */}
+          {quizState.questions.length - Math.round(score) > 0 && (
+            <div className="mt-8 w-full max-w-2xl mx-auto">
+              {!mistakeAnalysis && !isAnalyzingMistakes && (
+                <button
+                  onClick={analyzeMistakes}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg font-mono hover:from-purple-700 hover:to-indigo-700 transition-all"
+                >
+                  <Brain size={20} /> Анализирай грешките с AI
+                </button>
+              )}
+
+              {isAnalyzingMistakes && (
+                <div className="flex items-center justify-center gap-3 py-4 text-purple-400 font-mono">
+                  <RefreshCw size={20} className="animate-spin" />
+                  AI анализира грешките...
+                </div>
+              )}
+
+              {mistakeAnalysis && (
+                <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6 space-y-4">
+                  <div className="flex items-center gap-2 text-purple-400 font-mono font-semibold border-b border-slate-700 pb-3">
+                    <Brain size={20} />
+                    AI Анализ на грешките
+                  </div>
+
+                  {/* Summary */}
+                  <div className="text-slate-300 font-mono text-sm">
+                    {mistakeAnalysis.summary}
+                  </div>
+
+                  {/* Priority Focus */}
+                  {mistakeAnalysis.priorityFocus && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                      <div className="flex items-center gap-2 text-red-400 font-mono text-xs font-semibold mb-1">
+                        <Target size={14} />
+                        ПРИОРИТЕТЕН ФОКУС
+                      </div>
+                      <p className="text-red-300 font-mono text-sm">{mistakeAnalysis.priorityFocus}</p>
+                    </div>
+                  )}
+
+                  {/* Weak Concepts */}
+                  {mistakeAnalysis.weakConcepts.length > 0 && (
+                    <div>
+                      <h4 className="text-slate-400 font-mono text-xs font-semibold mb-2">Слаби концепции:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {mistakeAnalysis.weakConcepts.map((concept, i) => (
+                          <span key={i} className="px-2 py-1 bg-orange-500/20 text-orange-300 rounded text-xs font-mono">
+                            {concept}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Patterns */}
+                  {mistakeAnalysis.patterns.length > 0 && (
+                    <div>
+                      <h4 className="text-slate-400 font-mono text-xs font-semibold mb-2">Открити модели:</h4>
+                      <div className="space-y-2">
+                        {mistakeAnalysis.patterns.map((pattern, i) => (
+                          <div key={i} className="bg-slate-700/50 rounded p-2 text-xs font-mono">
+                            <span className={`inline-block px-1.5 py-0.5 rounded mr-2 ${
+                              pattern.type === 'conceptual_gap' ? 'bg-red-500/30 text-red-300' :
+                              pattern.type === 'confusion' ? 'bg-yellow-500/30 text-yellow-300' :
+                              pattern.type === 'detail_miss' ? 'bg-blue-500/30 text-blue-300' :
+                              pattern.type === 'application_error' ? 'bg-purple-500/30 text-purple-300' :
+                              'bg-slate-500/30 text-slate-300'
+                            }`}>
+                              {pattern.type === 'conceptual_gap' ? 'Концептуална празнина' :
+                               pattern.type === 'confusion' ? 'Объркване' :
+                               pattern.type === 'detail_miss' ? 'Пропуснат детайл' :
+                               pattern.type === 'application_error' ? 'Грешка в приложението' :
+                               pattern.type === 'recall_failure' ? 'Проблем с паметта' :
+                               pattern.type}
+                            </span>
+                            <span className="text-slate-300">{pattern.description}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Recommendations */}
+                  {mistakeAnalysis.recommendations.length > 0 && (
+                    <div>
+                      <h4 className="text-slate-400 font-mono text-xs font-semibold mb-2">Препоръки:</h4>
+                      <div className="space-y-2">
+                        {mistakeAnalysis.recommendations.map((rec, i) => (
+                          <div key={i} className={`rounded p-3 text-xs font-mono border-l-2 ${
+                            rec.priority === 'high' ? 'bg-red-500/10 border-red-500' :
+                            rec.priority === 'medium' ? 'bg-yellow-500/10 border-yellow-500' :
+                            'bg-green-500/10 border-green-500'
+                          }`}>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`uppercase text-[10px] font-bold ${
+                                rec.priority === 'high' ? 'text-red-400' :
+                                rec.priority === 'medium' ? 'text-yellow-400' :
+                                'text-green-400'
+                              }`}>
+                                {rec.priority === 'high' ? 'Важно' : rec.priority === 'medium' ? 'Средно' : 'Допълнително'}
+                              </span>
+                            </div>
+                            <p className="text-slate-200 mb-1">{rec.action}</p>
+                            <p className="text-slate-500 text-[10px]">{rec.reason}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -1030,9 +1493,10 @@ function QuizContent() {
   // Quiz in progress
   if (quizState.questions.length > 0) {
     const currentQuestion = quizState.questions[quizState.currentIndex];
+    const openEval = openEvaluations[quizState.currentIndex];
     const isCorrect = (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study')
       ? selectedAnswer === currentQuestion.correctAnswer
-      : true;
+      : openEval?.isCorrect ?? false; // Open questions use AI evaluation
 
     return (
       <div className="min-h-screen p-6 space-y-6">
@@ -1065,6 +1529,37 @@ function QuizContent() {
           </div>
         )}
 
+        {/* Back navigation confirmation modal */}
+        {showBackConfirm && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full">
+              <h3 className="text-lg font-semibold text-slate-100 font-mono mb-2">
+                Напускаш теста?
+              </h3>
+              <p className="text-sm text-slate-400 font-mono mb-4">
+                Имаш незавършен тест. Ако излезеш сега, прогресът ти ще бъде загубен.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBackConfirm(false)}
+                  className="flex-1 px-4 py-2 bg-slate-700 text-slate-200 rounded-lg font-mono text-sm hover:bg-slate-600"
+                >
+                  Остани
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBackConfirm(false);
+                    router.push('/quiz');
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-mono text-sm hover:bg-red-500"
+                >
+                  Напусни
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Question count warning banner */}
         {countWarning && (
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 flex items-start gap-3">
@@ -1082,9 +1577,13 @@ function QuizContent() {
         )}
 
         <div className="flex items-center gap-4">
-          <Link href="/quiz" className="text-slate-400 hover:text-slate-200 transition-colors">
+          <button
+            onClick={() => setShowBackConfirm(true)}
+            className="text-slate-400 hover:text-slate-200 transition-colors"
+            title="Назад (ще поиска потвърждение)"
+          >
             <ArrowLeft size={20} />
-          </Link>
+          </button>
           {/* Early stop button */}
           <button
             onClick={() => setShowEarlyStopConfirm(true)}
@@ -1209,16 +1708,88 @@ function QuizContent() {
           )}
 
           {showExplanation && (
-            <div className={`mt-6 p-4 rounded-lg border ${
-              isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
-            }`}>
-              <div className="flex items-center gap-2 mb-2">
-                {isCorrect ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-orange-400" />}
-                <span className={`font-mono font-semibold ${isCorrect ? 'text-green-400' : 'text-orange-400'}`}>
-                  {isCorrect ? 'Правилно!' : 'Провери'}
-                </span>
-              </div>
-              <p className="text-sm text-slate-300 font-mono">{currentQuestion.explanation}</p>
+            <div className="mt-6 space-y-4">
+              {/* AI Evaluation for open questions */}
+              {currentQuestion.type === 'open' && openEval && (
+                <div className={`p-4 rounded-lg border ${
+                  openEval.score >= 0.7 ? 'bg-green-500/10 border-green-500/30' :
+                  openEval.score >= 0.4 ? 'bg-yellow-500/10 border-yellow-500/30' :
+                  'bg-red-500/10 border-red-500/30'
+                }`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      {openEval.score >= 0.7 ? <CheckCircle size={18} className="text-green-400" /> :
+                       openEval.score >= 0.4 ? <AlertCircle size={18} className="text-yellow-400" /> :
+                       <XCircle size={18} className="text-red-400" />}
+                      <span className={`font-mono font-semibold ${
+                        openEval.score >= 0.7 ? 'text-green-400' :
+                        openEval.score >= 0.4 ? 'text-yellow-400' :
+                        'text-red-400'
+                      }`}>
+                        {openEval.score >= 0.7 ? 'Правилно!' :
+                         openEval.score >= 0.4 ? 'Частично' :
+                         'Неправилно'}
+                      </span>
+                    </div>
+                    <span className={`text-lg font-bold font-mono ${
+                      openEval.score >= 0.7 ? 'text-green-400' :
+                      openEval.score >= 0.4 ? 'text-yellow-400' :
+                      'text-red-400'
+                    }`}>
+                      {Math.round(openEval.score * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-300 font-mono mb-3">{openEval.feedback}</p>
+                  {openEval.keyPointsMissed && openEval.keyPointsMissed.length > 0 && (
+                    <div className="mt-2 p-2 bg-red-500/10 rounded">
+                      <p className="text-xs text-red-400 font-mono font-semibold mb-1">Пропуснато:</p>
+                      <ul className="text-xs text-red-300 font-mono list-disc list-inside">
+                        {openEval.keyPointsMissed.map((point, i) => (
+                          <li key={i}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {openEval.keyPointsCovered && openEval.keyPointsCovered.length > 0 && (
+                    <div className="mt-2 p-2 bg-green-500/10 rounded">
+                      <p className="text-xs text-green-400 font-mono font-semibold mb-1">Покрито:</p>
+                      <ul className="text-xs text-green-300 font-mono list-disc list-inside">
+                        {openEval.keyPointsCovered.map((point, i) => (
+                          <li key={i}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Standard result for MCQ */}
+              {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') && (
+                <div className={`p-4 rounded-lg border ${
+                  isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    {isCorrect ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-orange-400" />}
+                    <span className={`font-mono font-semibold ${isCorrect ? 'text-green-400' : 'text-orange-400'}`}>
+                      {isCorrect ? 'Правилно!' : 'Грешно'}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-300 font-mono">{currentQuestion.explanation}</p>
+                </div>
+              )}
+
+              {/* Model answer for open questions */}
+              {currentQuestion.type === 'open' && (
+                <div className="p-4 rounded-lg border bg-slate-800/50 border-slate-600">
+                  <p className="text-xs text-slate-500 font-mono mb-2 uppercase">Примерен отговор:</p>
+                  <p className="text-sm text-slate-300 font-mono">{currentQuestion.correctAnswer}</p>
+                  {currentQuestion.explanation && (
+                    <p className="text-sm text-slate-400 font-mono mt-3 pt-3 border-t border-slate-700">
+                      {currentQuestion.explanation}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1226,10 +1797,20 @@ function QuizContent() {
             {!showExplanation ? (
               <button
                 onClick={handleAnswer}
-                disabled={(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') ? !selectedAnswer : !openAnswer.trim()}
-                className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50"
+                disabled={
+                  isEvaluatingOpen ||
+                  ((currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') ? !selectedAnswer : !openAnswer.trim())
+                }
+                className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center gap-2"
               >
-                Провери
+                {isEvaluatingOpen ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    AI оценява...
+                  </>
+                ) : (
+                  'Провери'
+                )}
               </button>
             ) : (
               <button

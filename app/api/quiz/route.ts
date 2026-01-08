@@ -100,6 +100,18 @@ export async function POST(request: Request) {
       return handleDrillWeakness(anthropic, material, topicName, subjectName, wrongAnswers, questionCount);
     }
 
+    if (mode === 'evaluate_open') {
+      // Evaluate an open answer against the correct answer
+      const { userAnswer, correctAnswer, question, bloomLevel: qBloomLevel } = body;
+      return handleEvaluateOpen(anthropic, question, userAnswer, correctAnswer, qBloomLevel || 3);
+    }
+
+    if (mode === 'analyze_mistakes') {
+      // Analyze wrong answers pattern and provide study recommendations
+      const { mistakes, topicName: topic, subjectName: subject } = body;
+      return handleAnalyzeMistakes(anthropic, mistakes, topic, subject);
+    }
+
     if (!material) {
       return NextResponse.json({ error: 'Missing material' }, { status: 400 });
     }
@@ -496,6 +508,132 @@ Questions must be in Bulgarian.`
   });
 }
 
+async function handleEvaluateOpen(
+  anthropic: Anthropic,
+  question: string,
+  userAnswer: string,
+  correctAnswer: string,
+  bloomLevel: number
+) {
+  if (!userAnswer || !userAnswer.trim()) {
+    return NextResponse.json({
+      evaluation: {
+        score: 0,
+        isCorrect: false,
+        feedback: 'Не е даден отговор.',
+        keyPointsMissed: [],
+        keyPointsCovered: []
+      },
+      usage: { inputTokens: 0, outputTokens: 0, cost: 0 }
+    });
+  }
+
+  // Select model based on Bloom level - higher levels need smarter evaluation
+  const useOpus = bloomLevel >= 4;
+  const modelId = useOpus ? 'claude-opus-4-5-20251101' : 'claude-sonnet-4-5-20250929';
+
+  // Determine strictness based on Bloom level
+  const strictnessGuide = bloomLevel >= 5
+    ? `МНОГО СТРОГА ОЦЕНКА (Bloom ${bloomLevel} - Evaluate/Create):
+       - Изисквай ПЪЛЕН, ЗАДЪЛБОЧЕН отговор с ясна обосновка
+       - Трябва да има критичен анализ, не просто факти
+       - Частични отговори без обосновка = 0.2-0.4
+       - Добри отговори с малки пропуски = 0.5-0.7
+       - Само отлични, пълни отговори = 0.8+
+       - НЕ давай над 0.6 ако липсва обосновка или критичен анализ!`
+    : bloomLevel === 4
+      ? `СТРОГА ОЦЕНКА (Bloom 4 - Analyze):
+         - Изисквай анализ на връзки и причинно-следствени връзки
+         - Повърхностни отговори без анализ = 0.3-0.5
+         - Трябва да покаже РАЗБИРАНЕ, не само запаметяване
+         - Частични отговори = 0.4-0.6`
+      : bloomLevel === 3
+        ? `УМЕРЕНА ОЦЕНКА (Bloom 3 - Apply):
+           - Изисквай правилно ПРИЛОЖЕНИЕ на концепцията
+           - Трябва да покаже как се използва знанието
+           - Частични отговори = 0.4-0.6`
+        : `БАЗОВА ОЦЕНКА (Bloom ${bloomLevel} - Remember/Understand):
+           - Проверявай основните факти и дефиниции
+           - По-толерантен към формулировката
+           - Но фактологични грешки = строго наказание`;
+
+  const response = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Ти си строг медицински преподавател. Оцени отговора на студента.
+
+ВЪПРОС: ${question}
+
+ПРАВИЛЕН ОТГОВОР (reference):
+${correctAnswer}
+
+ОТГОВОР НА СТУДЕНТА:
+${userAnswer}
+
+${strictnessGuide}
+
+КРИТЕРИИ ЗА ОЦЕНКА:
+- Медицинска точност е КРИТИЧНА - грешни факти = сериозно намаляване
+- Непълни отговори НЕ са напълно правилни
+- Повърхностни отговори без детайли = ниска оценка
+- Правописни грешки са ОК, но фактологични грешки НЕ
+
+Върни САМО валиден JSON:
+{
+  "score": <0.0-1.0 с точност 0.1>,
+  "isCorrect": <true ако score >= 0.7>,
+  "feedback": "<кратка обратна връзка на български - какво е добре и какво липсва>",
+  "keyPointsCovered": ["<покрити ключови точки>"],
+  "keyPointsMissed": ["<пропуснати ключови точки>"]
+}
+
+БЪД СТРОГ! По-добре е студентът да знае какво не знае.`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let evaluation;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    // Fallback - be lenient if parsing fails
+    evaluation = {
+      score: 0.5,
+      isCorrect: false,
+      feedback: 'Не успях да оценя отговора автоматично. Сравни с правилния отговор.',
+      keyPointsCovered: [],
+      keyPointsMissed: []
+    };
+  }
+
+  // Cost calculation based on model used
+  // Opus: $15/MTok input, $75/MTok output
+  // Sonnet: $3/MTok input, $15/MTok output
+  const inputCost = useOpus ? 15 : 3;
+  const outputCost = useOpus ? 75 : 15;
+  const cost = (response.usage.input_tokens * inputCost + response.usage.output_tokens * outputCost) / 1000000;
+
+  return NextResponse.json({
+    evaluation,
+    model: useOpus ? 'opus' : 'sonnet', // Return which model was used
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 10000) / 10000
+    }
+  });
+}
+
 // Model mapping for user selection
 const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
   opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
@@ -686,6 +824,116 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       cost: Math.round(cost * 10000) / 10000
+    }
+  });
+}
+
+interface MistakeForAnalysis {
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  concept?: string;
+  bloomLevel?: number;
+}
+
+async function handleAnalyzeMistakes(
+  anthropic: Anthropic,
+  mistakes: MistakeForAnalysis[],
+  topicName: string,
+  subjectName: string
+) {
+  if (!mistakes || mistakes.length === 0) {
+    return NextResponse.json({
+      analysis: {
+        summary: 'Няма грешки за анализ - отлично представяне!',
+        weakConcepts: [],
+        patterns: [],
+        recommendations: [],
+        priorityFocus: null
+      },
+      usage: { inputTokens: 0, outputTokens: 0, cost: 0 }
+    });
+  }
+
+  const mistakesText = mistakes.map((m, i) => `
+Грешка ${i + 1}:
+- Въпрос: ${m.question}
+- Твой отговор: ${m.userAnswer || '(празен)'}
+- Правилен отговор: ${m.correctAnswer}
+- Концепция: ${m.concept || 'Обща'}
+- Bloom ниво: ${m.bloomLevel || 'N/A'}
+`).join('\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001', // Use Haiku for cost efficiency
+    max_tokens: 1500,
+    messages: [{
+      role: 'user',
+      content: `Ти си експерт по медицинско образование. Анализирай грешките на студент от тест по "${topicName}" (${subjectName}).
+
+ГРЕШКИ:
+${mistakesText}
+
+Анализирай pattern-ите в грешките и дай КОНКРЕТНИ, ДЕЙСТВАЩИ съвети.
+
+Отговори САМО с валиден JSON в този формат:
+{
+  "summary": "Кратко обобщение на проблемните области (1-2 изречения)",
+  "weakConcepts": ["концепция1", "концепция2"],
+  "patterns": [
+    {
+      "type": "pattern_type",
+      "description": "Описание на грешката",
+      "frequency": "честота"
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "high/medium/low",
+      "action": "Конкретно действие за подобрение",
+      "reason": "Защо това ще помогне"
+    }
+  ],
+  "priorityFocus": "Най-критичната област за незабавен фокус"
+}
+
+Pattern types: "conceptual_gap" (не разбира концепция), "detail_miss" (пропуска детайли), "confusion" (бърка подобни неща), "application_error" (не може да приложи), "recall_failure" (не помни)
+
+ВАЖНО: Бъди КОНКРЕТЕН - използвай имената на концепциите от грешките, не общи съвети!`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let analysis;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    // Fallback structure if parsing fails
+    analysis = {
+      summary: 'Анализът не можа да се генерира правилно.',
+      weakConcepts: mistakes.map(m => m.concept || 'Обща концепция').filter((v, i, a) => a.indexOf(v) === i),
+      patterns: [],
+      recommendations: [{ priority: 'high', action: 'Прегледай грешките внимателно', reason: 'За да разбереш къде грешиш' }],
+      priorityFocus: 'Преговор на материала'
+    };
+  }
+
+  const cost = (response.usage.input_tokens * 0.8 + response.usage.output_tokens * 4) / 1000000;
+
+  return NextResponse.json({
+    analysis,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }

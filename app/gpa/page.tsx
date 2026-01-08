@@ -63,6 +63,11 @@ export default function GPAPage() {
 
   const handleAddGrade = () => {
     if (!newGrade.subjectName.trim()) return;
+    // Validate grade is between 2-6
+    if (newGrade.grade < 2 || newGrade.grade > 6) {
+      alert('Оценката трябва да е между 2 и 6!');
+      return;
+    }
     addSemesterGrade(newGrade);
     setNewGrade({
       semester: newGrade.semester,
@@ -75,6 +80,11 @@ export default function GPAPage() {
 
   const handleAddStateExam = () => {
     if (!newStateExam.name.trim()) return;
+    // Validate grade is between 2-6
+    if (newStateExam.grade < 2 || newStateExam.grade > 6) {
+      alert('Оценката трябва да е между 2 и 6!');
+      return;
+    }
     setStateExams([...stateExams, newStateExam]);
     setNewStateExam({ name: '', grade: 6 });
     setShowStateExamModal(false);

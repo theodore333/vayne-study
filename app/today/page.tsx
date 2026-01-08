@@ -633,20 +633,13 @@ export default function TodayPage() {
                       </p>
                       {task.topics.length > 0 && (
                         <div className="space-y-1.5">
-                          {task.topics.map((topic, idx) => {
+                          {task.topics.map((topic) => {
                             const isTopicDone = completedTopics.has(topic.id);
                             const subject = data.subjects.find(s => s.topics.some(t => t.id === topic.id));
-                            // Check if related to previous or next topic in list
-                            const prevTopic = idx > 0 ? task.topics[idx - 1] : null;
-                            const isRelatedToPrev = prevTopic && (
-                              topic.relatedTopics?.includes(prevTopic.id) ||
-                              prevTopic.relatedTopics?.includes(topic.id) ||
-                              (topic.cluster && topic.cluster === prevTopic.cluster)
-                            );
                             return (
                               <div key={topic.id} className={`flex items-center gap-2 p-2 rounded-lg transition-all overflow-hidden ${
                                 isTopicDone ? 'bg-green-500/10' : 'hover:bg-slate-800/50'
-                              } ${isRelatedToPrev ? 'ml-4 border-l-2 border-cyan-500/30' : ''}`}>
+                              }`}>
                                 <button onClick={(e) => { e.stopPropagation(); toggleTopic(topic.id); }} className="shrink-0">
                                   {isTopicDone ? (
                                     <CheckCircle2 size={18} className="text-green-500" />
@@ -666,9 +659,6 @@ export default function TodayPage() {
                                   <span className="group-hover:underline">
                                     #{topic.number} {topic.name.length > 45 ? topic.name.slice(0, 45) + '...' : topic.name}
                                   </span>
-                                  {isRelatedToPrev && (
-                                    <span className="ml-1.5 text-[9px] text-cyan-400/70">свързана</span>
-                                  )}
                                 </Link>
                                 {isTopicDone && (
                                   <span className="text-[10px] text-green-400 font-mono shrink-0">+50 XP</span>

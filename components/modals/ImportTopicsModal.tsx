@@ -89,9 +89,6 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
     lastRead: null,
     size: null,
     sizeSetBy: null,
-    relatedTopics: [],
-    cluster: null,
-    prerequisites: [],
     wrongAnswers: [],
     highlights: []
   });

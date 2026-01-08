@@ -15,7 +15,7 @@ export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic, trackTopicRead } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -42,6 +42,8 @@ export default function TopicDetailPage() {
 
   // Open/close reader mode via URL
   const openReaderMode = () => {
+    // Track as actual read when entering reader mode
+    trackTopicRead(subjectId, topicId);
     router.push(`/subjects/${subjectId}/topics/${topicId}?reader=true`);
   };
   const closeReaderMode = () => {
@@ -404,47 +406,6 @@ export default function TopicDetailPage() {
           </div>
         </div>
       </div>
-
-      {/* Prerequisites Warning */}
-      {topic.prerequisites && topic.prerequisites.length > 0 && (() => {
-        const prereqTopics = topic.prerequisites
-          .map(id => subject.topics.find(t => t.id === id))
-          .filter(Boolean) as typeof subject.topics;
-        const unmetPrereqs = prereqTopics.filter(t => t.status !== 'green' && t.status !== 'yellow');
-
-        if (unmetPrereqs.length === 0) return null;
-
-        return (
-          <div className="mb-6 p-4 bg-amber-900/20 border border-amber-500/30 rounded-xl">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">⚠️</span>
-              <span className="text-sm font-semibold text-amber-400 font-mono">
-                Първо научи prerequisites ({unmetPrereqs.length})
-              </span>
-            </div>
-            <div className="space-y-2">
-              {unmetPrereqs.map(prereq => (
-                <Link
-                  key={prereq.id}
-                  href={`/subjects/${subjectId}/topics/${prereq.id}`}
-                  className="flex items-center gap-3 p-2 bg-amber-900/30 hover:bg-amber-900/50 rounded-lg transition-all group"
-                >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: STATUS_CONFIG[prereq.status].text }} />
-                  <span className="text-sm text-amber-200 font-mono group-hover:text-amber-100">
-                    #{prereq.number} {prereq.name}
-                  </span>
-                  <span className="text-xs text-amber-400/70 ml-auto">
-                    {STATUS_CONFIG[prereq.status].label} →
-                  </span>
-                </Link>
-              ))}
-            </div>
-            <p className="mt-3 text-xs text-amber-400/70 font-mono">
-              Тези теми са основа за текущата. Препоръчително е да ги научиш първо.
-            </p>
-          </div>
-        );
-      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}

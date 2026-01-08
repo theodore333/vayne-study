@@ -71,9 +71,6 @@ interface LegacyTopic {
   lastRead?: string | null;
   size?: TopicSize | null;
   sizeSetBy?: 'ai' | 'user' | null;
-  relatedTopics?: string[];
-  cluster?: string | null;
-  prerequisites?: string[];
   wrongAnswers?: Array<{ question: string; userAnswer: string | null; correctAnswer: string; concept: string; bloomLevel: number; date: string; drillCount: number }>;
   highlights?: Array<{ id: string; text: string; startOffset: number; endOffset: number; color: 'yellow' | 'green' | 'blue' | 'pink'; createdAt: string }>;
 }
@@ -280,10 +277,6 @@ export function loadData(): AppData {
         // Smart Scheduling: Size classification
         size: topic.size ?? null,
         sizeSetBy: topic.sizeSetBy ?? null,
-        // Smart Scheduling: Topic relations
-        relatedTopics: topic.relatedTopics ?? [],
-        cluster: topic.cluster ?? null,
-        prerequisites: topic.prerequisites ?? [],
         // Gap Analysis: Track wrong answers
         wrongAnswers: topic.wrongAnswers ?? [],
         // Reader Mode: Highlights

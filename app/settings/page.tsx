@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const [csvPreview, setCsvPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [columnMapping, setColumnMapping] = useState<{ name: string; status: string }>({ name: '', status: '' });
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
 
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -203,6 +204,11 @@ export default function SettingsPage() {
       return;
     }
 
+    if (!selectedSubjectId) {
+      setImportError('Избери предмет');
+      return;
+    }
+
     setImporting(true);
     setImportError(null);
 
@@ -215,17 +221,22 @@ export default function SettingsPage() {
       updated: []
     };
 
-    // Build a map of all topics by name (normalized)
+    // Build a map of topics ONLY from the selected subject
+    const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
+    if (!selectedSubject) {
+      setImportError('Предметът не е намерен');
+      setImporting(false);
+      return;
+    }
+
     const topicMap = new Map<string, { subjectId: string; topicId: string; currentStatus: TopicStatus }>();
-    for (const subject of data.subjects) {
-      for (const topic of subject.topics) {
-        const normalizedName = topic.name.toLowerCase().trim();
-        topicMap.set(normalizedName, {
-          subjectId: subject.id,
-          topicId: topic.id,
-          currentStatus: topic.status
-        });
-      }
+    for (const topic of selectedSubject.topics) {
+      const normalizedName = topic.name.toLowerCase().trim();
+      topicMap.set(normalizedName, {
+        subjectId: selectedSubject.id,
+        topicId: topic.id,
+        currentStatus: topic.status
+      });
     }
 
     // Process each row
@@ -271,6 +282,7 @@ export default function SettingsPage() {
   const cancelImport = () => {
     setCsvPreview(null);
     setColumnMapping({ name: '', status: '' });
+    setSelectedSubjectId('');
     setImportError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -349,6 +361,25 @@ export default function SettingsPage() {
                 </button>
               </div>
 
+              {/* Subject selector */}
+              <div className="mb-4">
+                <label className="block text-xs text-slate-500 font-mono mb-1">
+                  Предмет за import
+                </label>
+                <select
+                  value={selectedSubjectId}
+                  onChange={(e) => setSelectedSubjectId(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 font-mono text-sm"
+                >
+                  <option value="">Избери предмет...</option>
+                  {data.subjects.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.topics.length} теми)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Column mapping */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -416,7 +447,7 @@ export default function SettingsPage() {
             {/* Import button */}
             <button
               onClick={handleImport}
-              disabled={!columnMapping.name || !columnMapping.status || importing}
+              disabled={!columnMapping.name || !columnMapping.status || !selectedSubjectId || importing}
               className="w-full py-3 bg-orange-600 hover:bg-orange-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-mono text-sm transition-colors flex items-center justify-center gap-2"
             >
               {importing ? (

@@ -787,10 +787,19 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               </div>
               <p className="text-white/80 text-sm mt-1">{topic.name}</p>
             </div>
-            <div className="p-6">
-              <div className="prose prose-sm max-w-none text-stone-700 whitespace-pre-wrap">
-                {encodingCoach}
-              </div>
+            <div className="p-6 max-h-[60vh] overflow-y-auto">
+              <div
+                className="prose prose-sm max-w-none text-stone-700
+                  [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-stone-900 [&_h1]:mb-3 [&_h1]:mt-4
+                  [&_h2]:text-lg [&_h2]:font-bold [&_h2]:text-stone-800 [&_h2]:mb-2 [&_h2]:mt-3
+                  [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-stone-800 [&_h3]:mb-2 [&_h3]:mt-2
+                  [&_p]:text-stone-600 [&_p]:mb-2 [&_p]:leading-relaxed
+                  [&_strong]:text-stone-800
+                  [&_li]:text-stone-600 [&_li]:mb-1
+                  [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-2
+                  [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-2"
+                dangerouslySetInnerHTML={{ __html: parseMarkdown(encodingCoach) }}
+              />
               <div className="mt-4 pt-4 border-t border-stone-200">
                 <p className="text-xs text-stone-400 text-center">
                   💡 Този съвет е генериран веднъж за темата

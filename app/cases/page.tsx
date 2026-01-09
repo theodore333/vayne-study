@@ -17,6 +17,66 @@ import {
   StepEvaluation, InteractiveClinicalCase, EXAM_SYSTEMS, INVESTIGATION_CATEGORIES
 } from '@/lib/types';
 
+// Demo case for testing
+const DEMO_CASE: InteractiveClinicalCase = {
+  id: 'demo_case_1',
+  subjectId: 'demo',
+  topicId: 'demo',
+  difficulty: 'intermediate',
+  specialty: 'Кардиология',
+  createdAt: new Date().toISOString(),
+  completedAt: null,
+  presentation: {
+    age: 58,
+    gender: 'male',
+    chiefComplaint: 'Гръдна болка от 2 часа, с изпотяване и задух',
+    briefHistory: 'Пациентът съобщава за внезапна поява на стягаща болка зад гръдната кост преди около 2 часа, докато е бил в покой. Болката се разпространява към лявата ръка и е придружена от изпотяване и леко затруднено дишане.'
+  },
+  hiddenData: {
+    actualDiagnosis: 'Остър миокарден инфаркт (STEMI)',
+    keyHistoryFindings: [
+      'Хипертония от 10 години, нередовно приема лекарства',
+      'Пуши по 1 кутия цигари дневно от 30 години',
+      'Баща починал от инфаркт на 55 години',
+      'Диабет тип 2 от 5 години'
+    ],
+    keyExamFindings: {
+      general: { system: 'general', finding: 'Бледа, изпотена кожа, изглежда неспокоен', isNormal: false, isRelevant: true },
+      cardiovascular: { system: 'cardiovascular', finding: 'Тахикардия 110/мин, АН 150/95, тих систолен шум на върха', isNormal: false, isRelevant: true },
+      respiratory: { system: 'respiratory', finding: 'Леки влажни хрипове базално двустранно', isNormal: false, isRelevant: true },
+      abdominal: { system: 'abdominal', finding: 'Мек, неболезнен, без органомегалия', isNormal: true, isRelevant: false },
+      neurological: { system: 'neurological', finding: 'В съзнание, ориентиран, без огнищна симптоматика', isNormal: true, isRelevant: false }
+    },
+    expectedInvestigations: ['ЕКГ', 'Тропонин', 'Пълна кръвна картина', 'Ехокардиография'],
+    differentialDiagnoses: [
+      'Остър миокарден инфаркт (STEMI)',
+      'Нестабилна ангина',
+      'Аортна дисекация',
+      'Белодробна емболия',
+      'Перикардит'
+    ],
+    treatmentPlan: [
+      { id: 'tx1', category: 'medication', description: 'Аспирин', dosage: '300 mg per os', priority: 'immediate' },
+      { id: 'tx2', category: 'medication', description: 'Хепарин', dosage: '5000 IU i.v.', priority: 'immediate' },
+      { id: 'tx3', category: 'medication', description: 'Нитроглицерин', dosage: 'сублингвално при болка', priority: 'immediate' },
+      { id: 'tx4', category: 'procedure', description: 'Спешна коронарография и PCI', priority: 'immediate' },
+      { id: 'tx5', category: 'monitoring', description: 'Непрекъснат ЕКГ мониторинг', priority: 'immediate' }
+    ]
+  },
+  currentStep: 'presentation',
+  historyMessages: [],
+  selectedExams: [],
+  examFindings: [],
+  orderedInvestigations: [],
+  studentDdx: [],
+  finalDiagnosis: null,
+  treatmentPlan: [],
+  evaluations: [],
+  overallScore: null,
+  timeSpentMinutes: 0
+};
+
+
 // Icons for exam systems
 const SYSTEM_ICONS: Record<string, React.ReactNode> = {
   general: <User className="w-5 h-5" />,
@@ -110,6 +170,13 @@ function CasesContent() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Load demo case (no API needed)
+  const loadDemoCase = () => {
+    setActiveCase({ ...DEMO_CASE, id: `demo_${Date.now()}`, createdAt: new Date().toISOString() });
+    setCaseStartTime(Date.now());
+    setError(null);
   };
 
   // Generate case
@@ -1352,6 +1419,15 @@ function CasesContent() {
             Започни случай
           </>
         )}
+      </button>
+
+      {/* Demo button */}
+      <button
+        onClick={loadDemoCase}
+        className="w-full py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 flex items-center justify-center gap-2 font-semibold"
+      >
+        <Stethoscope className="w-5 h-5" />
+        Demo: Тествай с готов случай (без API)
       </button>
 
       {/* Info box */}

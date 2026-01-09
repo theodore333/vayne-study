@@ -114,7 +114,17 @@ function CasesContent() {
 
   // Generate case
   const handleGenerateCase = async () => {
-    if (!topic || !apiKey) return;
+    if (!subject || !apiKey) return;
+
+    // Get topics with material and pick a random one
+    const topicsWithMaterial = subject.topics.filter(t => t.material && t.material.length > 200);
+    if (topicsWithMaterial.length === 0) {
+      setError('Няма теми с достатъчно материал');
+      return;
+    }
+
+    // Pick random topic
+    const randomTopic = topicsWithMaterial[Math.floor(Math.random() * topicsWithMaterial.length)];
 
     setIsGenerating(true);
     setError(null);
@@ -126,10 +136,10 @@ function CasesContent() {
         body: JSON.stringify({
           apiKey,
           mode: 'generate_case',
-          material: topic.material,
-          topicName: topic.name,
-          subjectName: subject?.name || '',
-          subjectType: subject?.subjectType || 'clinical',
+          material: randomTopic.material,
+          topicName: randomTopic.name,
+          subjectName: subject.name,
+          subjectType: subject.subjectType || 'clinical',
           difficulty
         })
       });
@@ -142,7 +152,7 @@ function CasesContent() {
       const newCase: InteractiveClinicalCase = {
         id: Date.now().toString(),
         subjectId: selectedSubjectId!,
-        topicId: selectedTopicId!,
+        topicId: randomTopic.id,
         difficulty,
         specialty: result.case.specialty,
         createdAt: new Date().toISOString(),
@@ -1111,6 +1121,18 @@ function CasesContent() {
           ))}
         </div>
 
+        {/* Reveal which topic it was */}
+        {(() => {
+          const caseSubject = data.subjects.find(s => s.id === activeCase.subjectId);
+          const caseTopic = caseSubject?.topics.find(t => t.id === activeCase.topicId);
+          return caseTopic && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">Случаят беше базиран на:</p>
+              <p className="font-semibold text-blue-800 dark:text-blue-200">{caseTopic.name}</p>
+            </div>
+          );
+        })()}
+
         <div className="flex gap-3">
           <Link
             href="/cases"
@@ -1122,7 +1144,7 @@ function CasesContent() {
             href={`/subjects/${activeCase.subjectId}/topics/${activeCase.topicId}`}
             className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-center"
           >
-            Към темата
+            Преговори темата
           </Link>
         </div>
       </div>
@@ -1198,6 +1220,14 @@ function CasesContent() {
     );
   }
 
+  // Filter subjects - only clinical and hybrid
+  const clinicalSubjects = data.subjects.filter(s =>
+    s.subjectType === 'clinical' || s.subjectType === 'hybrid'
+  );
+
+  // Get topics with material for selected subject
+  const availableTopics = subject?.topics.filter(t => t.material && t.material.length > 200) || [];
+
   // Topic selection view
   return (
     <div className="space-y-6">
@@ -1211,56 +1241,58 @@ function CasesContent() {
         </Link>
       </div>
 
-      {/* Subject selection */}
+      {/* Subject selection - only clinical/hybrid */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Предмет
         </label>
-        <select
-          value={selectedSubjectId || ''}
-          onChange={(e) => {
-            setSelectedSubjectId(e.target.value || null);
-            setSelectedTopicId(null);
-          }}
-          className="w-full px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
-        >
-          <option value="">Избери предмет...</option>
-          {data.subjects.map(s => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        {clinicalSubjects.length === 0 ? (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300 p-4 rounded-lg">
+            <p className="font-medium mb-1">Няма подходящи предмети</p>
+            <p className="text-sm">Клиничните случаи са достъпни само за клинични и хибридни предмети. Отиди в Предмети и промени типа на предмета.</p>
+          </div>
+        ) : (
+          <select
+            value={selectedSubjectId || ''}
+            onChange={(e) => {
+              setSelectedSubjectId(e.target.value || null);
+              setSelectedTopicId(null);
+            }}
+            className="w-full px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+          >
+            <option value="">Избери предмет...</option>
+            {clinicalSubjects.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.subjectType === 'clinical' ? 'Клиничен' : 'Хибриден'})
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
-      {/* Topic selection */}
+      {/* Show available topics count */}
       {selectedSubjectId && subject && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Тема
-          </label>
-          <select
-            value={selectedTopicId || ''}
-            onChange={(e) => setSelectedTopicId(e.target.value || null)}
-            className="w-full px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700"
-          >
-            <option value="">Избери тема...</option>
-            {subject.topics
-              .filter(t => t.material && t.material.length > 200)
-              .map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.number}. {t.name} ({STATUS_CONFIG[t.status].label})
-                </option>
-              ))}
-          </select>
-          {subject.topics.filter(t => !t.material || t.material.length <= 200).length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">
-              Някои теми са скрити поради липса на достатъчно материал.
+        <div className={`p-4 rounded-lg border ${
+          availableTopics.length > 0
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+            : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+        }`}>
+          {availableTopics.length > 0 ? (
+            <p className="text-green-700 dark:text-green-300">
+              <CheckCircle className="w-4 h-4 inline mr-2" />
+              {availableTopics.length} теми с материал. AI ще избере случайна тема за случая.
+            </p>
+          ) : (
+            <p className="text-yellow-700 dark:text-yellow-300">
+              <AlertCircle className="w-4 h-4 inline mr-2" />
+              Няма теми с достатъчно материал. Добави материал в поне една тема.
             </p>
           )}
         </div>
       )}
 
       {/* Difficulty selection */}
-      {selectedTopicId && topic && (
+      {selectedSubjectId && availableTopics.length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
             Трудност
@@ -1273,13 +1305,13 @@ function CasesContent() {
                 className={`p-3 rounded-lg border text-center transition-all ${
                   difficulty === d
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300'
                 }`}
               >
                 <div className="font-medium">
                   {d === 'beginner' ? 'Начинаещ' : d === 'intermediate' ? 'Среден' : 'Напреднал'}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   {d === 'beginner' ? 'Ясна презентация' : d === 'intermediate' ? 'Умерена сложност' : 'Комплексен случай'}
                 </div>
               </button>
@@ -1306,7 +1338,7 @@ function CasesContent() {
       {/* Start button */}
       <button
         onClick={handleGenerateCase}
-        disabled={!selectedTopicId || !apiKey || isGenerating}
+        disabled={!selectedSubjectId || availableTopics.length === 0 || !apiKey || isGenerating}
         className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg font-semibold"
       >
         {isGenerating ? (
@@ -1324,13 +1356,13 @@ function CasesContent() {
 
       {/* Info box */}
       <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 text-sm text-gray-600 dark:text-gray-400">
-        <h4 className="font-semibold mb-2">Как работи:</h4>
+        <h4 className="font-semibold mb-2 text-gray-700 dark:text-gray-300">Как работи:</h4>
         <ol className="list-decimal list-inside space-y-1">
-          <li>AI генерира клиничен случай от материала на темата</li>
+          <li>AI избира случайна тема и генерира клиничен случай</li>
           <li>Събираш анамнеза чрез разговор с "пациента"</li>
           <li>Избираш какво да прегледаш и изследваш</li>
           <li>Създаваш диференциална диагноза и план за лечение</li>
-          <li>Получаваш обратна връзка на всяка стъпка</li>
+          <li>Получаваш обратна връзка и научаваш коя е била темата</li>
         </ol>
       </div>
     </div>

@@ -388,6 +388,7 @@ export interface AppData {
   studyGoals: StudyGoals;
   academicPeriod: AcademicPeriod;
   userProgress: UserProgress;
+  clinicalCaseSessions: ClinicalCaseSession;
 }
 
 export interface PredictedGrade {
@@ -435,3 +436,183 @@ export interface DailyTask {
   estimatedMinutes: number;
   completed: boolean;
 }
+
+// ================ INTERACTIVE CLINICAL CASES ================
+
+// Case step identifiers
+export type CaseStep =
+  | 'presentation'
+  | 'history'
+  | 'physical_exam'
+  | 'investigations'
+  | 'ddx'
+  | 'confirmation'
+  | 'treatment';
+
+export const CASE_STEPS: { step: CaseStep; name: string; icon: string }[] = [
+  { step: 'presentation', name: 'Представяне', icon: 'User' },
+  { step: 'history', name: 'Анамнеза', icon: 'MessageCircle' },
+  { step: 'physical_exam', name: 'Физикален преглед', icon: 'Stethoscope' },
+  { step: 'investigations', name: 'Изследвания', icon: 'TestTube' },
+  { step: 'ddx', name: 'DDx', icon: 'ListOrdered' },
+  { step: 'confirmation', name: 'Диагноза', icon: 'CheckCircle' },
+  { step: 'treatment', name: 'Лечение', icon: 'Pill' },
+];
+
+// Chat message for history step
+export interface CaseMessage {
+  id: string;
+  role: 'student' | 'patient' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+// Physical exam finding
+export interface ExamFinding {
+  system: string;
+  finding: string;
+  isNormal: boolean;
+  isRelevant: boolean;
+}
+
+// Investigation (lab/imaging)
+export interface CaseInvestigation {
+  id: string;
+  name: string;
+  category: 'laboratory' | 'imaging' | 'procedure' | 'other';
+  justification: string;
+  result: string;
+  isAppropriate: boolean;
+  feedback?: string;
+}
+
+// DDx entry
+export interface DifferentialDiagnosis {
+  id: string;
+  diagnosis: string;
+  rank: number;
+}
+
+// Treatment plan entry
+export interface TreatmentPlanItem {
+  id: string;
+  category: 'medication' | 'procedure' | 'lifestyle' | 'referral' | 'monitoring';
+  description: string;
+  dosage?: string;
+  duration?: string;
+  priority: 'immediate' | 'short_term' | 'long_term';
+}
+
+// Step evaluation from AI
+export interface StepEvaluation {
+  step: CaseStep;
+  score: number;
+  feedback: string;
+  strengths: string[];
+  areasToImprove: string[];
+  missedPoints?: string[];
+  timestamp: string;
+}
+
+// Case difficulty
+export type CaseDifficulty = 'beginner' | 'intermediate' | 'advanced';
+
+// Full Interactive Clinical Case
+export interface InteractiveClinicalCase {
+  id: string;
+  subjectId: string;
+  topicId: string;
+
+  // Case metadata
+  difficulty: CaseDifficulty;
+  specialty: string;
+  createdAt: string;
+  completedAt: string | null;
+
+  // Patient presentation
+  presentation: {
+    age: number;
+    gender: 'male' | 'female';
+    chiefComplaint: string;
+    briefHistory: string;
+  };
+
+  // Hidden case data (AI-generated, revealed progressively)
+  hiddenData: {
+    actualDiagnosis: string;
+    keyHistoryFindings: string[];
+    keyExamFindings: Record<string, ExamFinding>;
+    expectedInvestigations: string[];
+    differentialDiagnoses: string[];
+    treatmentPlan: TreatmentPlanItem[];
+  };
+
+  // Student's progress and responses
+  currentStep: CaseStep;
+  historyMessages: CaseMessage[];
+  selectedExams: string[];
+  examFindings: ExamFinding[];
+  orderedInvestigations: CaseInvestigation[];
+  studentDdx: DifferentialDiagnosis[];
+  finalDiagnosis: string | null;
+  treatmentPlan: TreatmentPlanItem[];
+
+  // Evaluations per step
+  evaluations: StepEvaluation[];
+
+  // Overall scoring
+  overallScore: number | null;
+  timeSpentMinutes: number;
+}
+
+// Case session state
+export interface ClinicalCaseSession {
+  activeCaseId: string | null;
+  cases: InteractiveClinicalCase[];
+  totalCasesCompleted: number;
+  averageScore: number;
+}
+
+// Available exam systems for physical exam step
+export const EXAM_SYSTEMS = [
+  { id: 'general', name: 'Общ статус', icon: 'User' },
+  { id: 'cardiovascular', name: 'Сърдечносъдова', icon: 'Heart' },
+  { id: 'respiratory', name: 'Дихателна', icon: 'Wind' },
+  { id: 'abdominal', name: 'Коремна', icon: 'Circle' },
+  { id: 'neurological', name: 'Неврологичен', icon: 'Brain' },
+  { id: 'musculoskeletal', name: 'Опорно-двигателен', icon: 'Bone' },
+  { id: 'skin', name: 'Кожа', icon: 'Droplet' },
+  { id: 'lymphatic', name: 'Лимфни възли', icon: 'GitBranch' },
+  { id: 'head_neck', name: 'Глава и шия', icon: 'Eye' },
+] as const;
+
+// Investigation categories
+export const INVESTIGATION_CATEGORIES = {
+  laboratory: {
+    name: 'Лабораторни',
+    tests: [
+      'ПКК (CBC)', 'Биохимия', 'Електролити', 'ЧДФ', 'Урина',
+      'Кръвна захар', 'Сърдечни маркери', 'Коагулация', 'Щитовидна жлеза',
+      'Хемокултура', 'CRP', 'D-димер', 'Кръвно-газов анализ'
+    ]
+  },
+  imaging: {
+    name: 'Образна диагностика',
+    tests: [
+      'Рентген гръден кош', 'Рентген корем', 'КТ глава', 'КТ гръден кош',
+      'КТ корем', 'МРТ мозък', 'Ехография корем', 'Ехокардиография',
+      'Доплер на съдове'
+    ]
+  },
+  procedure: {
+    name: 'Процедури',
+    tests: [
+      'ЕКГ', 'Лумбална пункция', 'Парацентеза', 'Торакоцентеза',
+      'Гастроскопия', 'Колоноскопия', 'Бронхоскопия'
+    ]
+  },
+  other: {
+    name: 'Други',
+    tests: ['Кожна биопсия', 'Костно-мозъчна биопсия', 'Спирометрия']
+  }
+} as const;

@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
@@ -133,6 +133,13 @@ const defaultAcademicPeriod: AcademicPeriod = {
   sessionEnd: null
 };
 
+const defaultClinicalCaseSessions: ClinicalCaseSession = {
+  activeCaseId: null,
+  cases: [],
+  totalCasesCompleted: 0,
+  averageScore: 0
+};
+
 const defaultData: AppData = {
   subjects: [],
   schedule: [],
@@ -144,7 +151,8 @@ const defaultData: AppData = {
   pomodoroSettings: defaultPomodoroSettings,
   studyGoals: defaultStudyGoals,
   academicPeriod: defaultAcademicPeriod,
-  userProgress: defaultUserProgress
+  userProgress: defaultUserProgress,
+  clinicalCaseSessions: defaultClinicalCaseSessions
 };
 
 // Materials storage helpers
@@ -223,6 +231,7 @@ export function loadData(): AppData {
     if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     if (!data.userProgress) data.userProgress = defaultUserProgress;
+    if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
 
     // Migrate: Calculate stats from existing data
     if (data.userProgress && data.subjects) {

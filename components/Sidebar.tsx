@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion, PanelLeftClose, PanelLeft, Stethoscope } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -17,7 +17,8 @@ const icons = {
   GraduationCap,
   Brain,
   Settings,
-  FileQuestion
+  FileQuestion,
+  Stethoscope
 };
 
 const NAV_ITEMS = [
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
   { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
   { href: '/question-bank', label: 'Question Bank', icon: 'FileQuestion' },
+  { href: '/cases', label: 'Клинични Случаи', icon: 'Stethoscope' },
   { href: '/timer', label: 'Таймер', icon: 'Clock' },
   { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
   { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },

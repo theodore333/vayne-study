@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
@@ -138,7 +138,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pomodoroSettings: defaultPomodoroSettings,
     studyGoals: defaultStudyGoals,
     academicPeriod: defaultAcademicPeriod,
-    userProgress: defaultUserProgress
+    userProgress: defaultUserProgress,
+    clinicalCaseSessions: {
+      activeCaseId: null,
+      cases: [],
+      totalCasesCompleted: 0,
+      averageScore: 0
+    }
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);

@@ -629,7 +629,7 @@ function CasesContent() {
                 onChange={(e) => setHistoryInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !isPatientResponding && handleSendQuestion()}
                 placeholder="Задайте въпрос на пациента..."
-                className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
                 disabled={isPatientResponding}
               />
               <button
@@ -773,7 +773,7 @@ function CasesContent() {
                   value={investigationJustification}
                   onChange={(e) => setInvestigationJustification(e.target.value)}
                   placeholder="Защо назначавате това изследване?"
-                  className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
                   rows={2}
                 />
                 <button
@@ -862,7 +862,7 @@ function CasesContent() {
                   onChange={(e) => setNewDdxInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleAddDdx()}
                   placeholder="Добави диагноза..."
-                  className="flex-1 px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
                 />
                 <button
                   onClick={handleAddDdx}
@@ -922,7 +922,7 @@ function CasesContent() {
                   value={finalDiagnosisInput}
                   onChange={(e) => setFinalDiagnosisInput(e.target.value)}
                   placeholder="Въведете финална диагноза..."
-                  className="w-full px-4 py-3 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 text-lg"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 text-lg"
                 />
                 <button
                   onClick={handleEvaluateDiagnosis}
@@ -975,7 +975,7 @@ function CasesContent() {
                     <select
                       value={item.category}
                       onChange={(e) => updateTreatmentItem(item.id, { category: e.target.value as TreatmentPlanItem['category'] })}
-                      className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
+                      className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
                     >
                       <option value="medication">Медикамент</option>
                       <option value="procedure">Процедура</option>
@@ -986,7 +986,7 @@ function CasesContent() {
                     <select
                       value={item.priority}
                       onChange={(e) => updateTreatmentItem(item.id, { priority: e.target.value as TreatmentPlanItem['priority'] })}
-                      className="px-2 py-1 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
+                      className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
                     >
                       <option value="immediate">Спешно</option>
                       <option value="short_term">Краткосрочно</option>
@@ -1004,7 +1004,7 @@ function CasesContent() {
                     value={item.description}
                     onChange={(e) => updateTreatmentItem(item.id, { description: e.target.value })}
                     placeholder="Описание..."
-                    className="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
+                    className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                   />
                   {item.category === 'medication' && (
                     <input
@@ -1012,7 +1012,7 @@ function CasesContent() {
                       value={item.dosage || ''}
                       onChange={(e) => updateTreatmentItem(item.id, { dosage: e.target.value })}
                       placeholder="Дозировка..."
-                      className="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
+                      className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 text-sm"
                     />
                   )}
                 </div>
@@ -1258,7 +1258,7 @@ function CasesContent() {
               setSelectedSubjectId(e.target.value || null);
               setSelectedTopicId(null);
             }}
-            className="w-full px-4 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
           >
             <option value="">Избери предмет...</option>
             {clinicalSubjects.map(s => (

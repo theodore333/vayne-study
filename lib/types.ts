@@ -543,6 +543,7 @@ export interface InteractiveClinicalCase {
     keyHistoryFindings: string[];
     keyExamFindings: Record<string, ExamFinding>;
     expectedInvestigations: string[];
+    investigationImages?: Record<string, string>;
     differentialDiagnoses: string[];
     treatmentPlan: TreatmentPlanItem[];
   };

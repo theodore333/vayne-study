@@ -48,6 +48,9 @@ const DEMO_CASE: InteractiveClinicalCase = {
       neurological: { system: 'neurological', finding: 'В съзнание, ориентиран, без огнищна симптоматика', isNormal: true, isRelevant: false }
     },
     expectedInvestigations: ['ЕКГ', 'Тропонин', 'Пълна кръвна картина', 'Ехокардиография'],
+    investigationImages: {
+      'ЕКГ': '/medical-images/ECG-Extensive-Anterolateral-STEMI.jpg'
+    },
     differentialDiagnoses: [
       'Остър миокарден инфаркт (STEMI)',
       'Нестабилна ангина',
@@ -856,20 +859,24 @@ function CasesContent() {
             {/* Ordered investigations */}
             {activeCase.orderedInvestigations.length > 0 && (
               <div className="space-y-3">
-                <h4 className="font-semibold">Резултати:</h4>
-                {activeCase.orderedInvestigations.map(inv => (
-                  <div key={inv.id} className={`p-3 rounded-lg border ${
-                    inv.isAppropriate
-                      ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
-                      : 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20'
-                  }`}>
-                    <p className="font-medium">{inv.name}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{inv.result}</p>
-                    {inv.feedback && (
-                      <p className="text-xs text-gray-500 mt-2 italic">{inv.feedback}</p>
-                    )}
-                  </div>
-                ))}
+                <h4 className="font-semibold text-gray-800">Резултати:</h4>
+                {activeCase.orderedInvestigations.map(inv => {
+                  const invImage = activeCase.hiddenData.investigationImages?.[inv.name];
+                  return (
+                    <div key={inv.id} className={`p-4 rounded-lg border bg-white shadow-sm ${inv.isAppropriate ? 'border-green-300' : 'border-yellow-300'}`}>
+                      <p className="font-semibold text-gray-900 text-lg">{inv.name}</p>
+                      {invImage && (
+                        <div className="my-3">
+                          <img src={invImage} alt={inv.name} className="rounded-lg max-w-full h-auto border border-gray-200 shadow-sm" />
+                        </div>
+                      )}
+                      <pre className="text-sm text-gray-700 mt-2 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded border">{inv.result}</pre>
+                      {inv.feedback && (
+                        <p className="text-sm text-green-700 mt-3 p-2 bg-green-50 rounded border border-green-200">{inv.feedback}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 

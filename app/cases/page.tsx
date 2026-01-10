@@ -359,7 +359,7 @@ function CasesContent() {
 
  // Reveal exam findings
  const handleRevealExam = async () => {
- if (!activeCase || selectedExamSystems.size === 0 || !apiKey) return;
+ if (!activeCase || selectedExamSystems.size === 0) return;
 
  setIsRevealingExam(true);
 
@@ -396,7 +396,7 @@ function CasesContent() {
 
  // Process investigation
  const handleOrderInvestigation = async () => {
- if (!activeCase || !selectedInvestigation || !investigationJustification.trim() || !apiKey) return;
+ if (!activeCase || !selectedInvestigation || !investigationJustification.trim()) return;
 
  setIsProcessingInvestigation(true);
 
@@ -477,7 +477,7 @@ function CasesContent() {
 
  // Evaluate DDx
  const handleEvaluateDdx = async () => {
- if (!activeCase || ddxItems.length === 0 || !apiKey) return;
+ if (!activeCase || ddxItems.length === 0) return;
 
  setIsEvaluatingDdx(true);
 
@@ -524,7 +524,7 @@ function CasesContent() {
 
  // Evaluate final diagnosis
  const handleEvaluateDiagnosis = async () => {
- if (!activeCase || !finalDiagnosisInput.trim() || !apiKey) return;
+ if (!activeCase || !finalDiagnosisInput.trim()) return;
 
  setIsEvaluatingDiagnosis(true);
 
@@ -591,7 +591,7 @@ function CasesContent() {
 
  // Evaluate treatment
  const handleEvaluateTreatment = async () => {
- if (!activeCase || treatmentItems.length === 0 || !apiKey) return;
+ if (!activeCase || treatmentItems.length === 0) return;
 
  setIsEvaluatingTreatment(true);
 

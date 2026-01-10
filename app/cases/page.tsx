@@ -364,6 +364,17 @@ function CasesContent() {
  setIsRevealingExam(true);
 
  try {
+ const isDemo = activeCase.subjectId === 'demo';
+ let findings: ExamFinding[];
+
+ if (!apiKey || isDemo) {
+ await new Promise(r => setTimeout(r, 600));
+ findings = Array.from(selectedExamSystems).map(system => {
+ const hidden = activeCase.hiddenData.keyExamFindings[system];
+ if (hidden) return hidden;
+ return { system, finding: 'Без патологични отклонения', isNormal: true, isRelevant: false };
+ });
+ } else {
  const response = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -375,16 +386,16 @@ function CasesContent() {
  presentation: activeCase.presentation
  })
  });
-
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
-
  incrementApiCalls(result.usage?.cost || 0);
+ findings = result.findings;
+ }
 
  setActiveCase(prev => prev ? {
  ...prev,
  selectedExams: Array.from(selectedExamSystems),
- examFindings: result.findings
+ examFindings: findings
  } : null);
  setExamRevealed(true);
  } catch (err) {
@@ -401,6 +412,30 @@ function CasesContent() {
  setIsProcessingInvestigation(true);
 
  try {
+ const isDemo = activeCase.subjectId === 'demo';
+ let invResult: string;
+ let isAppropriate: boolean;
+ let feedback: string;
+
+ if (!apiKey || isDemo) {
+ await new Promise(r => setTimeout(r, 700));
+ const expected = activeCase.hiddenData.expectedInvestigations || [];
+ isAppropriate = expected.includes(selectedInvestigation);
+
+ const demoResults: Record<string, string> = {
+ 'ЕКГ': 'ST елевация в V1-V6, I, aVL. Реципрочна депресия в II, III, aVF. Заключение: Обширен преден STEMI.',
+ 'Тропонин': 'Тропонин I: 2.8 ng/mL (норма < 0.04). ПОВИШЕН - индикативен за миокардна некроза.',
+ 'Пълна кръвна картина': 'Hb 14.2, WBC 12.1 (леко повишени), PLT 245. Лека левкоцитоза.',
+ 'Ехокардиография': 'Хипокинезия на предна стена и септум. ФИ 40%. Без перикарден излив.',
+ 'Кръвна захар': 'Глюкоза: 9.2 mmol/L (повишена)',
+ 'Липиден профил': 'Общ холестерол 6.8, LDL 4.2 (повишен), HDL 0.9 (нисък)',
+ 'Креатинин': 'Креатинин: 98 μmol/L (в норма)',
+ 'Рентген на гръден кош': 'Лека кардиомегалия. Белодробен застой.'
+ };
+
+ invResult = demoResults[selectedInvestigation] || 'Резултат: В референтни граници.';
+ feedback = isAppropriate ? 'Добър избор!' : 'Не е от първа необходимост за този случай.';
+ } else {
  const response = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -413,11 +448,13 @@ function CasesContent() {
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis
  })
  });
-
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
-
  incrementApiCalls(result.usage?.cost || 0);
+ invResult = result.result;
+ isAppropriate = result.isAppropriate;
+ feedback = result.feedback;
+ }
 
  const newInvestigation: CaseInvestigation = {
  id: Date.now().toString(),
@@ -426,9 +463,9 @@ function CasesContent() {
  (cat.tests as readonly string[]).includes(selectedInvestigation)
  )?.[0] as 'laboratory' | 'imaging' | 'procedure' | 'other' || 'other',
  justification: investigationJustification,
- result: result.result,
- isAppropriate: result.isAppropriate,
- feedback: result.feedback
+ result: invResult,
+ isAppropriate: isAppropriate,
+ feedback: feedback
  };
 
  setActiveCase(prev => prev ? {
@@ -482,6 +519,28 @@ function CasesContent() {
  setIsEvaluatingDdx(true);
 
  try {
+ const isDemo = activeCase.subjectId === 'demo';
+ let evalScore: number;
+ let evalFeedback: string;
+ let evalStrengths: string[];
+ let evalAreasToImprove: string[];
+ let missedDiagnoses: string[];
+
+ if (!apiKey || isDemo) {
+ await new Promise(r => setTimeout(r, 800));
+ const actualDx = activeCase.hiddenData.actualDiagnosis.toLowerCase();
+ const studentDiagnoses = ddxItems.map(d => d.diagnosis.toLowerCase());
+ const hasCorrect = studentDiagnoses.some(d => d.includes('инфаркт') || d.includes('stemi') || d.includes('оми'));
+ const correctAtTop = ddxItems[0]?.diagnosis.toLowerCase().includes('инфаркт') || ddxItems[0]?.diagnosis.toLowerCase().includes('stemi');
+
+ evalScore = 50 + (hasCorrect ? 25 : 0) + (correctAtTop ? 25 : 0);
+ evalFeedback = hasCorrect
+ ? (correctAtTop ? 'Отлично! Правилната диагноза е на първо място.' : 'Добре! Включихте STEMI, но може да е по-високо.')
+ : 'STEMI трябва да е в диференциалната диагноза при тази презентация.';
+ evalStrengths = hasCorrect ? ['Включена правилната диагноза'] : ['Систематичен подход'];
+ evalAreasToImprove = hasCorrect ? [] : ['Винаги мислете за ОМИ при гръдна болка'];
+ missedDiagnoses = activeCase.hiddenData.differentialDiagnoses.filter(d => !studentDiagnoses.some(sd => sd.includes(d.toLowerCase().split(' ')[0])));
+ } else {
  const response = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -494,19 +553,23 @@ function CasesContent() {
  caseContext: JSON.stringify(activeCase.presentation)
  })
  });
-
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
-
  incrementApiCalls(result.usage?.cost || 0);
+ evalScore = result.evaluation.score;
+ evalFeedback = result.evaluation.feedback;
+ evalStrengths = result.evaluation.strengths || [];
+ evalAreasToImprove = result.evaluation.areasToImprove || [];
+ missedDiagnoses = result.evaluation.missedDiagnoses || [];
+ }
 
  const evaluation: StepEvaluation = {
  step: 'ddx',
- score: result.evaluation.score,
- feedback: result.evaluation.feedback,
- strengths: result.evaluation.strengths || [],
- areasToImprove: result.evaluation.areasToImprove || [],
- missedPoints: result.evaluation.missedDiagnoses || [],
+ score: evalScore,
+ feedback: evalFeedback,
+ strengths: evalStrengths,
+ areasToImprove: evalAreasToImprove,
+ missedPoints: missedDiagnoses,
  timestamp: new Date().toISOString()
  };
 
@@ -529,6 +592,22 @@ function CasesContent() {
  setIsEvaluatingDiagnosis(true);
 
  try {
+ const isDemo = activeCase.subjectId === 'demo';
+ let evalScore: number;
+ let evalFeedback: string;
+ let learningPoints: string[];
+
+ if (!apiKey || isDemo) {
+ await new Promise(r => setTimeout(r, 600));
+ const student = finalDiagnosisInput.toLowerCase();
+ const isCorrect = student.includes('инфаркт') || student.includes('stemi') || student.includes('оми');
+
+ evalScore = isCorrect ? 100 : 30;
+ evalFeedback = isCorrect
+ ? 'Правилно! STEMI е коректната диагноза.'
+ : `Неправилно. Отговорът е: ${activeCase.hiddenData.actualDiagnosis}`;
+ learningPoints = ['ST елевация = STEMI', 'Време до PCI < 90 мин', 'Триада: болка + изпотяване + задух'];
+ } else {
  const response = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -541,17 +620,19 @@ function CasesContent() {
  caseContext: JSON.stringify(activeCase.presentation)
  })
  });
-
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
-
  incrementApiCalls(result.usage?.cost || 0);
+ evalScore = result.evaluation.score;
+ evalFeedback = result.evaluation.feedback;
+ learningPoints = result.evaluation.learningPoints || [];
+ }
 
  const evaluation: StepEvaluation = {
  step: 'confirmation',
- score: result.evaluation.score,
- feedback: result.evaluation.feedback,
- strengths: result.evaluation.learningPoints || [],
+ score: evalScore,
+ feedback: evalFeedback,
+ strengths: learningPoints,
  areasToImprove: [],
  timestamp: new Date().toISOString()
  };
@@ -596,6 +677,34 @@ function CasesContent() {
  setIsEvaluatingTreatment(true);
 
  try {
+ const isDemo = activeCase.subjectId === 'demo';
+ let evalScore: number;
+ let evalFeedback: string;
+ let evalStrengths: string[];
+ let evalAreasToImprove: string[];
+ let missedElements: string[];
+
+ if (!apiKey || isDemo) {
+ await new Promise(r => setTimeout(r, 800));
+ const studentMeds = treatmentItems.map(t => t.description.toLowerCase());
+ const hasAspirin = studentMeds.some(m => m.includes('аспирин'));
+ const hasAnticoag = studentMeds.some(m => m.includes('хепарин'));
+ const hasPCI = studentMeds.some(m => m.includes('pci') || m.includes('коронарограф'));
+
+ evalScore = 40 + (hasAspirin ? 20 : 0) + (hasAnticoag ? 20 : 0) + (hasPCI ? 20 : 0);
+ evalFeedback = evalScore >= 80 ? 'Отличен план!' : 'Планът може да се подобри.';
+ evalStrengths = [
+ ...(hasAspirin ? ['Аспирин'] : []),
+ ...(hasAnticoag ? ['Антикоагулация'] : []),
+ ...(hasPCI ? ['Реваскуларизация'] : [])
+ ];
+ evalAreasToImprove = [
+ ...(!hasAspirin ? ['Добавете аспирин'] : []),
+ ...(!hasAnticoag ? ['Добавете хепарин'] : []),
+ ...(!hasPCI ? ['PCI е стандарт'] : [])
+ ];
+ missedElements = [];
+ } else {
  const response = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -608,19 +717,23 @@ function CasesContent() {
  caseContext: JSON.stringify(activeCase.presentation)
  })
  });
-
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
-
  incrementApiCalls(result.usage?.cost || 0);
+ evalScore = result.evaluation.score;
+ evalFeedback = result.evaluation.feedback;
+ evalStrengths = result.evaluation.strengths || [];
+ evalAreasToImprove = result.evaluation.areasToImprove || [];
+ missedElements = result.evaluation.missedElements || [];
+ }
 
  const evaluation: StepEvaluation = {
  step: 'treatment',
- score: result.evaluation.score,
- feedback: result.evaluation.feedback,
- strengths: result.evaluation.strengths || [],
- areasToImprove: result.evaluation.areasToImprove || [],
- missedPoints: result.evaluation.missedElements || [],
+ score: evalScore,
+ feedback: evalFeedback,
+ strengths: evalStrengths,
+ areasToImprove: evalAreasToImprove,
+ missedPoints: missedElements,
  timestamp: new Date().toISOString()
  };
 
@@ -630,7 +743,21 @@ function CasesContent() {
  evaluations: [...prev.evaluations, evaluation]
  } : null);
 
- // Get case summary
+ // Demo summary or API summary
+ if (!apiKey || isDemo) {
+ const allEvals = [...activeCase.evaluations, evaluation];
+ const avgScore = Math.round(allEvals.reduce((sum, e) => sum + e.score, 0) / allEvals.length);
+ const grade = avgScore >= 90 ? 6 : avgScore >= 75 ? 5 : avgScore >= 60 ? 4 : avgScore >= 40 ? 3 : 2;
+ setCaseSummary({
+ overallScore: avgScore,
+ grade,
+ summary: 'Демо случай за STEMI завършен.',
+ keyLearnings: ['STEMI изисква спешна PCI', 'Ключови: ЕКГ + тропонин', 'Двойна антитромбоцитна терапия'],
+ areasForReview: avgScore < 80 ? ['Преговорете STEMI алгоритъма'] : [],
+ encouragement: avgScore >= 80 ? 'Отлично представяне!' : 'Добра работа, продължавайте да учите!',
+ nextSteps: 'Опитайте с реален случай с API ключ за по-разнообразни сценарии.'
+ });
+ } else {
  const summaryResponse = await fetch('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
@@ -646,11 +773,11 @@ function CasesContent() {
  timeSpentMinutes: Math.floor(elapsedTime / 60)
  })
  });
-
  const summaryResult = await summaryResponse.json();
  if (summaryResponse.ok) {
  incrementApiCalls(summaryResult.usage?.cost || 0);
  setCaseSummary(summaryResult.summary);
+ }
  }
 
  setShowResults(true);

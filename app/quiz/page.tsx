@@ -8,7 +8,7 @@ import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 
-type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
+type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
 
 interface Question {
   type: 'multiple_choice' | 'open' | 'case_study';
@@ -2141,6 +2141,7 @@ function QuizContent() {
     const getModeLabel = () => {
       switch (mode) {
         case 'assessment': return 'Assess My Level';
+        case 'lower_order': return 'Lower-Order (Remember/Understand)';
         case 'mid_order': return 'Mid-Order (Apply/Analyze)';
         case 'higher_order': return 'Higher-Order (Evaluate/Create)';
         case 'gap_analysis': return 'Gap Analysis';
@@ -2153,6 +2154,7 @@ function QuizContent() {
     const getModeColor = () => {
       switch (mode) {
         case 'assessment': return 'amber';
+        case 'lower_order': return 'cyan';
         case 'mid_order': return 'blue';
         case 'higher_order': return 'pink';
         case 'gap_analysis': return 'red';
@@ -2482,6 +2484,20 @@ function QuizContent() {
                 <span className="text-xs text-slate-500 font-mono">Пиши → AI оценява</span>
               </button>
             )}
+
+            {/* Lower-Order */}
+            <button
+              onClick={() => { setMode('lower_order'); setShowCustomOptions(false); }}
+              className={`p-4 rounded-xl border text-left transition-all ${
+                mode === 'lower_order' ? 'bg-cyan-500/20 border-cyan-500 ring-2 ring-cyan-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+              }`}
+            >
+              <Lightbulb size={20} className={mode === 'lower_order' ? 'text-cyan-400' : 'text-slate-400'} />
+              <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'lower_order' ? 'text-cyan-400' : 'text-slate-300'}`}>
+                Lower-Order
+              </span>
+              <span className="text-xs text-slate-500 font-mono">Bloom 1-2: Remember, Understand</span>
+            </button>
 
             {/* Mid-Order */}
             <button

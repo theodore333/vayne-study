@@ -700,6 +700,15 @@ ASSESSMENT MODE: Generate questions spanning ALL 6 Bloom's Taxonomy levels to as
 Include questions from each level (1-6), with more questions for harder levels.
 AI decides the total number based on topic complexity - NO FIXED COUNT.
 Mark each question with its bloomLevel (1-6).`;
+  } else if (mode === 'lower_order') {
+    bloomInstructions = `
+LOWER-ORDER THINKING MODE: Focus on Bloom's Taxonomy levels 1 and 2.
+${BLOOM_PROMPTS[1]}
+${BLOOM_PROMPTS[2]}
+Generate questions that test RECALL of facts and UNDERSTANDING of concepts.
+These are foundational questions - definitions, explanations, comparisons, summaries.
+Ideal for initial learning or reviewing basics before an exam.
+Mark each question with its bloomLevel (1 or 2).`;
   } else if (mode === 'mid_order') {
     bloomInstructions = `
 MID-ORDER THINKING MODE: Focus on Bloom's Taxonomy levels 3 and 4.

@@ -255,12 +255,8 @@ function QuizContent() {
 
   const aiRecommendation = getRecommendation();
 
-  // Auto-select recommended mode on mount
-  useEffect(() => {
-    if (aiRecommendation && mode === null) {
-      setMode(aiRecommendation.suggestedMode);
-    }
-  }, [aiRecommendation, mode]);
+  // NOTE: Removed auto-selection - let user choose their preferred mode
+  // AI recommendation is displayed but not auto-selected
 
   // Timer effect - runs when quiz starts
   useEffect(() => {

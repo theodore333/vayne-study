@@ -43,7 +43,7 @@ interface AppContextType {
   // Timer operations
   startTimer: (subjectId: string, topicId: string | null) => void;
   stopTimer: (rating: number | null) => void;
-  addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string) => void;
+  addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string, rating?: number | null) => void;
 
   // GPA operations
   addSemesterGrade: (grade: Omit<SemesterGrade, 'id'>) => void;
@@ -702,7 +702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   // Add completed Pomodoro session directly
-  const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string) => {
+  const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string, rating?: number | null) => {
     const endTime = new Date();
     const startTime = new Date(endTime.getTime() - durationMinutes * 60 * 1000);
 
@@ -713,7 +713,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       duration: durationMinutes,
-      rating: null,
+      rating: rating || null,
       distractionNote: note || undefined
     };
 

@@ -8,6 +8,19 @@ type TimerMode = 'normal' | 'pomodoro';
 type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak';
 type TabType = 'timer' | 'stats';
 
+const RATING_DESCRIPTIONS: Record<number, string> = {
+  1: 'Нонстоп се разсейвах',
+  2: 'Много разсеян',
+  3: 'Често губех фокус',
+  4: 'Под средното',
+  5: 'Средно, 50/50',
+  6: 'Над средното',
+  7: 'Добра концентрация',
+  8: 'Много фокусиран',
+  9: 'Почти перфектно',
+  10: 'Пълен фокус!'
+};
+
 export default function TimerPage() {
   const { data, startTimer, stopTimerWithNote, addPomodoroSession, updatePomodoroSettings, updateStudyGoals, updateAcademicPeriod } = useApp();
 
@@ -21,6 +34,9 @@ export default function TimerPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [showRating, setShowRating] = useState(false);
   const [distractionNote, setDistractionNote] = useState('');
+  const [showPomodoroRating, setShowPomodoroRating] = useState(false);
+  const [pomodoroDistractionNote, setPomodoroDistractionNote] = useState('');
+  const [pendingPomodoroData, setPendingPomodoroData] = useState<{duration: number; count: number; isLongBreak: boolean; nextPhase: 'shortBreak' | 'longBreak'; breakDuration: number} | null>(null);
   const [normalTimerPausedAt, setNormalTimerPausedAt] = useState<number | null>(null); // For normal timer pause
   const [showStopConfirm, setShowStopConfirm] = useState(false); // Confirmation before stopping pomodoro
 
@@ -323,13 +339,7 @@ export default function TimerPage() {
     setIsPaused(false); // Clear paused state on completion
 
     if (pomodoroPhase === 'work') {
-      // Record completed work session
-      addPomodoroSession(settings.workDuration, selectedSubject || undefined, selectedTopic);
-
       const newCount = pomodoroCount + 1;
-      setPomodoroCount(newCount);
-
-      // Long break after every N pomodoros (e.g., 4th, 8th, 12th...)
       const isLongBreak = newCount % settings.longBreakAfter === 0;
       const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
@@ -342,16 +352,16 @@ export default function TimerPage() {
         isLongBreak ? `Време за ДЪЛГА почивка (${breakDuration} мин)` : `Време за почивка (${breakDuration} мин)`
       );
 
-      // Set next phase and time
-      setPomodoroPhase(nextPhase);
-      setPomodoroTimeLeft(breakDuration * 60);
-
-      if (settings.autoStartBreaks) {
-        setTimeout(() => {
-          setPomodoroEndTime(Date.now() + breakDuration * 60 * 1000);
-          setIsRunning(true);
-        }, 100);
-      }
+      // Store pending data and show rating modal
+      setPendingPomodoroData({
+        duration: settings.workDuration,
+        count: newCount,
+        isLongBreak,
+        nextPhase,
+        breakDuration
+      });
+      setPomodoroDistractionNote('');
+      setShowPomodoroRating(true);
     } else {
       // Show notification for break end
       showNotification('Почивката свърши!', 'Време е за работа');
@@ -517,6 +527,37 @@ export default function TimerPage() {
     setShowRating(false);
     setElapsed(0);
     setDistractionNote('');
+  };
+
+  const handlePomodoroRatingSubmit = (rating: number | null) => {
+    if (!pendingPomodoroData) return;
+
+    // Record the pomodoro session with rating and distraction note
+    addPomodoroSession(
+      pendingPomodoroData.duration,
+      selectedSubject || undefined,
+      selectedTopic,
+      pomodoroDistractionNote.trim() || undefined,
+      rating
+    );
+
+    // Update count and phase
+    setPomodoroCount(pendingPomodoroData.count);
+    setPomodoroPhase(pendingPomodoroData.nextPhase);
+    setPomodoroTimeLeft(pendingPomodoroData.breakDuration * 60);
+
+    // Auto-start break if enabled
+    if (settings.autoStartBreaks) {
+      setTimeout(() => {
+        setPomodoroEndTime(Date.now() + pendingPomodoroData.breakDuration * 60 * 1000);
+        setIsRunning(true);
+      }, 100);
+    }
+
+    // Clean up
+    setShowPomodoroRating(false);
+    setPomodoroDistractionNote('');
+    setPendingPomodoroData(null);
   };
 
   const handleSkipBreak = () => {
@@ -1275,10 +1316,23 @@ export default function TimerPage() {
               {formatTime(elapsed)} ({Math.round(elapsed / 60)} мин)
             </p>
             <div className="grid grid-cols-5 gap-2 mb-4">
-              {[1, 2, 3, 4, 5].map(rating => (
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => (
                 <button key={rating} onClick={() => handleRatingSubmit(rating)}
-                  className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-cyan-500 hover:bg-cyan-500/10 transition-all text-2xl">
-                  {['😴','😕','😐','😊','🔥'][rating-1]}
+                  className={`p-2 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-cyan-500 hover:bg-cyan-500/10 transition-all flex flex-col items-center ${
+                    rating <= 3 ? 'hover:border-red-500 hover:bg-red-500/10' :
+                    rating <= 5 ? 'hover:border-orange-500 hover:bg-orange-500/10' :
+                    rating <= 7 ? 'hover:border-yellow-500 hover:bg-yellow-500/10' :
+                    'hover:border-green-500 hover:bg-green-500/10'
+                  }`}
+                  title={RATING_DESCRIPTIONS[rating]}
+                >
+                  <span className={`text-lg font-bold ${
+                    rating <= 3 ? 'text-red-400' :
+                    rating <= 5 ? 'text-orange-400' :
+                    rating <= 7 ? 'text-yellow-400' :
+                    'text-green-400'
+                  }`}>{rating}</span>
+                  <span className="text-[9px] text-slate-500 leading-tight text-center">{RATING_DESCRIPTIONS[rating].split(' ').slice(0, 2).join(' ')}</span>
                 </button>
               ))}
             </div>
@@ -1294,6 +1348,58 @@ export default function TimerPage() {
             <button onClick={() => handleRatingSubmit(null)}
               className="w-full py-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm">
               Пропусни оценката
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pomodoro Rating Modal */}
+      {showPomodoroRating && pendingPomodoroData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          <div className="relative bg-[rgba(20,20,35,0.98)] border border-cyan-500/30 rounded-2xl p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-cyan-400 mb-2 font-mono text-center">
+              🍅 Pomodoro #{pendingPomodoroData.count} завърши!
+            </h3>
+            <p className="text-sm text-slate-400 mb-4 text-center font-mono">
+              {pendingPomodoroData.duration} минути • {selectedSubject === 'anki' ? '📚 Anki' : (activeSubjects.find(s => s.id === selectedSubject)?.name || 'Обща работа')}
+            </p>
+            <p className="text-xs text-slate-500 mb-4 text-center font-mono">
+              Как мина сесията? (незадължително)
+            </p>
+            <div className="grid grid-cols-5 gap-2 mb-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => (
+                <button key={rating} onClick={() => handlePomodoroRatingSubmit(rating)}
+                  className={`p-2 bg-slate-800/50 border border-slate-700 rounded-lg transition-all flex flex-col items-center ${
+                    rating <= 3 ? 'hover:border-red-500 hover:bg-red-500/10' :
+                    rating <= 5 ? 'hover:border-orange-500 hover:bg-orange-500/10' :
+                    rating <= 7 ? 'hover:border-yellow-500 hover:bg-yellow-500/10' :
+                    'hover:border-green-500 hover:bg-green-500/10'
+                  }`}
+                  title={RATING_DESCRIPTIONS[rating]}
+                >
+                  <span className={`text-lg font-bold ${
+                    rating <= 3 ? 'text-red-400' :
+                    rating <= 5 ? 'text-orange-400' :
+                    rating <= 7 ? 'text-yellow-400' :
+                    'text-green-400'
+                  }`}>{rating}</span>
+                  <span className="text-[9px] text-slate-500 leading-tight text-center">{RATING_DESCRIPTIONS[rating].split(' ').slice(0, 2).join(' ')}</span>
+                </button>
+              ))}
+            </div>
+            <div className="mb-4">
+              <label className="block text-sm text-slate-400 mb-2 font-mono">💭 Какво те разсея? (незадължително)</label>
+              <textarea
+                value={pomodoroDistractionNote}
+                onChange={(e) => setPomodoroDistractionNote(e.target.value)}
+                placeholder="Телефон, социални мрежи, умора..."
+                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm resize-none h-20 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <button onClick={() => handlePomodoroRatingSubmit(null)}
+              className="w-full py-2 bg-green-600/30 hover:bg-green-600/50 text-green-400 rounded-lg transition-colors font-mono text-sm border border-green-500/30">
+              {pendingPomodoroData.isLongBreak ? '🌴 Дълга почивка' : '☕ Кратка почивка'} ({pendingPomodoroData.breakDuration} мин)
             </button>
           </div>
         </div>

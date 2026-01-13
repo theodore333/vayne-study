@@ -11,12 +11,13 @@ import ConfirmDialog from '@/components/modals/ConfirmDialog';
 export default function QuestionBankPage() {
   const { data, deleteQuestionBank } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
-    data.subjects.length > 0 ? data.subjects[0].id : null
+    data.subjects.filter(s => !s.archived).length > 0 ? data.subjects.filter(s => !s.archived)[0].id : null
   );
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingBank, setDeletingBank] = useState<{ id: string; name: string } | null>(null);
 
+  const activeSubjects = data.subjects.filter(s => !s.archived);
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
   const subjectBanks = (data.questionBanks || []).filter(b => b.subjectId === selectedSubjectId);
 
@@ -47,13 +48,13 @@ export default function QuestionBankPage() {
             <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-3">
               Предмети
             </h3>
-            {data.subjects.length === 0 ? (
+            {activeSubjects.length === 0 ? (
               <p className="text-sm text-slate-500 font-mono">
                 Няма предмети. Добави от Subjects страницата.
               </p>
             ) : (
               <ul className="space-y-2">
-                {data.subjects.map(subject => {
+                {activeSubjects.map(subject => {
                   const banks = (data.questionBanks || []).filter(b => b.subjectId === subject.id);
                   const qCount = banks.reduce((sum, b) => sum + b.questions.length, 0);
 

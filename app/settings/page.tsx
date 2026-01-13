@@ -15,6 +15,7 @@ interface ImportResult {
 export default function SettingsPage() {
   const { data, updateUsageBudget, setTopicStatus } = useApp();
   const { usageData } = data;
+  const activeSubjects = data.subjects.filter(s => !s.archived);
 
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -230,6 +231,7 @@ export default function SettingsPage() {
     };
 
     // Build a map of topics ONLY from the selected subject
+    const activeSubjects = data.subjects.filter(s => !s.archived);
     const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
     if (!selectedSubject) {
       setImportError('Предметът не е намерен');
@@ -443,7 +445,7 @@ export default function SettingsPage() {
                   className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-slate-100 font-mono text-sm"
                 >
                   <option value="">Избери предмет...</option>
-                  {data.subjects.map(s => (
+                  {activeSubjects.map(s => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.topics.length} теми)
                     </option>

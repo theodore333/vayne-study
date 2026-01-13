@@ -27,6 +27,7 @@ export default function SchedulePage() {
       .sort((a, b) => a.time.localeCompare(b.time));
   };
 
+  const activeSubjects = data.subjects.filter(s => !s.archived);
   const getSubjectById = (id: string) => data.subjects.find(s => s.id === id);
 
   return (

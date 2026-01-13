@@ -1478,6 +1478,7 @@ function CasesContent() {
 
  // Filter subjects - only clinical and hybrid
  const clinicalSubjects = data.subjects.filter(s =>
+    !s.archived &&
  s.subjectType === 'clinical' || s.subjectType === 'hybrid'
  );
 

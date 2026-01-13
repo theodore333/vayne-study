@@ -12,7 +12,8 @@ interface Props {
 
 export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
   const { data, addClass } = useApp();
-  const [subjectId, setSubjectId] = useState(data.subjects[0]?.id || '');
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const [subjectId, setSubjectId] = useState(activeSubjects[0]?.id || '');
   const [day, setDay] = useState(defaultDay);
   const [time, setTime] = useState('09:00');
   const [room, setRoom] = useState('');
@@ -63,7 +64,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
             <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
               Предмет
             </label>
-            {data.subjects.length === 0 ? (
+            {activeSubjects.length === 0 ? (
               <p className="text-sm text-slate-500 font-mono">
                 Първо добави предмет
               </p>
@@ -73,7 +74,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
                 onChange={(e) => setSubjectId(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
               >
-                {data.subjects.map(s => (
+                {activeSubjects.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>

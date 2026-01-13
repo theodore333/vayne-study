@@ -24,7 +24,8 @@ export default function Header() {
   const xpProgress = getXpForNextLevel(progress?.xp || 0);
 
   // Calculate total status counts across all subjects
-  const statusCounts = data.subjects.reduce(
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const statusCounts = activeSubjects.reduce(
     (acc, subject) => {
       subject.topics.forEach(topic => {
         acc[topic.status]++;

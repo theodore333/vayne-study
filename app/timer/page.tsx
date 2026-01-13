@@ -974,10 +974,11 @@ export default function TimerPage() {
                       onChange={(e) => { setSelectedSubject(e.target.value); setSelectedTopic(null); }}
                       className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono">
                       <option value="">Избери предмет (незадължително)</option>
+                      <option value="anki">📚 Anki</option>
                       {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
-                  {selectedSubject && topics.length > 0 && (
+                  {selectedSubject && selectedSubject !== 'anki' && topics.length > 0 && (
                     <div>
                       <label className="block text-sm text-slate-400 mb-2 font-mono">
                         <Target size={14} className="inline mr-2" />Тема (незадължително)
@@ -993,12 +994,15 @@ export default function TimerPage() {
                 </div>
               )}
 
-              {isRunning && selectedSubjectData && (
+              {isRunning && (selectedSubjectData || selectedSubject === 'anki') && (
                 <div className="mb-8">
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono"
-                    style={{ backgroundColor: `${selectedSubjectData.color}30`, color: selectedSubjectData.color }}>
+                    style={{ 
+                      backgroundColor: selectedSubject === 'anki' ? 'rgba(34, 197, 94, 0.2)' : `${selectedSubjectData?.color}30`, 
+                      color: selectedSubject === 'anki' ? '#22c55e' : selectedSubjectData?.color 
+                    }}>
                     <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                    {selectedSubjectData.name}
+                    {selectedSubject === 'anki' ? '📚 Anki' : selectedSubjectData?.name}
                     {selectedTopic && topics.find(t => t.id === selectedTopic) && (
                       <span className="text-slate-400">• #{topics.find(t => t.id === selectedTopic)?.number}</span>
                     )}

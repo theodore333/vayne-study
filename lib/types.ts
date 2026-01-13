@@ -160,6 +160,9 @@ export const QUIZ_LENGTH_PRESETS: Record<QuizLengthPreset, {
   marathon: { label: 'Маратон', questions: 35, weight: 2.0, description: '30+ въпроса' }
 };
 
+// Topic section for organizing theory vs practice
+export type TopicSection = 'theoretical' | 'practical';
+
 export interface Topic {
   id: string;
   number: number;
@@ -184,6 +187,8 @@ export interface Topic {
   wrongAnswers: WrongAnswer[]; // Recent wrong answers for drill weakness mode
   // Reader Mode: Highlights
   highlights: TextHighlight[]; // Highlighted text passages
+  // Section: theoretical or practical
+  section?: TopicSection;
 }
 
 // Text highlight for reader mode

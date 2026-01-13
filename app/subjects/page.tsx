@@ -5,7 +5,7 @@ import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
-import { TopicStatus, Subject, SubjectType, SUBJECT_TYPES } from '@/lib/types';
+import { TopicStatus, Subject, SubjectType, SUBJECT_TYPES, TopicSection } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
 import ImportFileModal from '@/components/modals/ImportFileModal';
@@ -32,13 +32,14 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus, archiveSubject, unarchiveSubject } = useApp();
+  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus, updateTopic, archiveSubject, unarchiveSubject } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
   const [showAIImport, setShowAIImport] = useState(false);
   const [statusFilter, setStatusFilter] = useState<TopicStatus | 'all'>('all');
   const [sizeFilter, setSizeFilter] = useState<'small' | 'medium' | 'large' | 'all'>('all');
+  const [sectionFilter, setSectionFilter] = useState<TopicSection | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingSubject, setEditingSubject] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -118,6 +119,15 @@ function SubjectsContent() {
     if (!selectedSubjectId || selectedTopicsForBulk.length === 0) return;
     for (const topicId of selectedTopicsForBulk) {
       setTopicStatus(selectedSubjectId, topicId, status);
+    }
+    clearBulkSelection();
+    setBulkEditMode(false);
+  };
+
+  const applyBulkSection = (section: TopicSection | null) => {
+    if (!selectedSubjectId || selectedTopicsForBulk.length === 0) return;
+    for (const topicId of selectedTopicsForBulk) {
+      updateTopic(selectedSubjectId, topicId, { section: section || undefined });
     }
     clearBulkSelection();
     setBulkEditMode(false);
@@ -228,10 +238,11 @@ function SubjectsContent() {
   const filteredTopics = selectedSubject?.topics.filter(topic => {
     const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
     const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
+    const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
     const matchesSearch = searchQuery === '' ||
       topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       topic.number.toString().includes(searchQuery);
-    return matchesStatus && matchesSize && matchesSearch;
+    return matchesStatus && matchesSize && matchesSection && matchesSearch;
   }) || [];
 
   const handleStartEdit = (subject: Subject) => {
@@ -627,6 +638,44 @@ function SubjectsContent() {
                       </span>
                     )}
                   </div>
+
+                  {/* Section Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-500 font-mono">Секция:</span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setSectionFilter('all')}
+                        className={`px-2.5 py-1 rounded text-xs font-mono transition-all ${
+                          sectionFilter === 'all' ? 'bg-slate-700 text-slate-200' : 'text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        Всички
+                      </button>
+                      <button
+                        onClick={() => setSectionFilter('theoretical')}
+                        className={`px-2.5 py-1 rounded text-xs font-mono transition-all ${
+                          sectionFilter === 'theoretical' ? 'bg-blue-600/30 text-blue-400 border border-blue-500/50' : 'text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        📖 Теоретичен
+                      </button>
+                      <button
+                        onClick={() => setSectionFilter('practical')}
+                        className={`px-2.5 py-1 rounded text-xs font-mono transition-all ${
+                          sectionFilter === 'practical' ? 'bg-green-600/30 text-green-400 border border-green-500/50' : 'text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        🔬 Практичен
+                      </button>
+                    </div>
+                    {selectedSubject && (
+                      <span className="text-[10px] text-slate-600 font-mono ml-2">
+                        {selectedSubject.topics.filter(t => t.section === 'theoretical').length}📖 /
+                        {selectedSubject.topics.filter(t => t.section === 'practical').length}🔬 /
+                        {selectedSubject.topics.filter(t => !t.section).length}?
+                      </span>
+                    )}
+                  </div>
                 </div>
 
               </div>
@@ -739,6 +788,18 @@ function SubjectsContent() {
                                     title={`${TOPIC_SIZE_CONFIG[topic.size].label} (~${TOPIC_SIZE_CONFIG[topic.size].minutes} мин)`}
                                   >
                                     {TOPIC_SIZE_CONFIG[topic.size].short}
+                                  </span>
+                                )}
+                                {/* Section Badge */}
+                                {topic.section && (
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                                      topic.section === 'theoretical'
+                                        ? 'bg-blue-500/20 text-blue-400'
+                                        : 'bg-green-500/20 text-green-400'
+                                    }`}
+                                  >
+                                    {topic.section === 'theoretical' ? '📖 Теор' : '🔬 Практ'}
                                   </span>
                                 )}
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
@@ -858,6 +919,32 @@ function SubjectsContent() {
                     {STATUS_CONFIG[status].emoji}
                   </button>
                 ))}
+              </div>
+            )}
+            {selectedTopicsForBulk.length > 0 && (
+              <div className="flex gap-2 border-l border-slate-700 pl-4">
+                <span className="text-xs text-slate-500 font-mono self-center mr-1">Секция:</span>
+                <button
+                  onClick={() => applyBulkSection('theoretical')}
+                  className="px-3 py-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-400 rounded-lg font-mono text-xs transition-all border border-blue-500/30"
+                  title="Теоретичен"
+                >
+                  📖 Теор
+                </button>
+                <button
+                  onClick={() => applyBulkSection('practical')}
+                  className="px-3 py-2 bg-green-600/30 hover:bg-green-600/50 text-green-400 rounded-lg font-mono text-xs transition-all border border-green-500/30"
+                  title="Практичен"
+                >
+                  🔬 Практ
+                </button>
+                <button
+                  onClick={() => applyBulkSection(null)}
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-400 rounded-lg font-mono text-xs transition-all"
+                  title="Без секция"
+                >
+                  ✕
+                </button>
               </div>
             )}
           </div>

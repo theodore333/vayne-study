@@ -362,8 +362,23 @@ ${subjectSummaries.filter((s) => s.daysUntilExam !== null && s.daysUntilExam <= 
 
   } catch (error) {
     console.error('AI advice error:', error);
+
+    // Return more specific error message
+    let errorMessage = 'Failed to get AI advice';
+    if (error instanceof Error) {
+      if (error.message.includes('401') || error.message.includes('authentication')) {
+        errorMessage = 'Невалиден API ключ. Провери го в Settings.';
+      } else if (error.message.includes('429') || error.message.includes('rate')) {
+        errorMessage = 'Rate limit - опитай пак след малко.';
+      } else if (error.message.includes('model')) {
+        errorMessage = 'Проблем с модела. Провери API ключа.';
+      } else {
+        errorMessage = `Грешка: ${error.message}`;
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Failed to get AI advice' },
+      { error: errorMessage },
       { status: 500 }
     );
   }

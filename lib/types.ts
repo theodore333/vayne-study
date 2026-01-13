@@ -31,6 +31,7 @@ export interface Subject {
   examFormat: string | null; // Description of exam format (e.g., "20 теста, 2 казуса, 1 есе")
   topics: Topic[];
   createdAt: string;
+  archived?: boolean; // Archived subjects are hidden and excluded from calculations
 }
 
 // Parsed exam format structure

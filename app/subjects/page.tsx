@@ -1,11 +1,11 @@
 'use client';
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
-import { TopicStatus, Subject } from '@/lib/types';
+import { TopicStatus, Subject, SubjectType, SUBJECT_TYPES } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import ImportTopicsModal from '@/components/modals/ImportTopicsModal';
 import ImportFileModal from '@/components/modals/ImportFileModal';
@@ -32,7 +32,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus } = useApp();
+  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus, archiveSubject, unarchiveSubject } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -45,9 +45,13 @@ function SubjectsContent() {
   const [editColor, setEditColor] = useState('');
   const [editExamDate, setEditExamDate] = useState('');
   const [editExamFormat, setEditExamFormat] = useState('');
+  const [editSubjectType, setEditSubjectType] = useState<SubjectType>('preclinical');
 
   // Sidebar toggle
   const [sidebarHidden, setSidebarHidden] = useState(false);
+
+  // Show archived subjects
+  const [showArchived, setShowArchived] = useState(false);
 
   // Sort subjects
   type SortOption = 'exam' | 'name' | 'progress' | 'topics';
@@ -150,21 +154,6 @@ function SubjectsContent() {
     }
   };
 
-  // Initial subject selection - only runs once on mount/URL change
-  useEffect(() => {
-    // Skip if we've already done initial selection
-    if (initialSelectionDone.current) return;
-
-    const id = searchParams.get('id');
-    if (id && data.subjects.find(s => s.id === id)) {
-      setSelectedSubjectId(id);
-      initialSelectionDone.current = true;
-    } else if (data.subjects.length > 0) {
-      setSelectedSubjectId(data.subjects[0].id);
-      initialSelectionDone.current = true;
-    }
-  }, [searchParams, data.subjects]);
-
   // Sort subjects
   const sortSubjects = (subjects: Subject[]): Subject[] => {
     return [...subjects].sort((a, b) => {
@@ -193,7 +182,31 @@ function SubjectsContent() {
     });
   };
 
-  const sortedSubjects = sortSubjects(data.subjects);
+  // Filter by archive status first, then sort
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const archivedSubjects = data.subjects.filter(s => s.archived);
+  const displayedSubjects = showArchived ? archivedSubjects : activeSubjects;
+  const sortedSubjects = sortSubjects(displayedSubjects);
+
+  // Initial subject selection - only runs once on mount/URL change
+  useEffect(() => {
+    // Skip if we've already done initial selection
+    if (initialSelectionDone.current) return;
+
+    const id = searchParams.get('id');
+    if (id && data.subjects.find(s => s.id === id)) {
+      // If URL points to an archived subject, show archived view
+      const subject = data.subjects.find(s => s.id === id);
+      if (subject?.archived) {
+        setShowArchived(true);
+      }
+      setSelectedSubjectId(id);
+      initialSelectionDone.current = true;
+    } else if (activeSubjects.length > 0) {
+      setSelectedSubjectId(activeSubjects[0].id);
+      initialSelectionDone.current = true;
+    }
+  }, [searchParams, data.subjects, activeSubjects]);
 
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: 'exam', label: 'Изпит (най-скоро)' },
@@ -227,6 +240,7 @@ function SubjectsContent() {
     setEditColor(subject.color);
     setEditExamDate(subject.examDate || '');
     setEditExamFormat(subject.examFormat || '');
+    setEditSubjectType(subject.subjectType || 'preclinical');
   };
 
   const handleSaveEdit = () => {
@@ -234,6 +248,7 @@ function SubjectsContent() {
       updateSubject(editingSubject, {
         name: editName.trim(),
         color: editColor,
+        subjectType: editSubjectType,
         examDate: editExamDate || null,
         examFormat: editExamFormat.trim() || null
       });
@@ -278,8 +293,30 @@ function SubjectsContent() {
                   </select>
                 </div>
               </div>
+              {/* Archive toggle */}
+              {archivedSubjects.length > 0 && (
+                <div className="mb-3">
+                  <button
+                    onClick={() => {
+                      setShowArchived(!showArchived);
+                      // Clear selection when switching views
+                      setSelectedSubjectId(null);
+                    }}
+                    className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs transition-colors ${
+                      showArchived
+                        ? 'bg-amber-600/20 text-amber-400 border border-amber-600/30'
+                        : 'bg-slate-800/50 text-slate-400 border border-slate-700 hover:border-slate-600'
+                    }`}
+                  >
+                    <Archive size={14} />
+                    {showArchived ? `Активни (${activeSubjects.length})` : `Архив (${archivedSubjects.length})`}
+                  </button>
+                </div>
+              )}
             {sortedSubjects.length === 0 ? (
-              <p className="text-sm text-slate-500 font-mono">Няма предмети</p>
+              <p className="text-sm text-slate-500 font-mono">
+                {showArchived ? 'Няма архивирани предмети' : 'Няма предмети'}
+              </p>
             ) : (
               <ul className="space-y-2">
                 {sortedSubjects.map(subject => {
@@ -307,6 +344,23 @@ function SubjectsContent() {
                                 className={"w-6 h-6 rounded " + (editColor === c ? "ring-2 ring-white" : "")}
                                 style={{ backgroundColor: c }}
                               />
+                            ))}
+                          </div>
+                          {/* Subject Type Selector */}
+                          <div className="flex gap-1">
+                            {SUBJECT_TYPES.map(st => (
+                              <button
+                                key={st.type}
+                                onClick={() => setEditSubjectType(st.type)}
+                                className={`flex-1 px-2 py-1.5 rounded text-xs font-mono transition-all ${
+                                  editSubjectType === st.type
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                                }`}
+                                title={st.description}
+                              >
+                                {st.name}
+                              </button>
                             ))}
                           </div>
                           <input
@@ -464,6 +518,33 @@ function SubjectsContent() {
                           Anki
                         </>
                       )}
+                    </button>
+                    {/* Archive/Unarchive button */}
+                    <button
+                      onClick={() => {
+                        if (selectedSubject.archived) {
+                          unarchiveSubject(selectedSubject.id);
+                          setShowArchived(false);
+                        } else {
+                          archiveSubject(selectedSubject.id);
+                          // Select the next active subject or show archived view
+                          const remainingActive = activeSubjects.filter(s => s.id !== selectedSubject.id);
+                          if (remainingActive.length > 0) {
+                            setSelectedSubjectId(remainingActive[0].id);
+                          } else {
+                            setShowArchived(true);
+                          }
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                        selectedSubject.archived
+                          ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
+                          : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30'
+                      }`}
+                      title={selectedSubject.archived ? 'Активирай предмета' : 'Архивирай предмета'}
+                    >
+                      {selectedSubject.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                      {selectedSubject.archived ? 'Активирай' : 'Архив'}
                     </button>
                     <button
                       onClick={() => setShowDeleteConfirm(true)}

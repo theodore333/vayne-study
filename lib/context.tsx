@@ -18,6 +18,8 @@ interface AppContextType {
   addSubject: (name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null) => void;
   updateSubject: (id: string, updates: Partial<Subject>) => void;
   deleteSubject: (id: string) => void;
+  archiveSubject: (id: string) => void;
+  unarchiveSubject: (id: string) => void;
 
   // Topic operations
   addTopics: (subjectId: string, topics: Omit<Topic, 'id'>[]) => void;
@@ -287,6 +289,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       };
     });
+  }, [updateData]);
+
+  const archiveSubject = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => s.id === id ? { ...s, archived: true } : s)
+    }));
+  }, [updateData]);
+
+  const unarchiveSubject = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => s.id === id ? { ...s, archived: false } : s)
+    }));
   }, [updateData]);
 
   // Topic operations
@@ -971,6 +987,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addSubject,
       updateSubject,
       deleteSubject,
+      archiveSubject,
+      unarchiveSubject,
       addTopics,
       updateTopic,
       deleteTopic,

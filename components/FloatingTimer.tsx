@@ -11,7 +11,8 @@ type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak';
 interface PomodoroState {
   phase: PomodoroPhase;
   count: number;
-  endTime: number;
+  endTime: number | null;
+  duration?: number;
 }
 
 export default function FloatingTimer() {
@@ -118,18 +119,19 @@ export default function FloatingTimer() {
           const state = JSON.parse(saved) as PomodoroState;
           const now = Date.now();
 
-          // Only track timers that have endTime (are running)
-          if (!state.endTime) {
+          // Track running timers OR pending breaks (break phase without endTime)
+          const isPendingBreak = !state.endTime && state.phase !== 'work';
+          if (!state.endTime && !isPendingBreak) {
             setPomodoroState(null);
             return;
           }
 
           setPomodoroState(state);
-          const remaining = Math.max(0, Math.ceil((state.endTime - now) / 1000));
+          const remaining = state.endTime ? Math.max(0, Math.ceil((state.endTime - now) / 1000)) : 0;
           setPomodoroTimeLeft(remaining);
 
           // If timer expired while on other pages, play sound (but NOT on timer page)
-          if (state.endTime <= now && !hasPlayedSoundRef.current && !actuallyOnTimerPage) {
+          if (state.endTime && state.endTime <= now && !hasPlayedSoundRef.current && !actuallyOnTimerPage) {
             playSound();
             hasPlayedSoundRef.current = true;
 
@@ -167,7 +169,7 @@ export default function FloatingTimer() {
 
     const updateTimer = () => {
       const now = Date.now();
-      const remaining = Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000));
+      const remaining = pomodoroState.endTime ? Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000)) : 0;
       setPomodoroTimeLeft(remaining);
 
       if (remaining <= 0 && !hasPlayedSoundRef.current && !isTimerPage) {
@@ -199,7 +201,7 @@ export default function FloatingTimer() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && pomodoroState && !isTimerPage) {
         const now = Date.now();
-        if (pomodoroState.endTime <= now && !hasPlayedSoundRef.current) {
+        if (pomodoroState.endTime && pomodoroState.endTime <= now && !hasPlayedSoundRef.current) {
           playSound();
           hasPlayedSoundRef.current = true;
 
@@ -261,7 +263,8 @@ export default function FloatingTimer() {
 
   // Don't render if no active timer or on timer page
   // Pomodoro: must have state AND time remaining
-  const hasPomodoro = pomodoroState !== null && pomodoroTimeLeft > 0;
+  const isPendingBreak = pomodoroState !== null && pomodoroState.phase !== 'work' && !pomodoroState.endTime;
+  const hasPomodoro = pomodoroState !== null && (pomodoroTimeLeft > 0 || isPendingBreak);
   // Normal timer: must have active session AND have been running for at least 1 second
   const hasNormalTimer = activeSession !== null && elapsed > 0;
 
@@ -344,7 +347,7 @@ export default function FloatingTimer() {
         >
           <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
           {PhaseIcon && <PhaseIcon size={14} className="text-white/80" />}
-          <span className="text-white font-mono font-bold">{formatTime(displayTime)}</span>
+          <span className="text-white font-mono font-bold">{isPendingBreak ? 'Почивка!' : formatTime(displayTime)}</span>
           <Maximize2 size={14} className="text-white/50 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
         {/* Hide button */}
@@ -429,31 +432,51 @@ export default function FloatingTimer() {
           )}
 
           {/* Timer Display */}
-          <div className={`text-4xl font-mono font-bold text-center mb-4 ${
-            isPomodoro
-              ? phaseInfo!.color === 'cyan' ? 'text-cyan-400'
-              : phaseInfo!.color === 'green' ? 'text-green-400' : 'text-purple-400'
-              : 'text-cyan-400'
-          }`}>
-            {formatTime(displayTime)}
-          </div>
+          {isPendingBreak ? (
+            <div className="text-center mb-4">
+              <div className="text-lg font-mono text-green-400 mb-2">
+                Pomodoro #{pomodoroState!.count} завърши!
+              </div>
+              <div className="text-sm text-slate-400 font-mono">
+                {pomodoroState!.phase === 'shortBreak' ? 'Кратка почивка' : 'Дълга почивка'}
+              </div>
+            </div>
+          ) : (
+            <div className={`text-4xl font-mono font-bold text-center mb-4 ${
+              isPomodoro
+                ? phaseInfo!.color === 'cyan' ? 'text-cyan-400'
+                : phaseInfo!.color === 'green' ? 'text-green-400' : 'text-purple-400'
+                : 'text-cyan-400'
+            }`}>
+              {formatTime(displayTime)}
+            </div>
+          )}
 
           {/* Controls */}
           <div className="flex gap-2">
             <Link
               href="/timer"
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors font-mono text-sm"
+              className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors font-mono text-sm ${
+                isPendingBreak 
+                  ? 'bg-green-600/80 hover:bg-green-600 text-white'
+                  : 'bg-slate-700/50 hover:bg-slate-700 text-slate-300'
+              }`}
             >
-              <Clock size={16} />
-              Детайли
+              {isPendingBreak ? (
+                <>▶ Започни почивка</>
+              ) : (
+                <><Clock size={16} />Детайли</>
+              )}
             </Link>
-            <button
-              onClick={isPomodoro ? handleStopPomodoro : handleStop}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors font-mono text-sm"
-            >
-              <Square size={16} />
-              Спри
-            </button>
+            {!isPendingBreak && (
+              <button
+                onClick={isPomodoro ? handleStopPomodoro : handleStop}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors font-mono text-sm"
+              >
+                <Square size={16} />
+                Спри
+              </button>
+            )}
           </div>
         </div>
       </div>

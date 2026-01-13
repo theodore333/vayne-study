@@ -964,7 +964,7 @@ export default function TimerPage() {
                 {timerMode === 'pomodoro' ? formatTime(pomodoroTimeLeft) : formatTime(elapsed)}
               </div>
 
-              {(timerMode === 'normal' || !isRunning) && !isRunning && (
+              {!isRunning && (timerMode !== 'pomodoro' || pomodoroPhase === 'work') && (
                 <div className="max-w-md mx-auto space-y-4 mb-8">
                   <div>
                     <label className="block text-sm text-slate-400 mb-2 font-mono">

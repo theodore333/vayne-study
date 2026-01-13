@@ -141,11 +141,12 @@ export default function TimerPage() {
         endTime: isRunning ? pomodoroEndTime : null, // Only save endTime if running
         pausedTimeLeft: isPaused ? pomodoroTimeLeft : null, // Save remaining time if paused
         duration: phaseDuration, // Save the duration so we know what was recorded
+        pendingRating: showPomodoroRating, // Flag for pending rating modal
         savedAt: Date.now()
       };
       localStorage.setItem('pomodoro_state', JSON.stringify(state));
     }
-  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized, settings]);
+  }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized, settings, showPomodoroRating]);
 
   // Initialize pomodoro time (only if not restored from localStorage and not paused)
   useEffect(() => {

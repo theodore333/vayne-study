@@ -48,6 +48,12 @@ export default function TimerPage() {
 
   const settings = data.pomodoroSettings;
   const goals = data.studyGoals;
+
+  // Filter out archived subjects
+  const activeSubjects = useMemo(
+    () => data.subjects.filter(s => !s.archived),
+    [data.subjects]
+  );
   const academicPeriod = data.academicPeriod;
 
   // Find active session
@@ -541,7 +547,7 @@ export default function TimerPage() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const selectedSubjectData = data.subjects.find(s => s.id === selectedSubject);
+  const selectedSubjectData = activeSubjects.find(s => s.id === selectedSubject);
   const topics = selectedSubjectData?.topics || [];
 
   // Statistics calculations
@@ -968,7 +974,7 @@ export default function TimerPage() {
                       onChange={(e) => { setSelectedSubject(e.target.value); setSelectedTopic(null); }}
                       className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono">
                       <option value="">Избери предмет (незадължително)</option>
-                      {data.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   {selectedSubject && topics.length > 0 && (
@@ -1347,7 +1353,7 @@ export default function TimerPage() {
                   className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
                 >
                   <option value="">Общо учене</option>
-                  {data.subjects.map(s => (
+                  {activeSubjects.map(s => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>

@@ -73,6 +73,12 @@ function QuizContent() {
 
   const { data, addGrade, incrementApiCalls, updateTopic, trackTopicRead } = useApp();
 
+  // Filter out archived subjects for selection
+  const activeSubjects = useMemo(
+    () => data.subjects.filter(s => !s.archived),
+    [data.subjects]
+  );
+
   // Parse multi-topic params
   const multiTopics = useMemo(() => {
     if (!isMultiMode || !topicsParam) return [];
@@ -1159,7 +1165,7 @@ function QuizContent() {
           </h2>
 
           <div className="space-y-4">
-            {data.subjects.map(subj => (
+            {activeSubjects.map(subj => (
               <div key={subj.id}>
                 <h3 className="text-sm text-slate-400 font-mono mb-2" style={{ color: subj.color }}>
                   {subj.name}

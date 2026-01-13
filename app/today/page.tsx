@@ -62,6 +62,12 @@ export default function TodayPage() {
   // Check which topics have been reviewed today
   const today = new Date().toISOString().split('T')[0];
 
+  // Filter out archived subjects
+  const activeSubjects = useMemo(
+    () => data.subjects.filter(s => !s.archived),
+    [data.subjects]
+  );
+
   // Show achievement popup when new achievements are unlocked
   useEffect(() => {
     if (newAchievements.length > 0) {
@@ -72,7 +78,7 @@ export default function TodayPage() {
   // Auto-mark topics that were reviewed today
   useEffect(() => {
     const reviewedToday = new Set<string>();
-    data.subjects.forEach(subject => {
+    activeSubjects.forEach(subject => {
       subject.topics.forEach(topic => {
         if (topic.lastReview && topic.lastReview.startsWith(today)) {
           reviewedToday.add(topic.id);
@@ -84,23 +90,23 @@ export default function TodayPage() {
       reviewedToday.forEach(id => merged.add(id));
       return merged;
     });
-  }, [data.subjects, today]);
+  }, [activeSubjects, today]);
 
   // Calculate workload based on exam dates
   const workload = useMemo(
-    () => calculateDailyTopics(data.subjects, data.dailyStatus),
-    [data.subjects, data.dailyStatus]
+    () => calculateDailyTopics(activeSubjects, data.dailyStatus),
+    [activeSubjects, data.dailyStatus]
   );
 
   // Detect crunch mode
   const crunchStatus = useMemo(
-    () => detectCrunchMode(data.subjects),
-    [data.subjects]
+    () => detectCrunchMode(activeSubjects),
+    [activeSubjects]
   );
 
   const dailyPlan = useMemo(
-    () => generateDailyPlan(data.subjects, data.schedule, data.dailyStatus),
-    [data.subjects, data.schedule, data.dailyStatus]
+    () => generateDailyPlan(activeSubjects, data.schedule, data.dailyStatus),
+    [activeSubjects, data.schedule, data.dailyStatus]
   );
 
   // Calculate study streak
@@ -157,7 +163,7 @@ export default function TodayPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjects: data.subjects,
+          subjects: activeSubjects,
           userProgress: data.userProgress,
           timerSessions: data.timerSessions,
           dailyStatus: data.dailyStatus,
@@ -417,7 +423,7 @@ export default function TodayPage() {
         ) : (
           <div className="space-y-2">
             {workload.bySubject.map(item => {
-              const subject = data.subjects.find(s => s.id === item.subjectId);
+              const subject = activeSubjects.find(s => s.id === item.subjectId);
               return (
                 <div key={item.subjectId} className={`flex items-center justify-between p-3 rounded-lg ${
                   item.warning ? 'bg-red-500/10 border border-red-500/30' : 'bg-slate-800/30'
@@ -635,7 +641,7 @@ export default function TodayPage() {
                         <div className="space-y-1.5">
                           {task.topics.map((topic) => {
                             const isTopicDone = completedTopics.has(topic.id);
-                            const subject = data.subjects.find(s => s.topics.some(t => t.id === topic.id));
+                            const subject = activeSubjects.find(s => s.topics.some(t => t.id === topic.id));
                             return (
                               <div key={topic.id} className={`flex items-center gap-2 p-2 rounded-lg transition-all overflow-hidden ${
                                 isTopicDone ? 'bg-green-500/10' : 'hover:bg-slate-800/50'

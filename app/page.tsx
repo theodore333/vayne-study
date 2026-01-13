@@ -87,9 +87,12 @@ export default function Dashboard() {
     );
   }
 
-  const alerts = getAlerts(data.subjects, data.schedule);
-  const totalTopics = data.subjects.reduce((sum, s) => sum + s.topics.length, 0);
-  const statusCounts = data.subjects.reduce(
+  // Filter out archived subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+
+  const alerts = getAlerts(activeSubjects, data.schedule);
+  const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);
+  const statusCounts = activeSubjects.reduce(
     (acc, subject) => {
       subject.topics.forEach(topic => { acc[topic.status]++; });
       return acc;
@@ -100,10 +103,10 @@ export default function Dashboard() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
-      <StatsGrid subjects={data.subjects} totalTopics={totalTopics} alertsCount={alerts.length} />
+      <StatsGrid subjects={activeSubjects} totalTopics={totalTopics} alertsCount={alerts.length} />
       {ankiStats && <AnkiWidget stats={ankiStats} onRefresh={refreshAnkiStats} loading={ankiLoading} />}
       <StatusOverview statusCounts={statusCounts} totalTopics={totalTopics} />
-      <SubjectsSection subjects={data.subjects} onAddClick={() => setShowAddSubject(true)} />
+      <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
       {alerts.length > 0 && <AlertsSection alerts={alerts} />}
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
     </div>

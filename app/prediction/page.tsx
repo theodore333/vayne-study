@@ -19,9 +19,12 @@ export default function PredictionPage() {
     );
   }
 
+  // Filter out archived subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+
   const selectedSubject = selectedSubjectId
-    ? data.subjects.find(s => s.id === selectedSubjectId)
-    : data.subjects[0];
+    ? activeSubjects.find(s => s.id === selectedSubjectId)
+    : activeSubjects[0];
 
   const prediction = selectedSubject ? calculatePredictedGrade(selectedSubject, false, data.questionBanks || []) : null;
   const progress = selectedSubject ? getSubjectProgress(selectedSubject) : null;
@@ -56,7 +59,7 @@ export default function PredictionPage() {
         </button>
       </div>
 
-      {data.subjects.length === 0 ? (
+      {activeSubjects.length === 0 ? (
         <div className="p-12 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b] text-center">
           <TrendingUp size={48} className="text-slate-600 mx-auto mb-4" />
           <p className="text-slate-400 font-mono">Добави предмети за да видиш прогнози</p>
@@ -68,10 +71,10 @@ export default function PredictionPage() {
             <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
               <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-3">Предмети</h3>
               <div className="space-y-2">
-                {data.subjects.map(subject => {
+                {activeSubjects.map(subject => {
                   const pred = calculatePredictedGrade(subject, false, data.questionBanks || []);
                   const days = getDaysUntil(subject.examDate);
-                  const isSelected = (selectedSubject?.id || data.subjects[0]?.id) === subject.id;
+                  const isSelected = (selectedSubject?.id || activeSubjects[0]?.id) === subject.id;
 
                   return (
                     <button
@@ -330,11 +333,11 @@ export default function PredictionPage() {
       )}
 
       {/* Overall Stats */}
-      {data.subjects.length > 0 && (
+      {activeSubjects.length > 0 && (
         <div className="mt-6 p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
           <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4">Общ преглед</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {data.subjects.map(subject => {
+            {activeSubjects.map(subject => {
               const pred = calculatePredictedGrade(subject, false, data.questionBanks || []);
               return (
                 <div key={subject.id} className="p-4 rounded-lg bg-slate-800/50 text-center">

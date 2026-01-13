@@ -58,10 +58,13 @@ export default function Sidebar() {
     );
   }
 
-  const alerts = getAlerts(data.subjects, data.schedule).slice(0, 2);
+  // Filter out archived subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived);
+
+  const alerts = getAlerts(activeSubjects, data.schedule).slice(0, 2);
 
   // Sort subjects by exam date (nearest first) - matches default sorting in subjects page
-  const sortedSubjects = [...data.subjects].sort((a, b) => {
+  const sortedSubjects = [...activeSubjects].sort((a, b) => {
     const daysA = getDaysUntil(a.examDate);
     const daysB = getDaysUntil(b.examDate);
     // Put subjects without exam dates at the end

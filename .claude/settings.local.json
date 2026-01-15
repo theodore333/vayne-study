@@ -23,7 +23,9 @@
       "Bash(find:*)",
       "Bash(grep:*)",
       "Bash(npm run dev:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(git rm:*)",
+      "Bash(railway login:*)"
     ]
   }
 }

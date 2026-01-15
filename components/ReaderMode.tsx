@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -25,9 +25,10 @@ import {
   Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote, Wand2,
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
-  MinusIcon
+  MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
+import { mergeAttributes } from '@tiptap/core';
 
 const lowlight = createLowlight(common);
 
@@ -39,6 +40,143 @@ const HIGHLIGHT_COLORS = [
   { name: 'Розово', color: '#fecdd3' },
   { name: 'Оранжево', color: '#fed7aa' },
 ];
+
+// Resizable Image Component
+function ResizableImageComponent({ node, updateAttributes, selected }: NodeViewProps) {
+  const [isResizing, setIsResizing] = useState(false);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent, corner: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    startX.current = e.clientX;
+    startWidth.current = imageRef.current?.offsetWidth || 300;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const diff = e.clientX - startX.current;
+      const newWidth = Math.max(100, Math.min(800, startWidth.current + (corner.includes('right') ? diff : -diff)));
+      updateAttributes({ width: newWidth });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  return (
+    <NodeViewWrapper className="resizable-image-wrapper" data-drag-handle>
+      <div className={`relative inline-block ${selected ? 'ring-2 ring-blue-500' : ''}`} style={{ width: node.attrs.width || 'auto' }}>
+        <img
+          ref={imageRef}
+          src={node.attrs.src}
+          alt={node.attrs.alt || ''}
+          style={{ width: '100%', height: 'auto', display: 'block' }}
+          className="rounded-lg"
+          draggable={false}
+        />
+        {selected && (
+          <>
+            {/* Resize handles */}
+            <div
+              className="absolute top-0 left-0 w-3 h-3 bg-blue-500 cursor-nw-resize rounded-sm transform -translate-x-1/2 -translate-y-1/2 hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'top-left')}
+            />
+            <div
+              className="absolute top-0 right-0 w-3 h-3 bg-blue-500 cursor-ne-resize rounded-sm transform translate-x-1/2 -translate-y-1/2 hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'top-right')}
+            />
+            <div
+              className="absolute bottom-0 left-0 w-3 h-3 bg-blue-500 cursor-sw-resize rounded-sm transform -translate-x-1/2 translate-y-1/2 hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'bottom-left')}
+            />
+            <div
+              className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 cursor-se-resize rounded-sm transform translate-x-1/2 translate-y-1/2 hover:scale-125 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'bottom-right')}
+            />
+            {/* Side handles */}
+            <div
+              className="absolute top-1/2 left-0 w-2 h-8 bg-blue-500 cursor-ew-resize rounded-sm transform -translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'left')}
+            />
+            <div
+              className="absolute top-1/2 right-0 w-2 h-8 bg-blue-500 cursor-ew-resize rounded-sm transform translate-x-1/2 -translate-y-1/2 hover:scale-110 transition-transform"
+              onMouseDown={(e) => handleMouseDown(e, 'right')}
+            />
+          </>
+        )}
+      </div>
+    </NodeViewWrapper>
+  );
+}
+
+// Create Resizable Image Extension
+const ResizableImage = Image.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      width: {
+        default: null,
+        renderHTML: attributes => {
+          if (!attributes.width) return {};
+          return { style: `width: ${attributes.width}px` };
+        },
+      },
+      align: {
+        default: 'center',
+        renderHTML: attributes => {
+          return { 'data-align': attributes.align };
+        },
+      },
+    };
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ResizableImageComponent);
+  },
+});
+
+// Table Grid Picker Component
+function TableGridPicker({ onSelect, onClose }: { onSelect: (rows: number, cols: number) => void; onClose: () => void }) {
+  const [hoveredCell, setHoveredCell] = useState<{ row: number; col: number } | null>(null);
+  const maxRows = 8;
+  const maxCols = 8;
+
+  return (
+    <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-stone-200 p-3 z-50">
+      <div className="text-xs text-stone-500 mb-2 text-center">
+        {hoveredCell ? `${hoveredCell.row} x ${hoveredCell.col}` : 'Избери размер'}
+      </div>
+      <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${maxCols}, 1fr)` }}>
+        {Array.from({ length: maxRows * maxCols }).map((_, index) => {
+          const row = Math.floor(index / maxCols) + 1;
+          const col = (index % maxCols) + 1;
+          const isHighlighted = hoveredCell && row <= hoveredCell.row && col <= hoveredCell.col;
+          return (
+            <div
+              key={index}
+              className={`w-4 h-4 border rounded-sm cursor-pointer transition-colors ${
+                isHighlighted ? 'bg-amber-400 border-amber-500' : 'bg-stone-100 border-stone-300 hover:bg-stone-200'
+              }`}
+              onMouseEnter={() => setHoveredCell({ row, col })}
+              onMouseLeave={() => setHoveredCell(null)}
+              onClick={() => {
+                onSelect(row, col);
+                onClose();
+              }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 interface ReaderModeProps {
   topic: Topic;
@@ -259,11 +397,13 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [isFormatting, setIsFormatting] = useState(false);
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showTableMenu, setShowTableMenu] = useState(false);
+  const [showTableGridPicker, setShowTableGridPicker] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const highlightPickerRef = useRef<HTMLDivElement>(null);
   const tableMenuRef = useRef<HTMLDivElement>(null);
+  const tableGridPickerRef = useRef<HTMLDivElement>(null);
 
   // Initialize TipTap editor
   const editor = useEditor({
@@ -285,7 +425,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       }),
       Typography,
       Underline,
-      Image.configure({
+      ResizableImage.configure({
         inline: false,
         allowBase64: true,
         HTMLAttributes: {
@@ -350,6 +490,9 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       }
       if (tableMenuRef.current && !tableMenuRef.current.contains(e.target as Node)) {
         setShowTableMenu(false);
+      }
+      if (tableGridPickerRef.current && !tableGridPickerRef.current.contains(e.target as Node)) {
+        setShowTableGridPicker(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -738,82 +881,95 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             <ImagePlus size={18} />
           </ToolbarButton>
 
-          {/* Table with dropdown */}
-          <div className="relative" ref={tableMenuRef}>
+          {/* Table insert with grid picker */}
+          <div className="relative" ref={tableGridPickerRef}>
             <button
-              onClick={() => setShowTableMenu(!showTableMenu)}
+              onClick={() => setShowTableGridPicker(!showTableGridPicker)}
               className={`p-2 rounded transition-colors flex items-center gap-0.5 ${
                 editor.isActive('table')
                   ? 'bg-amber-100 text-amber-700'
                   : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
               }`}
-              title="Таблица"
+              title="Вмъкни таблица"
             >
               <TableIcon size={18} />
               <ChevronDown size={12} />
             </button>
-            {showTableMenu && (
-              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-stone-200 p-2 z-50 min-w-[160px]">
-                {!editor.isActive('table') ? (
-                  <button
-                    onClick={() => {
-                      editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-                      setShowTableMenu(false);
-                    }}
-                    className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
-                  >
-                    <PlusIcon size={14} /> Вмъкни таблица (3x3)
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => { editor.chain().focus().addRowBefore().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
-                    >
-                      <RowsIcon size={14} /> Добави ред отгоре
-                    </button>
-                    <button
-                      onClick={() => { editor.chain().focus().addRowAfter().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
-                    >
-                      <RowsIcon size={14} /> Добави ред отдолу
-                    </button>
-                    <button
-                      onClick={() => { editor.chain().focus().addColumnBefore().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
-                    >
-                      <ColumnsIcon size={14} /> Добави колона вляво
-                    </button>
-                    <button
-                      onClick={() => { editor.chain().focus().addColumnAfter().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
-                    >
-                      <ColumnsIcon size={14} /> Добави колона вдясно
-                    </button>
-                    <div className="border-t border-stone-200 my-1" />
-                    <button
-                      onClick={() => { editor.chain().focus().deleteRow().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
-                    >
-                      <Trash2 size={14} /> Изтрий ред
-                    </button>
-                    <button
-                      onClick={() => { editor.chain().focus().deleteColumn().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
-                    >
-                      <Trash2 size={14} /> Изтрий колона
-                    </button>
-                    <button
-                      onClick={() => { editor.chain().focus().deleteTable().run(); setShowTableMenu(false); }}
-                      className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
-                    >
-                      <Trash2 size={14} /> Изтрий таблицата
-                    </button>
-                  </>
-                )}
-              </div>
+            {showTableGridPicker && (
+              <TableGridPicker
+                onSelect={(rows, cols) => {
+                  editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+                }}
+                onClose={() => setShowTableGridPicker(false)}
+              />
             )}
           </div>
+
+          {/* Table edit controls - only show when in table */}
+          {editor.isActive('table') && (
+            <div className="relative" ref={tableMenuRef}>
+              <button
+                onClick={() => setShowTableMenu(!showTableMenu)}
+                className="p-2 rounded transition-colors flex items-center gap-0.5 bg-blue-100 text-blue-700 hover:bg-blue-200"
+                title="Редактирай таблица"
+              >
+                <GripVertical size={18} />
+                <ChevronDown size={12} />
+              </button>
+              {showTableMenu && (
+                <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-stone-200 p-2 z-50 min-w-[180px]">
+                  <div className="text-xs font-medium text-stone-500 px-3 py-1 mb-1">Редове</div>
+                  <button
+                    onClick={() => { editor.chain().focus().addRowBefore().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
+                  >
+                    <PlusIcon size={14} /> Добави ред отгоре
+                  </button>
+                  <button
+                    onClick={() => { editor.chain().focus().addRowAfter().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
+                  >
+                    <PlusIcon size={14} /> Добави ред отдолу
+                  </button>
+                  <button
+                    onClick={() => { editor.chain().focus().deleteRow().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
+                  >
+                    <Trash2 size={14} /> Изтрий ред
+                  </button>
+
+                  <div className="border-t border-stone-200 my-2" />
+                  <div className="text-xs font-medium text-stone-500 px-3 py-1 mb-1">Колони</div>
+                  <button
+                    onClick={() => { editor.chain().focus().addColumnBefore().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
+                  >
+                    <PlusIcon size={14} /> Добави колона вляво
+                  </button>
+                  <button
+                    onClick={() => { editor.chain().focus().addColumnAfter().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-100 rounded flex items-center gap-2"
+                  >
+                    <PlusIcon size={14} /> Добави колона вдясно
+                  </button>
+                  <button
+                    onClick={() => { editor.chain().focus().deleteColumn().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
+                  >
+                    <Trash2 size={14} /> Изтрий колона
+                  </button>
+
+                  <div className="border-t border-stone-200 my-2" />
+                  <button
+                    onClick={() => { editor.chain().focus().deleteTable().run(); setShowTableMenu(false); }}
+                    className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded flex items-center gap-2"
+                  >
+                    <Trash2 size={14} /> Изтрий таблицата
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Link */}
           <ToolbarButton

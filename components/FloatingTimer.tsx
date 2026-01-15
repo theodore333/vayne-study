@@ -174,7 +174,7 @@ export default function FloatingTimer() {
       const remaining = pomodoroState.endTime ? Math.max(0, Math.ceil((pomodoroState.endTime - now) / 1000)) : 0;
       setPomodoroTimeLeft(remaining);
 
-      if (remaining <= 0 && !hasPlayedSoundRef.current && !isTimerPage) {
+      if (remaining <= 0 && pomodoroState.endTime && !hasPlayedSoundRef.current && !isTimerPage) {
         // Play sound and show notification when timer ends (not on timer page)
         playSound();
         hasPlayedSoundRef.current = true;
@@ -187,7 +187,9 @@ export default function FloatingTimer() {
           : 'Време за работа!';
 
         showNotification(phaseLabel, phaseBody);
-        setPomodoroState(null);
+
+        // DON'T clear state - mark as expired so user can see it ended
+        // The timer page will handle the actual state transition
       }
     };
 
@@ -264,10 +266,15 @@ export default function FloatingTimer() {
   };
 
   // Don't render if no active timer or on timer page
-  // Pomodoro: must have state AND time remaining
+  // Pomodoro states:
+  // - Running: has endTime and time remaining > 0
+  // - Expired: has endTime but time remaining = 0 (work finished, waiting to start break)
+  // - Pending break: phase is break but no endTime (waiting to start break timer)
+  // - Pending rating: pendingRating flag is true
   const isPendingBreak = pomodoroState !== null && pomodoroState.phase !== 'work' && !pomodoroState.endTime;
   const isPendingRating = pomodoroState !== null && pomodoroState.pendingRating === true;
-  const hasPomodoro = pomodoroState !== null && (pomodoroTimeLeft > 0 || isPendingBreak || isPendingRating);
+  const isExpired = pomodoroState !== null && pomodoroState.endTime !== null && pomodoroTimeLeft <= 0;
+  const hasPomodoro = pomodoroState !== null && (pomodoroTimeLeft > 0 || isPendingBreak || isPendingRating || isExpired);
   // Normal timer: must have active session AND have been running for at least 1 second
   const hasNormalTimer = activeSession !== null && elapsed > 0;
 
@@ -350,7 +357,7 @@ export default function FloatingTimer() {
         >
           <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
           {PhaseIcon && <PhaseIcon size={14} className="text-white/80" />}
-          <span className="text-white font-mono font-bold">{isPendingRating ? 'Оценка!' : isPendingBreak ? 'Почивка!' : formatTime(displayTime)}</span>
+          <span className="text-white font-mono font-bold">{isPendingRating ? 'Оценка!' : isPendingBreak ? 'Почивка!' : isExpired ? 'Свърши!' : formatTime(displayTime)}</span>
           <Maximize2 size={14} className="text-white/50 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
         {/* Hide button */}
@@ -453,6 +460,18 @@ export default function FloatingTimer() {
                 {pomodoroState!.phase === 'shortBreak' ? 'Кратка почивка' : 'Дълга почивка'}
               </div>
             </div>
+          ) : isExpired && pomodoroState ? (
+            <div className="text-center mb-4">
+              <div className="text-lg font-mono text-amber-400 mb-2">
+                {pomodoroState.phase === 'work' ? '🍅 Pomodoro завърши!' : '☕ Почивката свърши!'}
+              </div>
+              <div className="text-sm text-slate-400 font-mono">
+                {pomodoroState.phase === 'work'
+                  ? 'Оцени сесията и започни почивка'
+                  : 'Време за нов pomodoro!'
+                }
+              </div>
+            </div>
           ) : (
             <div className={`text-4xl font-mono font-bold text-center mb-4 ${
               isPomodoro
@@ -469,9 +488,9 @@ export default function FloatingTimer() {
             <Link
               href="/timer"
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors font-mono text-sm ${
-                isPendingRating
-                  ? 'bg-cyan-600/80 hover:bg-cyan-600 text-white'
-                  : isPendingBreak 
+                isPendingRating || isExpired
+                  ? 'bg-amber-600/80 hover:bg-amber-600 text-white'
+                  : isPendingBreak
                     ? 'bg-green-600/80 hover:bg-green-600 text-white'
                     : 'bg-slate-700/50 hover:bg-slate-700 text-slate-300'
               }`}
@@ -480,11 +499,13 @@ export default function FloatingTimer() {
                 <>⭐ Оцени сесията</>
               ) : isPendingBreak ? (
                 <>▶ Започни почивка</>
+              ) : isExpired ? (
+                <>🍅 Виж таймера</>
               ) : (
                 <><Clock size={16} />Детайли</>
               )}
             </Link>
-            {!isPendingBreak && !isPendingRating && (
+            {!isPendingBreak && !isPendingRating && !isExpired && (
               <button
                 onClick={isPomodoro ? handleStopPomodoro : handleStop}
                 className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600/80 hover:bg-red-600 text-white rounded-lg transition-colors font-mono text-sm"

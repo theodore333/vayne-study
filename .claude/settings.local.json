@@ -19,7 +19,11 @@
       "Bash(ping:*)",
       "Bash(curl:*)",
       "Bash(cat:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npm run dev:*)",
+      "Bash(findstr:*)"
     ]
   }
 }

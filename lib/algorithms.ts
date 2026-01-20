@@ -255,8 +255,9 @@ export function getWeightedMasteryScore(topic: Topic): number {
   let weightedScore = 0;
 
   history.forEach((quiz, index) => {
-    // Recency factor: more recent = higher weight (last quiz = 1.5x, older = decreasing)
-    const recencyFactor = 1 + (0.5 * (index / history.length));
+    // Recency factor: more recent = higher weight (last quiz = 1.5x, first/oldest = 1.0x)
+    // Array is ordered oldest to newest, so higher index = more recent
+    const recencyFactor = 1 + (0.5 * (index / Math.max(1, history.length - 1)));
     const quizWeight = (quiz.weight || 1.0) * recencyFactor;
 
     totalWeight += quizWeight;
@@ -1016,12 +1017,19 @@ export function getSubjectProgress(subject: Subject): {
   };
 }
 
-export function getAlerts(subjects: Subject[], schedule: ScheduleClass[]): {
+export function getAlerts(
+  subjects: Subject[],
+  schedule: ScheduleClass[],
+  studyGoals?: StudyGoals
+): {
   type: 'critical' | 'warning' | 'info';
   message: string;
   subjectId?: string;
 }[] {
   const alerts: { type: 'critical' | 'warning' | 'info'; message: string; subjectId?: string }[] = [];
+
+  // In vacation mode, extend decay thresholds by 50%
+  const decayMultiplier = studyGoals?.vacationMode ? 1.5 : 1.0;
 
   const today = new Date();
   const tomorrow = new Date(today);
@@ -1057,11 +1065,13 @@ export function getAlerts(subjects: Subject[], schedule: ScheduleClass[]): {
   }
 
   // Check for decay warnings (using adaptive thresholds)
+  // In vacation mode, thresholds are extended so fewer warnings appear
   for (const subject of subjects) {
     const decayingCount = subject.topics.filter(t => {
       if (t.status === 'gray') return false;
       const days = getDaysSince(t.lastReview);
-      const warningDays = getDecayWarningDays(t);  // Adaptive threshold
+      const baseWarningDays = getDecayWarningDays(t);  // Adaptive threshold
+      const warningDays = Math.round(baseWarningDays * decayMultiplier);
       return days >= warningDays;
     }).length;
 

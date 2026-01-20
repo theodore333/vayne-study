@@ -90,7 +90,7 @@ export default function Dashboard() {
   // Filter out archived subjects
   const activeSubjects = data.subjects.filter(s => !s.archived);
 
-  const alerts = getAlerts(activeSubjects, data.schedule);
+  const alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals);
   const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);
   const statusCounts = activeSubjects.reduce(
     (acc, subject) => {

@@ -909,7 +909,15 @@ function QuizContent() {
     const grade = getGradeFromScore(score, quizState.questions.length);
     const percentage = (score / quizState.questions.length) * 100;
 
-    addGrade(subjectId, topicId, grade);
+    // Pass quiz metadata for accurate history tracking
+    // Use preset weight for consistent quiz weighting
+    const quizWeight = mode === 'custom' ? 1.0 : QUIZ_LENGTH_PRESETS[quizLength].weight;
+    addGrade(subjectId, topicId, grade, {
+      bloomLevel: topic.currentBloomLevel || 1,
+      questionsCount: quizState.questions.length,
+      correctAnswers: score,
+      weight: quizWeight
+    });
     // Note: Don't track as "read" here - quizzes test knowledge, not reading
 
     // Collect wrong answers AND track correctly answered concepts
@@ -1049,8 +1057,8 @@ function QuizContent() {
 
     // Don't set currentBloomLevel directly - let context.tsx calculate it
     // based on quizHistory (requires 2+ successful quizzes at current level to advance)
+    // Note: quizHistory is now updated via addGrade(), only update wrongAnswers here
     updateTopic(subjectId, topicId, {
-      quizHistory: [...(topic.quizHistory || []), quizResult],
       wrongAnswers: mergedWrongAnswers
     });
     // Mark as saved and show feedback
@@ -1061,23 +1069,14 @@ function QuizContent() {
   const handleSaveFreeRecallGrade = () => {
     if (!subjectId || !topicId || !topic || !freeRecallEvaluation) return;
 
-    addGrade(subjectId, topicId, freeRecallEvaluation.grade);
-    // Note: Don't track as "read" here - free recall tests knowledge, not reading
-
-    // Free recall gets standard weight
-    const quizResult = {
-      date: new Date().toISOString(),
-      bloomLevel: freeRecallEvaluation.bloomLevel as BloomLevel,
-      score: freeRecallEvaluation.score,
+    // Pass quiz metadata - addGrade now handles quizHistory
+    addGrade(subjectId, topicId, freeRecallEvaluation.grade, {
+      bloomLevel: freeRecallEvaluation.bloomLevel,
       questionsCount: 1,
       correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0,
       weight: 1.0
-    };
-
-    // Don't set currentBloomLevel directly - let context.tsx calculate it
-    updateTopic(subjectId, topicId, {
-      quizHistory: [...(topic.quizHistory || []), quizResult]
     });
+    // Note: Don't track as "read" here - free recall tests knowledge, not reading
   };
 
   const resetQuiz = () => {

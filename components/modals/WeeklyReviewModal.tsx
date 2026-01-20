@@ -208,6 +208,12 @@ export default function WeeklyReviewModal({ onClose }: Props) {
     }
   };
 
+  // Dismiss without saving feedback (but still mark as reviewed)
+  const handleDismiss = () => {
+    localStorage.setItem('weekly-review-date', new Date().toISOString().split('T')[0]);
+    onClose();
+  };
+
   // Save and close
   const handleSave = () => {
     const reviewData: WeeklyReviewData = {
@@ -232,7 +238,7 @@ export default function WeeklyReviewModal({ onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleDismiss} />
       <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-xl max-h-[90vh] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b] shrink-0">
@@ -246,7 +252,7 @@ export default function WeeklyReviewModal({ onClose }: Props) {
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleDismiss}
             className="p-2 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-slate-200"
           >
             <X size={20} />

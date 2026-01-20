@@ -61,7 +61,7 @@ export default function Sidebar() {
   // Filter out archived subjects
   const activeSubjects = data.subjects.filter(s => !s.archived);
 
-  const alerts = getAlerts(activeSubjects, data.schedule).slice(0, 2);
+  const alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals).slice(0, 2);
 
   // Sort subjects by exam date (nearest first) - matches default sorting in subjects page
   const sortedSubjects = [...activeSubjects].sort((a, b) => {

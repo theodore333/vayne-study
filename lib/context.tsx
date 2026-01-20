@@ -26,7 +26,7 @@ interface AppContextType {
   updateTopic: (subjectId: string, topicId: string, updates: Partial<Topic>) => void;
   deleteTopic: (subjectId: string, topicId: string) => void;
   setTopicStatus: (subjectId: string, topicId: string, status: TopicStatus) => void;
-  addGrade: (subjectId: string, topicId: string, grade: number) => void;
+  addGrade: (subjectId: string, topicId: string, grade: number, quizMeta?: { bloomLevel?: number; questionsCount?: number; correctAnswers?: number; weight?: number }) => void;
   updateTopicMaterial: (subjectId: string, topicId: string, material: string) => void;
   trackTopicRead: (subjectId: string, topicId: string) => void;
   // Smart Scheduling operations
@@ -448,7 +448,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
-  const addGrade = useCallback((subjectId: string, topicId: string, grade: number) => {
+  const addGrade = useCallback((
+    subjectId: string,
+    topicId: string,
+    grade: number,
+    quizMeta?: { bloomLevel?: number; questionsCount?: number; correctAnswers?: number; weight?: number }
+  ) => {
     // Validate grade is in Bulgarian scale (2-6)
     const validGrade = Math.max(2, Math.min(6, grade));
     if (grade !== validGrade) {
@@ -456,12 +461,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     updateData(prev => {
-      // Find old status for XP calculation
+      // Find old status and current Bloom level for quiz history
       let oldStatus: TopicStatus = 'gray';
+      let currentBloom = 1;
       const subject = prev.subjects.find(s => s.id === subjectId);
       if (subject) {
         const topic = subject.topics.find(t => t.id === topicId);
-        if (topic) oldStatus = topic.status;
+        if (topic) {
+          oldStatus = topic.status;
+          currentBloom = topic.currentBloomLevel || 1;
+        }
       }
 
       // Update combo FIRST to get correct multiplier
@@ -471,6 +480,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Calculate quiz XP (convert grade 2-6 to score 0-100)
       const score = Math.round(((validGrade - 2) / 4) * 100);
+
+      // Create quiz result for history
+      const quizResult = {
+        date: new Date().toISOString(),
+        bloomLevel: (quizMeta?.bloomLevel || currentBloom) as 1 | 2 | 3 | 4 | 5 | 6,
+        score: score,
+        questionsCount: quizMeta?.questionsCount || 5,
+        correctAnswers: quizMeta?.correctAnswers || Math.round(score / 20),
+        weight: quizMeta?.weight || 1.0
+      };
       const quizXp = calculateQuizXp(score, comboMultiplier);
 
       // Update subjects
@@ -511,7 +530,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               quizCount: newQuizCount,
               status: gradeToStatus(avgGrade),
               lastReview: new Date().toISOString(),
-              currentBloomLevel: newBloomLevel
+              currentBloomLevel: newBloomLevel,
+              quizHistory: [...(t.quizHistory || []), quizResult]
             };
           })
         };

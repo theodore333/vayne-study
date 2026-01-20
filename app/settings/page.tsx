@@ -443,7 +443,7 @@ export default function SettingsPage() {
                 step={10}
                 value={studyGoals.vacationMultiplier * 100}
                 onChange={(e) => updateStudyGoals({ vacationMultiplier: parseInt(e.target.value) / 100 })}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+                className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-cyan-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
                 <span>20% (лека)</span>

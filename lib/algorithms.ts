@@ -1084,5 +1084,103 @@ export function getAlerts(
     }
   }
 
+  // Check for subjects missing setup (PRIORITY alerts before studying)
+  for (const subject of subjects) {
+    const setup = getSubjectSetupStatus(subject);
+
+    // No topics = highest priority - can't study without syllabus
+    if (!setup.hasTopics) {
+      alerts.unshift({
+        type: 'critical',
+        message: `📋 ${subject.name}: добави конспект/теми преди да учиш!`,
+        subjectId: subject.id
+      });
+    }
+    // No exam date set - important for planning
+    else if (!setup.hasExamDate) {
+      alerts.unshift({
+        type: 'warning',
+        message: `📅 ${subject.name}: задай дата на изпит за по-добро планиране`,
+        subjectId: subject.id
+      });
+    }
+    // No material entered for any topic
+    else if (!setup.hasMaterial) {
+      alerts.unshift({
+        type: 'warning',
+        message: `📝 ${subject.name}: добави материал поне за някои теми`,
+        subjectId: subject.id
+      });
+    }
+    // No quizzes taken yet
+    else if (!setup.hasQuizzes) {
+      alerts.unshift({
+        type: 'info',
+        message: `🧪 ${subject.name}: направи поне 1 тест за да оценим знанията ти`,
+        subjectId: subject.id
+      });
+    }
+  }
+
   return alerts;
+}
+
+/**
+ * Check subject setup completeness
+ * Returns what data the user has entered vs what's missing
+ */
+export interface SubjectSetupStatus {
+  hasTopics: boolean;           // Has at least 1 topic (syllabus entered)
+  hasExamDate: boolean;         // Has exam date set
+  hasMaterial: boolean;         // At least 1 topic has material
+  hasQuizzes: boolean;          // At least 1 quiz taken
+  topicsWithMaterial: number;   // Count of topics with material
+  topicsWithQuizzes: number;    // Count of topics with quizzes
+  completenessScore: number;    // 0-100 percentage
+  isReadyForPlanning: boolean;  // Has minimum data for effective planning
+}
+
+export function getSubjectSetupStatus(subject: Subject): SubjectSetupStatus {
+  const hasTopics = subject.topics.length > 0;
+  const hasExamDate = subject.examDate !== null;
+
+  const topicsWithMaterial = subject.topics.filter(t =>
+    (t.material && t.material.trim().length > 0) ||
+    (t.materialImages && t.materialImages.length > 0)
+  ).length;
+
+  const topicsWithQuizzes = subject.topics.filter(t =>
+    t.quizCount > 0 || (t.quizHistory && t.quizHistory.length > 0)
+  ).length;
+
+  const hasMaterial = topicsWithMaterial > 0;
+  const hasQuizzes = topicsWithQuizzes > 0;
+
+  // Calculate completeness score (weighted)
+  // 30% topics, 20% exam date, 25% material, 25% quizzes
+  let score = 0;
+  if (hasTopics) score += 30;
+  if (hasExamDate) score += 20;
+  if (hasMaterial) {
+    const materialCoverage = Math.min(topicsWithMaterial / Math.max(subject.topics.length, 1), 1);
+    score += 25 * materialCoverage;
+  }
+  if (hasQuizzes) {
+    const quizCoverage = Math.min(topicsWithQuizzes / Math.max(subject.topics.length, 1), 1);
+    score += 25 * quizCoverage;
+  }
+
+  // Ready for planning if has topics + exam date + (material OR quizzes)
+  const isReadyForPlanning = hasTopics && hasExamDate && (hasMaterial || hasQuizzes);
+
+  return {
+    hasTopics,
+    hasExamDate,
+    hasMaterial,
+    hasQuizzes,
+    topicsWithMaterial,
+    topicsWithQuizzes,
+    completenessScore: Math.round(score),
+    isReadyForPlanning
+  };
 }

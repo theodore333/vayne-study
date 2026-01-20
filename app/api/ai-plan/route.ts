@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       schedule: ScheduleClass[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
       apiKey: string;
-      studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number };
+      studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number; vacationMode?: boolean; vacationMultiplier?: number };
     };
 
     if (!apiKey) {
@@ -79,6 +79,13 @@ export async function POST(request: NextRequest) {
     const userDailyGoalMinutes = studyGoals?.dailyMinutes || 480;
     const userWeekendGoalMinutes = studyGoals?.weekendDailyMinutes || userDailyGoalMinutes;
     let dailyMinutes = isWeekend ? userWeekendGoalMinutes : userDailyGoalMinutes;
+
+    // Adjust for vacation mode
+    const isVacationMode = studyGoals?.vacationMode || false;
+    const vacationMultiplier = studyGoals?.vacationMultiplier || 0.4;
+    if (isVacationMode) {
+      dailyMinutes = Math.round(dailyMinutes * vacationMultiplier);
+    }
 
     // Adjust for sick/holiday
     if (dailyStatus?.sick || dailyStatus?.holiday) {
@@ -153,6 +160,7 @@ export async function POST(request: NextRequest) {
 
 ДАТА: ${todayStr} (${isWeekend ? 'уикенд' : 'делник'})
 КАПАЦИТЕТ: ${dailyTopicCapacity} теми (${dailyMinutes} минути общо)
+${isVacationMode ? `РЕЖИМ: 🏖️ ВАКАНЦИЯ - намален workload до ${Math.round(vacationMultiplier * 100)}%! Фокус върху поддръжка и лек преговор.` : ''}
 ${dailyStatus?.sick ? 'СТАТУС: Болен - намален капацитет!' : dailyStatus?.holiday ? 'СТАТУС: Почивка - намален капацитет!' : ''}
 
 ПРЕДМЕТИ И ТЕМИ:

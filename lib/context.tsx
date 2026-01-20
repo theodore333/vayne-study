@@ -717,14 +717,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       distractionNote: note || undefined
     };
 
-    console.log('[addPomodoroSession] Recording session:', {
-      duration: durationMinutes,
-      subjectId: subjectId || 'pomodoro',
-      startTime: startTime.toISOString(),
-      endTime: endTime.toISOString(),
-      stack: new Error().stack?.split('\n').slice(1, 4).join('\n')
-    });
-
     updateData(prev => ({
       ...prev,
       timerSessions: [...prev.timerSessions, session]

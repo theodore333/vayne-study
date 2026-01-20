@@ -737,7 +737,8 @@ export function generateDailyPlan(
     totalGrayTopics
   );
   // Capacity for Tier 1-3 (exams, exercises, decay prevention)
-  let capacityForReview = remainingTopics - reservedForNew;
+  // FIX: Ensure this never goes negative
+  let capacityForReview = Math.max(0, remainingTopics - reservedForNew);
   // Track how much of reserved capacity is actually used
   let usedNewMaterialSlots = 0;
 

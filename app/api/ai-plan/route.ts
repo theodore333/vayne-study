@@ -85,8 +85,10 @@ export async function POST(request: NextRequest) {
       dailyMinutes = Math.round(dailyMinutes * 0.5);
     }
 
-    // Roughly 20-30 minutes per topic
-    const dailyTopicCapacity = Math.round(dailyMinutes / 25);
+    // Roughly 20-30 minutes per topic, but cap at reasonable maximum
+    const rawCapacity = Math.round(dailyMinutes / 25);
+    const MAX_TOPICS_PER_DAY = 12; // Hard limit for reasonable daily workload
+    const dailyTopicCapacity = Math.min(rawCapacity, MAX_TOPICS_PER_DAY);
 
     // Check for exercises tomorrow
     const tomorrowExercises = schedule.filter(
@@ -174,13 +176,14 @@ ${JSON.stringify(subjectData, null, 2)}
    - Общо развитие
 
 ВАЖНИ ПРАВИЛА:
+- ⚠️ КРИТИЧНО: ОБЩО МАКСИМУМ ${dailyTopicCapacity} ТЕМИ ЗА ЦЕЛИЯ ПЛАН! Не повече!
+- Максимум 4-5 задачи общо (групирай добре)
 - ЗАДЪЛЖИТЕЛНО включи поне 25% сиви теми (нов материал) за да има прогрес!
-- Групирай свързани теми по предмет
+- Групирай свързани теми по предмет (2-4 теми на задача максимум)
 - Ако има много жълти теми - те са БЪРЗ преговор, не пълно учене
 - Оранжеви теми имат само основи - нужна е работа
-- Ако има случаен избор на изпит - фокусирай се на ПОКРИТИЕ (повече теми)
 - Малки теми (size: "small") дават бързи победи
-- Максимум 5-7 задачи общо
+- Не претоварвай - студентът трябва реално да свърши плана!
 
 ФОРМАТ НА ОТГОВОР (САМО валиден JSON, без markdown):
 {
@@ -229,13 +232,32 @@ ${JSON.stringify(subjectData, null, 2)}
     }
 
     // Convert to DailyTask format with full topic data
-    const dailyTasks = parsedResponse.tasks.map((task, index) => {
+    // Also enforce hard limit on total topics
+    let totalTopicsUsed = 0;
+    const dailyTasks = [];
+
+    for (let index = 0; index < parsedResponse.tasks.length; index++) {
+      const task = parsedResponse.tasks[index];
       const subject = subjects.find(s => s.id === task.subjectId);
-      const topics = task.topicIds
+
+      // Get topics but respect the hard limit
+      const remainingCapacity = MAX_TOPICS_PER_DAY - totalTopicsUsed;
+      if (remainingCapacity <= 0) break; // Stop if we've hit the limit
+
+      let topics = task.topicIds
         .map(id => subject?.topics.find(t => t.id === id))
         .filter((t): t is RequestTopic => t !== undefined);
 
-      return {
+      // Truncate topics if needed
+      if (topics.length > remainingCapacity) {
+        topics = topics.slice(0, remainingCapacity);
+      }
+
+      if (topics.length === 0) continue; // Skip empty tasks
+
+      totalTopicsUsed += topics.length;
+
+      dailyTasks.push({
         id: `ai-task-${Date.now()}-${index}`,
         subjectId: task.subjectId,
         subjectName: task.subjectName,
@@ -246,8 +268,8 @@ ${JSON.stringify(subjectData, null, 2)}
         topics: topics,
         estimatedMinutes: task.estimatedMinutes || topics.length * 20,
         completed: false
-      };
-    });
+      });
+    }
 
     // Calculate cost (Opus pricing)
     const inputTokens = message.usage.input_tokens;

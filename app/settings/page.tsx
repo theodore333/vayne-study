@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus } from '@/lib/types';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getDeckNames, getSelectedDecks, saveSelectedDecks } from '@/lib/anki';
@@ -13,8 +13,8 @@ interface ImportResult {
 }
 
 export default function SettingsPage() {
-  const { data, updateUsageBudget, setTopicStatus } = useApp();
-  const { usageData } = data;
+  const { data, updateUsageBudget, setTopicStatus, updateStudyGoals } = useApp();
+  const { usageData, studyGoals } = data;
   const activeSubjects = data.subjects.filter(s => !s.archived);
 
   const [apiKey, setApiKey] = useState('');
@@ -389,6 +389,78 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Vacation Mode */}
+      <div className={`bg-[rgba(20,20,35,0.8)] border rounded-xl p-6 ${
+        studyGoals.vacationMode ? 'border-cyan-500/50 bg-cyan-900/10' : 'border-[#1e293b]'
+      }`}>
+        <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2 mb-4">
+          <Palmtree size={20} className="text-cyan-400" />
+          Vacation Mode
+          {studyGoals.vacationMode && (
+            <span className="ml-2 px-2 py-0.5 text-xs bg-cyan-500/20 text-cyan-400 rounded font-mono">
+              АКТИВЕН
+            </span>
+          )}
+        </h2>
+
+        <p className="text-sm text-slate-400 font-mono mb-4">
+          Между семестри или ваканция? Включи vacation mode за намален workload.
+        </p>
+
+        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg mb-4">
+          <div>
+            <p className="text-slate-200 font-mono">Vacation Mode</p>
+            <p className="text-xs text-slate-500 font-mono mt-1">
+              {studyGoals.vacationMode
+                ? `Workload намален до ${Math.round(studyGoals.vacationMultiplier * 100)}%`
+                : 'Нормален учебен режим'
+              }
+            </p>
+          </div>
+          <button
+            onClick={() => updateStudyGoals({ vacationMode: !studyGoals.vacationMode })}
+            className={`relative w-14 h-7 rounded-full transition-colors ${
+              studyGoals.vacationMode ? 'bg-cyan-600' : 'bg-slate-600'
+            }`}
+          >
+            <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
+              studyGoals.vacationMode ? 'translate-x-8' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
+        {studyGoals.vacationMode && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">
+                Интензивност ({Math.round(studyGoals.vacationMultiplier * 100)}% от нормалното)
+              </label>
+              <input
+                type="range"
+                min={20}
+                max={80}
+                step={10}
+                value={studyGoals.vacationMultiplier * 100}
+                onChange={(e) => updateStudyGoals({ vacationMultiplier: parseInt(e.target.value) / 100 })}
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+              />
+              <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
+                <span>20% (лека)</span>
+                <span>50%</span>
+                <span>80% (интензивна)</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-cyan-900/20 border border-cyan-800/30 rounded-lg">
+              <p className="text-xs text-cyan-300 font-mono">
+                Vacation mode: {Math.round((studyGoals.dailyMinutes * studyGoals.vacationMultiplier) / 60)}ч дневно вместо {Math.round(studyGoals.dailyMinutes / 60)}ч,
+                по-дълги decay интервали, фокус върху нов материал.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Notion Import */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">

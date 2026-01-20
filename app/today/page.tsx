@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2 } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -137,8 +137,8 @@ export default function TodayPage() {
   );
 
   const dailyPlan = useMemo(
-    () => generateDailyPlan(activeSubjects, data.schedule, data.dailyStatus),
-    [activeSubjects, data.schedule, data.dailyStatus]
+    () => generateDailyPlan(activeSubjects, data.schedule, data.dailyStatus, data.studyGoals),
+    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals]
   );
 
   // Calculate study streak
@@ -288,6 +288,18 @@ export default function TodayPage() {
               <div>
                 <span className="text-lg font-bold text-orange-400 font-mono">{streak}</span>
                 <span className="text-xs text-orange-400/70 font-mono ml-1">дни streak</span>
+              </div>
+            </div>
+          )}
+          {/* Vacation Mode Indicator */}
+          {data.studyGoals.vacationMode && (
+            <div className="flex items-center gap-2 px-4 py-2 bg-cyan-500/20 border border-cyan-500/30 rounded-xl">
+              <Umbrella size={20} className="text-cyan-400" />
+              <div>
+                <span className="text-sm font-bold text-cyan-400 font-mono">Vacation</span>
+                <span className="text-xs text-cyan-400/70 font-mono ml-1">
+                  {Math.round(data.studyGoals.vacationMultiplier * 100)}%
+                </span>
               </div>
             </div>
           )}

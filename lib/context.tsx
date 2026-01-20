@@ -114,7 +114,9 @@ const defaultStudyGoals: StudyGoals = {
   weeklyMinutes: 2880, // auto: 8*5 + 4*2 = 48 hours
   monthlyMinutes: 12480, // auto: ~4.3 weeks
   weekendDailyMinutes: 240, // 4 hours (weekends)
-  useWeekendHours: true
+  useWeekendHours: true,
+  vacationMode: false,
+  vacationMultiplier: 0.4
 };
 
 const defaultAcademicPeriod: AcademicPeriod = {

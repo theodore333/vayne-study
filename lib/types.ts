@@ -265,6 +265,8 @@ export interface StudyGoals {
   monthlyMinutes: number;     // Monthly goal in minutes (auto-calculated)
   weekendDailyMinutes: number; // Weekend goal in minutes (default same as daily)
   useWeekendHours: boolean;   // Use different hours for weekends
+  vacationMode: boolean;      // Between semesters - reduced workload
+  vacationMultiplier: number; // Multiplier for vacation mode (default 0.4 = 40%)
 }
 
 export interface AcademicPeriod {

@@ -123,7 +123,9 @@ const defaultStudyGoals: StudyGoals = {
   weeklyMinutes: 2880,
   monthlyMinutes: 12480,
   weekendDailyMinutes: 240,
-  useWeekendHours: true
+  useWeekendHours: true,
+  vacationMode: false,
+  vacationMultiplier: 0.4
 };
 
 const defaultAcademicPeriod: AcademicPeriod = {
@@ -229,6 +231,8 @@ export function loadData(): AppData {
     if (!data.pomodoroSettings) data.pomodoroSettings = defaultPomodoroSettings;
     if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
     if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
+    if (data.studyGoals.vacationMode === undefined) data.studyGoals.vacationMode = false;
+    if (data.studyGoals.vacationMultiplier === undefined) data.studyGoals.vacationMultiplier = 0.4;
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     if (!data.userProgress) data.userProgress = defaultUserProgress;
     if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;

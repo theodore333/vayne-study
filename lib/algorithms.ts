@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
 
 /**
@@ -312,7 +312,8 @@ export function calculateEffectiveHours(status: DailyStatus): number {
 // Calculate daily topic workload based on exam dates
 export function calculateDailyTopics(
   subjects: Subject[],
-  status: DailyStatus
+  status: DailyStatus,
+  studyGoals?: StudyGoals
 ): { total: number; bySubject: { subjectId: string; subjectName: string; topics: number; remaining: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low'; warning: string | null }[] } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -381,6 +382,15 @@ export function calculateDailyTopics(
     total = Math.max(1, Math.ceil(total * modifier));
     bySubject.forEach(s => {
       s.topics = Math.max(1, Math.ceil(s.topics * modifier));
+    });
+  }
+
+  // Apply vacation mode multiplier
+  if (studyGoals?.vacationMode && studyGoals.vacationMultiplier < 1) {
+    const vacationMult = studyGoals.vacationMultiplier;
+    total = Math.max(1, Math.ceil(total * vacationMult));
+    bySubject.forEach(s => {
+      s.topics = Math.max(1, Math.ceil(s.topics * vacationMult));
     });
   }
 
@@ -714,16 +724,17 @@ function selectTopicsWithRelations(
 export function generateDailyPlan(
   subjects: Subject[],
   schedule: ScheduleClass[],
-  dailyStatus: DailyStatus
+  dailyStatus: DailyStatus,
+  studyGoals?: StudyGoals
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
-  // Detect crunch mode for priority calculation
+  // Detect crunch mode for priority calculation (disabled in vacation mode)
   const crunchStatus = detectCrunchMode(subjects);
-  const inCrunchMode = crunchStatus.isActive;
+  const inCrunchMode = studyGoals?.vacationMode ? false : crunchStatus.isActive;
 
-  // Get topic-based workload from calculateDailyTopics
-  const workload = calculateDailyTopics(subjects, dailyStatus);
+  // Get topic-based workload from calculateDailyTopics (vacation mode applied inside)
+  const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals);
   let remainingTopics = workload.total;
 
   if (remainingTopics === 0) return tasks;
@@ -835,6 +846,9 @@ export function generateDailyPlan(
 
   // 3. MEDIUM: Decay warning - only if we have remaining capacity
   // Uses adaptive decay thresholds based on topic mastery
+  // In vacation mode, extend thresholds by 50% (more relaxed review schedule)
+  const vacationDecayMultiplier = studyGoals?.vacationMode ? 1.5 : 1.0;
+
   if (capacityForReview > 0) {
     for (const subject of subjects) {
       if (capacityForReview <= 0) break;
@@ -843,7 +857,8 @@ export function generateDailyPlan(
       const decayingTopics = subject.topics.filter(t => {
         if (t.status === 'gray') return false;
         const days = getDaysSince(t.lastReview);
-        const warningDays = getDecayWarningDays(t);  // Adaptive threshold
+        const baseWarningDays = getDecayWarningDays(t);  // Adaptive threshold
+        const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
         return days >= warningDays;
       });
 

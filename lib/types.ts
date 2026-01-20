@@ -437,7 +437,7 @@ export interface DailyTask {
   subjectId: string;
   subjectName: string;
   subjectColor: string;
-  type: 'critical' | 'high' | 'medium' | 'normal';
+  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal';
   typeLabel: string;
   description: string;
   topics: Topic[];

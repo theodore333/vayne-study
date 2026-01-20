@@ -18,6 +18,8 @@ interface RequestTopic {
   quizCount: number;
   lastReview: string | null;
   size: 'small' | 'medium' | 'large' | null;
+  material?: string;
+  materialImages?: string[];
 }
 
 interface RequestSubject {
@@ -42,7 +44,7 @@ interface GeneratedTask {
   subjectId: string;
   subjectName: string;
   subjectColor: string;
-  type: 'critical' | 'high' | 'medium' | 'normal';
+  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal';
   typeLabel: string;
   description: string;
   topicIds: string[];
@@ -110,6 +112,37 @@ export async function POST(request: NextRequest) {
       const orangeTopics = s.topics.filter(t => t.status === 'orange').length;
       const grayTopics = s.topics.filter(t => t.status === 'gray').length;
 
+      // Calculate setup completeness
+      const hasTopics = totalTopics > 0;
+      const hasExamDate = s.examDate !== null;
+      const topicsWithMaterial = s.topics.filter(t =>
+        (t.material && t.material.trim().length > 0) ||
+        (t.materialImages && t.materialImages.length > 0)
+      ).length;
+      const topicsWithQuizzes = s.topics.filter(t =>
+        t.quizCount > 0 || (t.quizHistory && t.quizHistory.length > 0)
+      ).length;
+      const hasMaterial = topicsWithMaterial > 0;
+      const hasQuizzes = topicsWithQuizzes > 0;
+
+      // Setup status for AI to consider
+      const setupStatus = {
+        hasTopics,
+        hasExamDate,
+        hasMaterial,
+        hasQuizzes,
+        materialCoverage: totalTopics > 0 ? Math.round((topicsWithMaterial / totalTopics) * 100) : 0,
+        quizCoverage: totalTopics > 0 ? Math.round((topicsWithQuizzes / totalTopics) * 100) : 0,
+        isReadyForStudy: hasTopics && hasExamDate && (hasMaterial || hasQuizzes),
+        missingSetup: [] as string[]
+      };
+
+      // Build list of missing setup items
+      if (!hasTopics) setupStatus.missingSetup.push('НЯМА ТЕМИ/КОНСПЕКТ');
+      if (!hasExamDate) setupStatus.missingSetup.push('НЯМА ДАТА НА ИЗПИТ');
+      if (!hasMaterial) setupStatus.missingSetup.push('НЯМА ВКАРАН МАТЕРИАЛ');
+      if (!hasQuizzes) setupStatus.missingSetup.push('НЕ Е ПРАВЕН ТЕСТ');
+
       let daysUntilExam = null;
       if (s.examDate) {
         const examDate = new Date(s.examDate);
@@ -140,6 +173,7 @@ export async function POST(request: NextRequest) {
         yellowTopics,
         orangeTopics,
         grayTopics,
+        setupStatus, // NEW: setup completeness info
         topicsNeedingReview: topicsNeedingReview.length,
         hasExerciseTomorrow: tomorrowExercises.some(e => e.subjectId === s.id),
         topics: s.topics.map(t => ({
@@ -150,10 +184,16 @@ export async function POST(request: NextRequest) {
           avgGrade: t.avgGrade,
           lastReview: t.lastReview,
           size: t.size,
+          hasMaterial: (t.material && t.material.trim().length > 0) || (t.materialImages && t.materialImages.length > 0),
+          hasQuiz: t.quizCount > 0,
           needsReview: topicsNeedingReview.some(r => r.id === t.id)
         }))
       };
     });
+
+    // Check if any subjects need setup
+    const subjectsNeedingSetup = subjectData.filter(s => !s.setupStatus.isReadyForStudy);
+    const hasSetupTasks = subjectsNeedingSetup.length > 0;
 
     // Build the prompt
     const prompt = `Ти си експертен AI планировчик за медицински студент. Твоята задача е да генерираш ОПТИМАЛЕН дневен план за учене.
@@ -163,14 +203,32 @@ export async function POST(request: NextRequest) {
 ${isVacationMode ? `РЕЖИМ: 🏖️ ВАКАНЦИЯ - намален workload до ${Math.round(vacationMultiplier * 100)}%! Фокус върху поддръжка и лек преговор.` : ''}
 ${dailyStatus?.sick ? 'СТАТУС: Болен - намален капацитет!' : dailyStatus?.holiday ? 'СТАТУС: Почивка - намален капацитет!' : ''}
 
+${hasSetupTasks ? `⚠️ ВАЖНО: НЯКОИ ПРЕДМЕТИ ИМАТ НЕПЪЛНА ИНФОРМАЦИЯ!
+Предмети нуждаещи се от setup: ${subjectsNeedingSetup.map(s => `${s.name} (${s.setupStatus.missingSetup.join(', ')})`).join('; ')}
+
+ПРЕДИ ДА ГЕНЕРИРАШ ПЛАН ЗА УЧЕНЕ, трябва да дадеш SETUP TASKS за непълните предмети!
+` : ''}
+
 ПРЕДМЕТИ И ТЕМИ:
 ${JSON.stringify(subjectData, null, 2)}
 
 ПРАВИЛА ЗА ПРИОРИТИЗАЦИЯ (спазвай стриктно!):
 
-1. КРИТИЧНИ (type: "critical"):
+${hasSetupTasks ? `0. SETUP TASKS (НАЙ-ВИСОК ПРИОРИТЕТ! type: "setup"):
+   - За предмети с setupStatus.isReadyForStudy = false
+   - НЕ включвай теми (topicIds: []) - това са административни задачи
+   - Примери:
+     * "📋 Добави конспект" ако няма теми
+     * "📅 Задай дата на изпит" ако няма examDate
+     * "📝 Вкарай материал" ако няма материал (hasMaterial: false)
+     * "🧪 Направи първи тест" ако няма quizzes (hasQuizzes: false)
+   - estimatedMinutes: 15-30 мин за setup tasks
+   - ВАЖНО: НЕ ПЛАНИРАЙ УЧЕНЕ за предмети без пълен setup!
+
+` : ''}1. КРИТИЧНИ (type: "critical"):
    - Упражнение утре → теми от този предмет ЗАДЪЛЖИТЕЛНО първи
    - Изпит до 3 дни → максимален фокус
+   - САМО за предмети с setupStatus.isReadyForStudy = true!
 
 2. ВИСОКИ (type: "high"):
    - Изпит 4-7 дни → интензивна подготовка
@@ -186,8 +244,10 @@ ${JSON.stringify(subjectData, null, 2)}
 ВАЖНИ ПРАВИЛА:
 - ⚠️ КРИТИЧНО: ОБЩО МАКСИМУМ ${dailyTopicCapacity} ТЕМИ ЗА ЦЕЛИЯ ПЛАН! Не повече!
 - Максимум 4-5 задачи общо (групирай добре)
+${hasSetupTasks ? '- ⚠️ SETUP TASKS ПЪРВО! Не планирай учене за непълни предмети!' : ''}
 - ЗАДЪЛЖИТЕЛНО включи поне 25% сиви теми (нов материал) за да има прогрес!
 - Групирай свързани теми по предмет (2-4 теми на задача максимум)
+- Приоритизирай теми С материал (hasMaterial: true) - те са по-ефективни за учене
 - Ако има много жълти теми - те са БЪРЗ преговор, не пълно учене
 - Оранжеви теми имат само основи - нужна е работа
 - Малки теми (size: "small") дават бързи победи
@@ -200,8 +260,8 @@ ${JSON.stringify(subjectData, null, 2)}
       "subjectId": "id на предмета",
       "subjectName": "име на предмета",
       "subjectColor": "цвят",
-      "type": "critical|high|medium|normal",
-      "typeLabel": "кратък етикет с emoji (напр. '📝 Изпит след 3 дни')",
+      "type": "setup|critical|high|medium|normal",
+      "typeLabel": "кратък етикет с emoji (напр. '📝 Изпит след 3 дни' или '📋 Setup')",
       "description": "кратко описание какво да се направи",
       "topicIds": ["id1", "id2", "..."],
       "estimatedMinutes": число
@@ -248,6 +308,23 @@ ${JSON.stringify(subjectData, null, 2)}
       const task = parsedResponse.tasks[index];
       const subject = subjects.find(s => s.id === task.subjectId);
 
+      // Handle setup tasks (no topics required)
+      if (task.type === 'setup') {
+        dailyTasks.push({
+          id: `ai-task-${Date.now()}-${index}`,
+          subjectId: task.subjectId,
+          subjectName: task.subjectName,
+          subjectColor: task.subjectColor,
+          type: task.type,
+          typeLabel: task.typeLabel + ' (AI)',
+          description: task.description,
+          topics: [], // Setup tasks have no topics
+          estimatedMinutes: task.estimatedMinutes || 20,
+          completed: false
+        });
+        continue;
+      }
+
       // Get topics but respect the hard limit
       const remainingCapacity = MAX_TOPICS_PER_DAY - totalTopicsUsed;
       if (remainingCapacity <= 0) break; // Stop if we've hit the limit
@@ -261,7 +338,7 @@ ${JSON.stringify(subjectData, null, 2)}
         topics = topics.slice(0, remainingCapacity);
       }
 
-      if (topics.length === 0) continue; // Skip empty tasks
+      if (topics.length === 0) continue; // Skip empty study tasks
 
       totalTopicsUsed += topics.length;
 

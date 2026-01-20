@@ -101,6 +101,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   };
 
   const typeColors: Record<DailyTask['type'], { bg: string; border: string; text: string }> = {
+    setup: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
     critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
     high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
     medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },

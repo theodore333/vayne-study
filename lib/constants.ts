@@ -70,17 +70,31 @@ export const CRUNCH_MODE_THRESHOLDS = {
   workloadPerDayCritical: 3    // And > 3 topics/day in that period
 };
 
+// New material quota - guarantees progress with gray topics
+export const NEW_MATERIAL_QUOTA = 0.25; // 25% of daily capacity reserved for gray topics
+
+// Adaptive decay thresholds based on mastery (avgGrade)
+// Higher mastery = longer intervals before decay warning
+export const DECAY_THRESHOLDS = [
+  { minGrade: 95, warningDays: 21 },  // Excellent mastery - can wait longer
+  { minGrade: 85, warningDays: 16 },  // Very good - moderate interval
+  { minGrade: 70, warningDays: 12 },  // Good - more frequent review
+  { minGrade: 50, warningDays: 8 },   // Weak - needs soon
+  { minGrade: 0, warningDays: 5 }     // Critical - urgent review
+];
+
+// Updated decay rules with longer intervals (spaced repetition style)
 export const DECAY_RULES = {
   green: [
-    { days: 18, newStatus: 'orange' as TopicStatus },
-    { days: 10, newStatus: 'yellow' as TopicStatus }
+    { days: 28, newStatus: 'orange' as TopicStatus },  // was 18
+    { days: 18, newStatus: 'yellow' as TopicStatus }   // was 10
   ],
   yellow: [
-    { days: 14, newStatus: 'gray' as TopicStatus },
-    { days: 7, newStatus: 'orange' as TopicStatus }
+    { days: 28, newStatus: 'gray' as TopicStatus },    // was 14
+    { days: 14, newStatus: 'orange' as TopicStatus }   // was 7
   ],
   orange: [
-    { days: 12, newStatus: 'gray' as TopicStatus }
+    { days: 18, newStatus: 'gray' as TopicStatus }     // was 12
   ],
   gray: []
 };

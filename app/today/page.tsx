@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar, Layers, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Circle, Target, Zap, BookOpen, Flame, Thermometer, Palmtree, Trophy, Bot, Sparkles, Calendar, Layers, RefreshCw, Wand2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, calculateDailyTopics, detectCrunchMode } from '@/lib/algorithms';
 import { getLevelInfo, getXpForNextLevel, getComboMultiplier, ACHIEVEMENT_DEFINITIONS } from '@/lib/gamification';
 import { LEVEL_THRESHOLDS } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
+import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
+import WeeklyReviewModal from '@/components/modals/WeeklyReviewModal';
 import Link from 'next/link';
+import { DailyTask } from '@/lib/types';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 
 export default function TodayPage() {
@@ -25,10 +28,59 @@ export default function TodayPage() {
   const [loadingWeekly, setLoadingWeekly] = useState(false);
   const [apiKey, setApiKey] = useState<string | null>(null);
 
+  // Custom plan state
+  const [customPlan, setCustomPlan] = useState<DailyTask[] | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showWeeklyReviewModal, setShowWeeklyReviewModal] = useState(false);
+  const [planIsCustomized, setPlanIsCustomized] = useState(false);
+
+  // AI plan generation state
+  const [loadingAiPlan, setLoadingAiPlan] = useState(false);
+  const [aiPlanReasoning, setAiPlanReasoning] = useState<string | null>(null);
+
   // Load API key
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);
+  }, []);
+
+  // Load custom plan from localStorage
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const customPlanKey = `custom-daily-plan-${todayStr}`;
+    const storedPlan = localStorage.getItem(customPlanKey);
+    if (storedPlan) {
+      try {
+        const parsed = JSON.parse(storedPlan);
+        setCustomPlan(parsed.tasks);
+        setPlanIsCustomized(parsed.isCustomized);
+      } catch (e) {
+        console.error('Failed to parse custom plan', e);
+      }
+    }
+
+    // Clean up old custom plans (keep only today's)
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('custom-daily-plan-') && k !== customPlanKey);
+    keys.forEach(k => localStorage.removeItem(k));
+  }, []);
+
+  // Check for weekly review on Mondays
+  useEffect(() => {
+    const dayOfWeek = new Date().getDay(); // 0 = Sunday, 1 = Monday
+    if (dayOfWeek === 1) { // Monday
+      const lastReview = localStorage.getItem('weekly-review-date');
+      if (lastReview) {
+        const lastReviewDate = new Date(lastReview);
+        const todayDate = new Date();
+        const daysSinceReview = Math.floor((todayDate.getTime() - lastReviewDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (daysSinceReview >= 7) {
+          setShowWeeklyReviewModal(true);
+        }
+      } else {
+        // No review ever done, show the modal
+        setShowWeeklyReviewModal(true);
+      }
+    }
   }, []);
 
   // Anki integration
@@ -232,7 +284,74 @@ export default function TodayPage() {
     });
   };
 
-  const allPlanTopics = dailyPlan.flatMap(task => task.topics);
+  // Save custom plan
+  const handleSaveCustomPlan = (plan: DailyTask[]) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const customPlanKey = `custom-daily-plan-${todayStr}`;
+    localStorage.setItem(customPlanKey, JSON.stringify({
+      date: todayStr,
+      tasks: plan,
+      isCustomized: true
+    }));
+    setCustomPlan(plan);
+    setPlanIsCustomized(true);
+  };
+
+  // Generate AI plan
+  const handleGenerateAiPlan = async () => {
+    if (!apiKey) {
+      alert('Добави API ключ в Settings за да използваш AI планиране.');
+      return;
+    }
+
+    setLoadingAiPlan(true);
+    setAiPlanReasoning(null);
+
+    try {
+      const response = await fetch('/api/ai-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjects: activeSubjects,
+          schedule: data.schedule,
+          dailyStatus: data.dailyStatus,
+          studyGoals: data.studyGoals,
+          apiKey
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        alert(`Грешка: ${result.error}`);
+      } else if (result.tasks) {
+        // Save as custom plan
+        const todayStr = new Date().toISOString().split('T')[0];
+        const customPlanKey = `custom-daily-plan-${todayStr}`;
+        localStorage.setItem(customPlanKey, JSON.stringify({
+          date: todayStr,
+          tasks: result.tasks,
+          isCustomized: true
+        }));
+        setCustomPlan(result.tasks);
+        setPlanIsCustomized(true);
+        setAiPlanReasoning(result.reasoning || null);
+
+        if (result.cost) {
+          incrementApiCalls(result.cost);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate AI plan:', error);
+      alert('Грешка при генериране на AI план.');
+    } finally {
+      setLoadingAiPlan(false);
+    }
+  };
+
+  // Use custom plan if available, otherwise use generated plan
+  const activePlan = customPlan || dailyPlan;
+  const allPlanTopics = activePlan.flatMap(task => task.topics);
   const completedTopicCount = allPlanTopics.filter(t => completedTopics.has(t.id)).length;
   const topicProgressPercent = allPlanTopics.length > 0
     ? Math.round((completedTopicCount / allPlanTopics.length) * 100) : 0;
@@ -580,12 +699,43 @@ export default function TodayPage() {
               <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2">
                 <BookOpen size={20} />
                 Днешен план
+                {planIsCustomized && (
+                  <span className="text-xs text-cyan-400 font-normal">(редактиран)</span>
+                )}
               </h2>
               <p className="text-sm text-slate-500 font-mono mt-1">{formatDate()}</p>
             </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-purple-400 font-mono">{topicProgressPercent}%</div>
-              <div className="text-xs text-slate-500 font-mono">{completedTopicCount}/{allPlanTopics.length} теми</div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleGenerateAiPlan}
+                  disabled={loadingAiPlan}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 disabled:from-slate-700 disabled:to-slate-700 text-white rounded-lg transition-all"
+                  title="Генерирай план с Claude Opus за максимално качество"
+                >
+                  {loadingAiPlan ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      AI...
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 size={12} />
+                      AI план
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-cyan-400 border border-slate-700 hover:border-cyan-500/50 rounded-lg transition-colors"
+                >
+                  Редактирай
+                </button>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-purple-400 font-mono">{topicProgressPercent}%</div>
+                <div className="text-xs text-slate-500 font-mono">{completedTopicCount}/{allPlanTopics.length} теми</div>
+              </div>
             </div>
           </div>
           <div className="h-2 rounded-full bg-slate-800 overflow-hidden mt-3">
@@ -596,7 +746,18 @@ export default function TodayPage() {
           </div>
         </div>
 
-        {dailyPlan.length === 0 ? (
+        {/* AI Reasoning */}
+        {aiPlanReasoning && planIsCustomized && (
+          <div className="px-6 py-3 border-b border-[#1e293b] bg-gradient-to-r from-purple-900/20 to-cyan-900/20">
+            <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+              <Wand2 size={12} className="text-purple-400" />
+              <span className="text-purple-300">AI:</span>
+              <span>{aiPlanReasoning}</span>
+            </div>
+          </div>
+        )}
+
+        {activePlan.length === 0 ? (
           <div className="p-12 text-center">
             <div className="text-4xl mb-4">✨</div>
             <p className="text-slate-400 font-mono">Няма планирани задачи за днес</p>
@@ -606,7 +767,7 @@ export default function TodayPage() {
           </div>
         ) : (
           <div className="divide-y divide-[#1e293b]">
-            {dailyPlan.map(task => {
+            {activePlan.map(task => {
               const isCompleted = completedTasks.has(task.id);
               const colors = typeColors[task.type];
               return (
@@ -712,6 +873,19 @@ export default function TodayPage() {
       )}
 
       {showCheckin && <DailyCheckinModal onClose={() => setShowCheckin(false)} />}
+
+      {showEditModal && (
+        <EditDailyPlanModal
+          onClose={() => setShowEditModal(false)}
+          originalPlan={dailyPlan}
+          customPlan={customPlan || []}
+          onSave={handleSaveCustomPlan}
+        />
+      )}
+
+      {showWeeklyReviewModal && (
+        <WeeklyReviewModal onClose={() => setShowWeeklyReviewModal(false)} />
+      )}
     </div>
   );
 }

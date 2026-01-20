@@ -1,5 +1,5 @@
 import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus } from './types';
-import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG } from './constants';
+import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
 
 /**
  * Monte Carlo simulation for exam outcome
@@ -167,6 +167,23 @@ export function getDaysUntil(dateString: string | null): number {
   today.setHours(0, 0, 0, 0);
   date.setHours(0, 0, 0, 0);
   return Math.floor((date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+/**
+ * Get adaptive decay warning days based on topic mastery (avgGrade)
+ * Higher mastery = longer intervals before decay warning
+ * This implements spaced repetition principles
+ */
+export function getDecayWarningDays(topic: Topic): number {
+  // Convert avgGrade (2-6 scale) to percentage (0-100)
+  const grade = topic.avgGrade ? ((topic.avgGrade - 2) / 4) * 100 : 0;
+
+  for (const threshold of DECAY_THRESHOLDS) {
+    if (grade >= threshold.minGrade) {
+      return threshold.warningDays;
+    }
+  }
+  return 5; // default for topics with no grades
 }
 
 export function applyDecay(topic: Topic): Topic {
@@ -711,6 +728,19 @@ export function generateDailyPlan(
 
   if (remainingTopics === 0) return tasks;
 
+  // NEW: Reserve quota for gray topics (new material)
+  // This ensures progress with new material even when there's review pressure
+  const totalGrayTopics = subjects.reduce((sum, s) =>
+    sum + s.topics.filter(t => t.status === 'gray').length, 0);
+  const reservedForNew = Math.min(
+    Math.ceil(remainingTopics * NEW_MATERIAL_QUOTA),
+    totalGrayTopics
+  );
+  // Capacity for Tier 1-3 (exams, exercises, decay prevention)
+  let capacityForReview = remainingTopics - reservedForNew;
+  // Track how much of reserved capacity is actually used
+  let usedNewMaterialSlots = 0;
+
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -729,7 +759,7 @@ export function generateDailyPlan(
     if (!subject || subject.topics.length === 0) continue;
 
     const subjectWork = subjectWorkload.get(subject.id);
-    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, remainingTopics) : Math.min(5, remainingTopics);
+    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, capacityForReview) : Math.min(5, capacityForReview);
 
     // Select topics with related grouping
     const candidates = subject.topics.filter(t => t.status !== 'green');
@@ -748,13 +778,13 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20, // ~20 min per topic
         completed: false
       });
-      remainingTopics -= weakTopics.length;
+      capacityForReview -= weakTopics.length;
     }
   }
 
   // 2. HIGH: Subjects with exams - use their calculated daily workload
   for (const subjectWork of workload.bySubject) {
-    if (remainingTopics <= 0) break;
+    if (capacityForReview <= 0) break;
 
     const subject = subjects.find(s => s.id === subjectWork.subjectId);
     if (!subject) continue;
@@ -762,7 +792,7 @@ export function generateDailyPlan(
     // Skip if already added as critical
     if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
 
-    const topicsToTake = Math.min(subjectWork.topics, remainingTopics);
+    const topicsToTake = Math.min(subjectWork.topics, capacityForReview);
 
     // Check exam format for special recommendations
     const examFormat = parseExamFormat(subject.examFormat);
@@ -798,23 +828,31 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20,
         completed: false
       });
-      remainingTopics -= weakTopics.length;
+      capacityForReview -= weakTopics.length;
     }
   }
 
   // 3. MEDIUM: Decay warning - only if we have remaining capacity
-  if (remainingTopics > 0) {
+  // Uses adaptive decay thresholds based on topic mastery
+  if (capacityForReview > 0) {
     for (const subject of subjects) {
-      if (remainingTopics <= 0) break;
+      if (capacityForReview <= 0) break;
 
+      // Use adaptive decay warning days based on mastery
       const decayingTopics = subject.topics.filter(t => {
+        if (t.status === 'gray') return false;
         const days = getDaysSince(t.lastReview);
-        return days >= 7 && t.status !== 'gray';
+        const warningDays = getDecayWarningDays(t);  // Adaptive threshold
+        return days >= warningDays;
       });
 
       if (decayingTopics.length > 0) {
-        const topicsToTake = Math.min(Math.ceil(remainingTopics * 0.3), decayingTopics.length, 5);
+        const topicsToTake = Math.min(Math.ceil(capacityForReview * 0.3), decayingTopics.length, 5);
         const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
+        // Calculate average warning days for description
+        const avgWarningDays = Math.round(
+          selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
+        );
         tasks.push({
           id: generateId(),
           subjectId: subject.id,
@@ -822,42 +860,79 @@ export function generateDailyPlan(
           subjectColor: subject.color,
           type: 'medium',
           typeLabel: '⚠️ Риск от забравяне',
-          description: 'Преговор на теми без review 7+ дни',
+          description: `Преговор на теми без review ${avgWarningDays}+ дни (адаптивен праг)`,
           topics: selectedTopics,
           estimatedMinutes: selectedTopics.length * 20,
           completed: false
         });
-        remainingTopics -= selectedTopics.length;
+        capacityForReview -= selectedTopics.length;
       }
     }
   }
 
-  // 4. NORMAL: New material - only if we have remaining capacity
-  if (remainingTopics > 0) {
-    for (const subject of subjects) {
-      if (remainingTopics <= 0) break;
+  // 4. NORMAL: New material - use reserved quota + any remaining capacity
+  // This ensures guaranteed progress with new material (gray topics)
+  const availableForNew = reservedForNew + Math.max(0, capacityForReview);
 
-      const newTopics = subject.topics.filter(t => t.status === 'gray');
-      const daysUntilExam = getDaysUntil(subject.examDate);
+  if (availableForNew > 0) {
+    // Collect all gray topics from subjects with exams, sorted by urgency
+    const subjectsWithGray = subjects
+      .filter(s => {
+        const daysUntilExam = getDaysUntil(s.examDate);
+        return daysUntilExam !== Infinity && s.topics.some(t => t.status === 'gray');
+      })
+      .map(s => ({
+        subject: s,
+        grayTopics: s.topics.filter(t => t.status === 'gray'),
+        daysUntilExam: getDaysUntil(s.examDate),
+        priority: s.topics.filter(t => t.status === 'gray').length / Math.max(1, getDaysUntil(s.examDate))
+      }))
+      .sort((a, b) => b.priority - a.priority);
 
-      if (newTopics.length > 0 && daysUntilExam !== Infinity) {
-        const priority = newTopics.length / Math.max(1, daysUntilExam);
-        if (priority > 0.5) {
-          const topicsToTake = Math.min(remainingTopics, 3);
-          const selectedTopics = selectTopicsWithRelations(newTopics, topicsToTake, inCrunchMode);
-          tasks.push({
-            id: generateId(),
-            subjectId: subject.id,
-            subjectName: subject.name,
-            subjectColor: subject.color,
-            type: 'normal',
-            typeLabel: '📚 Нов материал',
-            description: 'Започни нови теми',
-            topics: selectedTopics,
-            estimatedMinutes: selectedTopics.length * 20,
-            completed: false
-          });
-          remainingTopics -= selectedTopics.length;
+    let newMaterialBudget = availableForNew;
+
+    for (const { subject, grayTopics, daysUntilExam } of subjectsWithGray) {
+      if (newMaterialBudget <= 0) break;
+
+      // Calculate how many topics to take from this subject
+      // Prioritize subjects with more gray topics relative to time
+      const topicsToTake = Math.min(
+        newMaterialBudget,
+        Math.ceil(grayTopics.length / Math.max(1, daysUntilExam) * 2), // Scale by urgency
+        grayTopics.length,
+        5 // Max 5 per subject
+      );
+
+      if (topicsToTake > 0) {
+        const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode);
+
+        if (selectedTopics.length > 0) {
+          // Check if there's already a task for this subject
+          const existingTask = tasks.find(t => t.subjectId === subject.id);
+
+          if (existingTask && existingTask.type !== 'critical') {
+            // Add to existing task
+            existingTask.topics.push(...selectedTopics);
+            existingTask.estimatedMinutes += selectedTopics.length * 20;
+            existingTask.description += ' + нов материал';
+          } else {
+            // Create new task
+            tasks.push({
+              id: generateId(),
+              subjectId: subject.id,
+              subjectName: subject.name,
+              subjectColor: subject.color,
+              type: 'normal',
+              typeLabel: '📚 Нов материал (квота)',
+              description: `Започни нови теми (${Math.round(NEW_MATERIAL_QUOTA * 100)}% дневна квота)`,
+              topics: selectedTopics,
+              estimatedMinutes: selectedTopics.length * 20,
+              completed: false
+            });
+          }
+
+          newMaterialBudget -= selectedTopics.length;
+          usedNewMaterialSlots += selectedTopics.length;
         }
       }
     }
@@ -965,11 +1040,13 @@ export function getAlerts(subjects: Subject[], schedule: ScheduleClass[]): {
     }
   }
 
-  // Check for decay warnings
+  // Check for decay warnings (using adaptive thresholds)
   for (const subject of subjects) {
     const decayingCount = subject.topics.filter(t => {
+      if (t.status === 'gray') return false;
       const days = getDaysSince(t.lastReview);
-      return days >= 7 && t.status !== 'gray';
+      const warningDays = getDecayWarningDays(t);  // Adaptive threshold
+      return days >= warningDays;
     }).length;
 
     if (decayingCount >= 3) {

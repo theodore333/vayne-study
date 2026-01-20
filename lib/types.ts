@@ -443,6 +443,27 @@ export interface DailyTask {
   completed: boolean;
 }
 
+// Custom daily plan (edited by user)
+export interface CustomDailyPlan {
+  date: string;  // YYYY-MM-DD
+  tasks: DailyTask[];
+  isCustomized: boolean;
+}
+
+// Weekly review data
+export interface WeeklyReviewData {
+  lastReviewDate: string;  // YYYY-MM-DD
+  userFeedback: {
+    overloaded: boolean;
+    tooMuchRepetition: boolean;
+    enoughNewMaterial: boolean;
+  };
+  adjustments: {
+    decayMultiplier: number;  // 1.0 = default, 1.2 = longer intervals
+    quotaAdjustment: number;  // 0 = default, +5 = more new material percentage
+  };
+}
+
 // ================ INTERACTIVE CLINICAL CASES ================
 
 // Case step identifiers

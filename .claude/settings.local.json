@@ -25,7 +25,8 @@
       "Bash(npm run dev:*)",
       "Bash(findstr:*)",
       "Bash(git rm:*)",
-      "Bash(railway login:*)"
+      "Bash(railway login:*)",
+      "Bash(npx vercel --prod)"
     ]
   }
 }

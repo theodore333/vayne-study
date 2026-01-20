@@ -83,8 +83,9 @@ export async function POST(request: NextRequest) {
     let dailyMinutes = isWeekend ? userWeekendGoalMinutes : userDailyGoalMinutes;
 
     // Adjust for vacation mode
-    const isVacationMode = studyGoals?.vacationMode || false;
-    const vacationMultiplier = studyGoals?.vacationMultiplier || 0.4;
+    const isVacationMode = studyGoals?.vacationMode === true;
+    // Ensure minimum multiplier of 0.1 to prevent 0 capacity
+    const vacationMultiplier = Math.max(0.1, studyGoals?.vacationMultiplier ?? 0.4);
     if (isVacationMode) {
       dailyMinutes = Math.round(dailyMinutes * vacationMultiplier);
     }

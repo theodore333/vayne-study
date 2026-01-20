@@ -732,7 +732,7 @@ export function generateDailyPlan(
 
   // Detect crunch mode for priority calculation (disabled in vacation mode)
   const crunchStatus = detectCrunchMode(subjects);
-  const inCrunchMode = studyGoals?.vacationMode ? false : crunchStatus.isActive;
+  const inCrunchMode = studyGoals?.vacationMode === true ? false : crunchStatus.isActive;
 
   // Get topic-based workload from calculateDailyTopics (vacation mode applied inside)
   const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals);
@@ -848,7 +848,7 @@ export function generateDailyPlan(
   // 3. MEDIUM: Decay warning - only if we have remaining capacity
   // Uses adaptive decay thresholds based on topic mastery
   // In vacation mode, extend thresholds by 50% (more relaxed review schedule)
-  const vacationDecayMultiplier = studyGoals?.vacationMode ? 1.5 : 1.0;
+  const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
 
   if (capacityForReview > 0) {
     for (const subject of subjects) {
@@ -1029,7 +1029,7 @@ export function getAlerts(
   const alerts: { type: 'critical' | 'warning' | 'info'; message: string; subjectId?: string }[] = [];
 
   // In vacation mode, extend decay thresholds by 50%
-  const decayMultiplier = studyGoals?.vacationMode ? 1.5 : 1.0;
+  const decayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
 
   const today = new Date();
   const tomorrow = new Date(today);
@@ -1145,8 +1145,8 @@ export function getSubjectSetupStatus(subject: Subject): SubjectSetupStatus {
   const hasExamDate = subject.examDate !== null;
 
   const topicsWithMaterial = subject.topics.filter(t =>
-    (t.material && t.material.trim().length > 0) ||
-    (t.materialImages && t.materialImages.length > 0)
+    (t.material?.trim()?.length ?? 0) > 0 ||
+    (Array.isArray(t.materialImages) && t.materialImages.length > 0)
   ).length;
 
   const topicsWithQuizzes = subject.topics.filter(t =>

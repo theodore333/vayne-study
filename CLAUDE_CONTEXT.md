@@ -180,4 +180,63 @@ git push origin master
 
 ---
 
+## VAYNE OS Integration (January 2026)
+
+Study sessions can sync to VAYNE OS for unified XP tracking.
+
+### Files Created
+- `lib/vayne-os-sync.ts` - Client-side sync functions
+- `app/api/vayne-sync/route.ts` - Server-side proxy (keeps API key secure)
+
+### Environment Variables
+```bash
+# Add to .env.local
+VAYNE_OS_API_URL=https://vayne-os-production.up.railway.app
+VAYNE_OS_SYNC_KEY=<same as STUDY_SYNC_API_KEY in VAYNE OS>
+VAYNE_OS_USER_ID=26f7e2f7-131c-409c-9612-e85fbb524641
+```
+
+### How to Use
+Import and call sync functions in context.tsx or timer/page.tsx:
+
+```typescript
+import { syncStudySession, syncTopicProgress, syncQuizResult } from '@/lib/vayne-os-sync';
+
+// After session completes:
+await syncStudySession({
+  id: session.id,
+  subjectId: subject.id,
+  subjectName: subject.name,
+  topicId: topic?.id,
+  topicName: topic?.name,
+  duration: durationMinutes,
+  pomodorosCompleted: count,
+  rating: userRating,
+  sessionType: 'pomodoro'
+});
+
+// After topic goes green:
+await syncTopicProgress({
+  topicId: topic.id,
+  topicName: topic.name,
+  subjectName: subject.name,
+  newStatus: 'green',
+  previousStatus: 'yellow'
+});
+```
+
+### Sync Types
+- `session` - Study session completed → Activity log + XP
+- `topic_progress` - Topic mastered (green) → 50 XP
+- `quiz` - Quiz completed → 15-30 XP based on score
+- `exam_date` - Exam date set → Creates goal in VAYNE OS
+
+### TODO
+- [ ] Add sync calls to context.tsx (stopTimerWithNote, addPomodoroSession)
+- [ ] Add sync call to setTopicStatus when going green
+- [ ] Add sync call to quiz completion
+- [ ] Test end-to-end sync
+
+---
+
 *Този файл се update-ва при значими промени в проекта.*

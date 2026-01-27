@@ -158,7 +158,7 @@ async function handleFreeRecallHint(
   hintContext: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001', // Use Haiku for hints (cheaper)
+    model: 'claude-opus-4-5-20251101', // Use Haiku for hints (cheaper)
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -437,7 +437,7 @@ ${i + 1}. Оригинален въпрос: "${wa.question}"
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514', // Use Sonnet for faster drill questions
+    model: 'claude-opus-4-5-20251101', // Use Sonnet for faster drill questions
     max_tokens: 6144,
     messages: [{
       role: 'user',
@@ -537,7 +537,7 @@ async function handleEvaluateOpen(
 
   // Select model based on Bloom level - higher levels need smarter evaluation
   const useOpus = bloomLevel >= 4;
-  const modelId = useOpus ? 'claude-opus-4-5-20251101' : 'claude-sonnet-4-5-20250929';
+  const modelId = useOpus ? 'claude-opus-4-5-20251101' : 'claude-opus-4-5-20251101';
 
   // Determine strictness based on Bloom level
   const strictnessGuide = bloomLevel >= 5
@@ -644,8 +644,8 @@ ${strictnessGuide}
 // Model mapping for user selection
 const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
   opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
-  sonnet: { id: 'claude-sonnet-4-5-20250929', inputCost: 3, outputCost: 15 },
-  haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 0.8, outputCost: 4 }
+  sonnet: { id: 'claude-opus-4-5-20251101', inputCost: 3, outputCost: 15 },
+  haiku: { id: 'claude-opus-4-5-20251101', inputCost: 0.8, outputCost: 4 }
 };
 
 async function handleStandardQuiz(
@@ -883,7 +883,7 @@ async function handleAnalyzeMistakes(
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001', // Use Haiku for cost efficiency
+    model: 'claude-opus-4-5-20251101', // Use Haiku for cost efficiency
     max_tokens: 1500,
     messages: [{
       role: 'user',
@@ -999,7 +999,7 @@ async function handleOpenHint(
   };
 
   const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001', // Haiku for speed and cost
+    model: 'claude-opus-4-5-20251101', // Haiku for speed and cost
     max_tokens: 400,
     messages: [{
       role: 'user',

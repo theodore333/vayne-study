@@ -216,11 +216,24 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
 
+  // Helper to sanitize URLs (prevent javascript: and data: XSS)
+  const sanitizeUrl = (url: string): string => {
+    const trimmed = url.trim().toLowerCase();
+    if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('vbscript:')) {
+      return '#'; // Neutralize dangerous URLs
+    }
+    return url;
+  };
+
   // Images (before links)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) =>
+    `<img src="${sanitizeUrl(src)}" alt="${alt}">`
+  );
 
   // Links
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) =>
+    `<a href="${sanitizeUrl(href)}">${text}</a>`
+  );
 
   // Bold and italic
   html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');

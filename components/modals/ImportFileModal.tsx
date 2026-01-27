@@ -225,37 +225,47 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
       const topics: ExtractedTopic[] = [];
       let globalIndex = 1;
 
+      // Keywords that indicate section headers
+      const sectionKeywords = ['ИЗПИТ', 'ПРАКТИЧ', 'ТЕОРИТ', 'ТЕОРЕТ', 'РАЗДЕЛ', 'ЧАСТ', 'СЕКЦИЯ'];
+
+      const isSectionHeader = (line: string): boolean => {
+        const trimmed = line.trim();
+        // Skip if it starts with a number (it's a topic)
+        if (/^\d+[\.\)]/.test(trimmed)) return false;
+        // Check for ## prefix
+        if (trimmed.startsWith('##')) return true;
+        // Check for keywords (case insensitive)
+        const upper = trimmed.toUpperCase();
+        return sectionKeywords.some(kw => upper.includes(kw));
+      };
+
       for (const line of lines) {
-        // Check for section headers (## Section Name)
-        const sectionMatch = line.match(/^##\s*(.+)/);
-        if (sectionMatch) {
-          // Add section header as a special topic
+        const trimmed = line.trim();
+
+        // Check for section headers
+        if (isSectionHeader(trimmed)) {
+          // Remove ## prefix if present
+          const sectionName = trimmed.replace(/^##\s*/, '').toUpperCase();
           topics.push({
-            number: `📚`,
-            name: sectionMatch[1].trim().toUpperCase()
+            number: '📚',
+            name: sectionName
           });
-          globalIndex++;
           continue;
         }
 
         // Skip # headers (single #)
-        if (line.startsWith('#') && !line.startsWith('##')) continue;
+        if (trimmed.startsWith('#') && !trimmed.startsWith('##')) continue;
 
         // Match numbered topics: "1. Topic name" or "1) Topic name"
-        const match = line.match(/^\s*(\d+)[\.\)]\s*(.+)/);
+        const match = trimmed.match(/^(\d+)[\.\)]\s*(.+)/);
         if (match) {
           topics.push({
             number: match[1], // Keep original number from document
             name: match[2].trim()
           });
           globalIndex++;
-        } else if (line.trim() && !line.startsWith('-') && !line.startsWith('*')) {
-          // Non-numbered but non-empty lines
-          topics.push({
-            number: globalIndex++,
-            name: line.trim()
-          });
         }
+        // Skip non-numbered lines (they're likely descriptions or noise)
       }
 
       if (topics.length === 0) {

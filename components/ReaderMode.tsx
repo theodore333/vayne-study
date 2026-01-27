@@ -490,6 +490,89 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       attributes: {
         class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',
       },
+      handlePaste: (view, event) => {
+        const clipboardData = event.clipboardData;
+        if (!clipboardData) return false;
+
+        // Check for HTML content first (Notion pastes HTML)
+        const html = clipboardData.getData('text/html');
+        if (html) {
+          // Notion HTML is usually well-formatted, let TipTap handle it
+          return false;
+        }
+
+        // Handle plain text with markdown or tab-separated tables
+        const text = clipboardData.getData('text/plain');
+        if (!text) return false;
+
+        // Check if it looks like a table (tab-separated from Notion/Excel)
+        const lines = text.trim().split('\n');
+        const isTabSeparatedTable = lines.length > 1 && lines.every(line => line.includes('\t'));
+
+        // Check if it contains markdown formatting
+        const hasMarkdown = /(\*\*|__|\*|_|~~|^#|^>|^-\s|^\d+\.\s|```|\|.+\|)/.test(text);
+
+        if (isTabSeparatedTable) {
+          // Convert tab-separated to HTML table
+          const rows = lines.map(line => {
+            const cells = line.split('\t');
+            return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
+          });
+          // First row as header
+          const headerRow = rows[0].replace(/<td>/g, '<th>').replace(/<\/td>/g, '</th>');
+          const bodyRows = rows.slice(1).join('');
+          const tableHtml = `<table><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table>`;
+
+          event.preventDefault();
+          view.dispatch(view.state.tr.replaceSelectionWith(
+            view.state.schema.nodeFromJSON({
+              type: 'doc',
+              content: [{ type: 'table', content: [] }]
+            })
+          ).scrollIntoView());
+
+          // Use insertContent for better table handling
+          const { state, dispatch } = view;
+          const { tr } = state;
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(tableHtml, 'text/html');
+          const tableEl = doc.querySelector('table');
+          if (tableEl) {
+            // Let TipTap parse the HTML table
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = tableHtml;
+            const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv, {
+              preserveWhitespace: true,
+              context: state.selection.$from,
+            });
+            if (slice) {
+              dispatch(tr.replaceSelection(slice).scrollIntoView());
+              return true;
+            }
+          }
+          return false;
+        }
+
+        if (hasMarkdown) {
+          // Convert markdown to HTML
+          const convertedHtml = markdownToHtml(text);
+          event.preventDefault();
+
+          // Parse and insert the HTML
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = convertedHtml;
+          const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv, {
+            preserveWhitespace: true,
+            context: view.state.selection.$from,
+          });
+          if (slice) {
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+            return true;
+          }
+        }
+
+        return false; // Let default handling take over
+      },
     },
     onUpdate: ({ editor }) => {
       setHasUnsavedChanges(true);

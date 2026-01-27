@@ -20,11 +20,42 @@ interface Props {
 
 // Convert markdown to HTML for TipTap
 function markdownToHtml(markdown: string): string {
-  let html = markdown
-    // Escape HTML first
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  // Remove empty lines that only have whitespace
+  let text = markdown.replace(/^\s*$/gm, '');
+
+  // Process lists first - group consecutive list items
+  const lines = text.split('\n');
+  const processedLines: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    const numberedMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+
+    if (bulletMatch || numberedMatch) {
+      const content = bulletMatch ? bulletMatch[1] : numberedMatch![1];
+      if (!inList) {
+        processedLines.push('<ul>');
+        inList = true;
+      }
+      processedLines.push(`<li>${content}</li>`);
+    } else {
+      if (inList) {
+        processedLines.push('</ul>');
+        inList = false;
+      }
+      if (line.trim()) {
+        processedLines.push(line);
+      }
+    }
+  }
+  if (inList) {
+    processedLines.push('</ul>');
+  }
+
+  let html = processedLines.join('\n')
+    // Escape HTML in non-tag content (skip tags we created)
+    .replace(/&(?!amp;|lt;|gt;)/g, '&amp;')
     // Headers
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
     .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -39,22 +70,31 @@ function markdownToHtml(markdown: string): string {
     .replace(/~~(.+?)~~/g, '<s>$1</s>')
     // Code
     .replace(/`([^`]+)`/g, '<code>$1</code>')
-    // Lists
-    .replace(/^\s*[-*]\s+(.+)$/gm, '<li>$1</li>')
-    .replace(/^\s*\d+\.\s+(.+)$/gm, '<li>$1</li>')
     // Blockquotes
     .replace(/^>\s*(.+)$/gm, '<blockquote>$1</blockquote>')
-    // Line breaks - convert double newlines to paragraphs
+    // Line breaks - but not inside lists
     .replace(/\n\n+/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+    .replace(/(?<!<\/li>|<ul>|<\/ul>)\n(?!<li>|<\/ul>|<ul>)/g, '<br>');
+
+  // Clean up empty paragraphs and breaks around lists
+  html = html
+    .replace(/<br><ul>/g, '<ul>')
+    .replace(/<\/ul><br>/g, '</ul>')
+    .replace(/<p><ul>/g, '<ul>')
+    .replace(/<\/ul><\/p>/g, '</ul>')
+    .replace(/<\/p><p>/g, '</p>\n<p>')
+    .replace(/<br><br>/g, '</p><p>');
 
   // Wrap in paragraph if not already wrapped
-  if (!html.startsWith('<h') && !html.startsWith('<p') && !html.startsWith('<ul') && !html.startsWith('<ol')) {
+  if (!html.startsWith('<h') && !html.startsWith('<p') && !html.startsWith('<ul') && !html.startsWith('<ol') && !html.startsWith('<blockquote')) {
     html = '<p>' + html + '</p>';
   }
 
-  // Wrap consecutive <li> in <ul>
-  html = html.replace(/(<li>[\s\S]*?<\/li>)+/g, '<ul>$&</ul>');
+  // Clean up empty elements
+  html = html
+    .replace(/<p>\s*<\/p>/g, '')
+    .replace(/<li>\s*<\/li>/g, '')
+    .replace(/<ul>\s*<\/ul>/g, '');
 
   return html;
 }

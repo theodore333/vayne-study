@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession } from './types';
-import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage } from './storage';
+import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
@@ -50,6 +50,8 @@ interface AppContextType {
   updateSemesterGrade: (id: string, updates: Partial<SemesterGrade>) => void;
   deleteSemesterGrade: (id: string) => void;
   setTargetGPA: (target: number) => void;
+  addStateExam: (exam: { name: string; grade: number }) => void;
+  deleteStateExam: (index: number) => void;
 
   // Usage tracking
   incrementApiCalls: (cost: number) => void;
@@ -87,9 +89,36 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// Helper function to calculate study streak from timer sessions
+function calculateStudyStreak(sessions: TimerSession[]): number {
+  const dates = new Set(
+    sessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0])
+  );
+  let count = 0;
+  const checkDate = new Date();
+  while (true) {
+    const dateStr = checkDate.toISOString().split('T')[0];
+    if (dates.has(dateStr)) {
+      count++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else if (count === 0) {
+      // Allow skipping today if no session yet
+      checkDate.setDate(checkDate.getDate() - 1);
+      if (dates.has(checkDate.toISOString().split('T')[0])) {
+        count++;
+        checkDate.setDate(checkDate.getDate() - 1);
+        continue;
+      }
+      break;
+    } else break;
+  }
+  return count;
+}
+
 const defaultGPAData: GPAData = {
   grades: [],
-  targetGPA: 5.5
+  targetGPA: 5.5,
+  stateExams: []
 };
 
 const defaultUsageData: UsageData = {
@@ -184,6 +213,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initData = async () => {
+      // Initialize materials cache from IndexedDB (handles migration from localStorage)
+      await initMaterialsCache();
+
       // First load from localStorage for instant display
       const localData = loadData();
       setData(localData);
@@ -418,7 +450,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       // Check achievements
-      const streak = prev.timerSessions.filter(s => s.endTime !== null).length > 0 ? 1 : 0;
+      const streak = calculateStudyStreak(prev.timerSessions);
       const newSubjects = prev.subjects.map(s => {
         if (s.id !== subjectId) return s;
         return {
@@ -571,7 +603,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       // Check achievements
-      const streak = prev.timerSessions.filter(s => s.endTime !== null).length > 0 ? 1 : 0;
+      const streak = calculateStudyStreak(prev.timerSessions);
       const unlocked = checkAchievements(newProgress, newSubjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
@@ -795,6 +827,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const addStateExam = useCallback((exam: { name: string; grade: number }) => {
+    // Validate grade is between 2-6
+    const validGrade = Math.max(2, Math.min(6, exam.grade));
+    updateData(prev => ({
+      ...prev,
+      gpaData: {
+        ...prev.gpaData,
+        stateExams: [...(prev.gpaData.stateExams || []), { ...exam, grade: validGrade }]
+      }
+    }));
+  }, [updateData]);
+
+  const deleteStateExam = useCallback((index: number) => {
+    updateData(prev => ({
+      ...prev,
+      gpaData: {
+        ...prev.gpaData,
+        stateExams: (prev.gpaData.stateExams || []).filter((_, i) => i !== index)
+      }
+    }));
+  }, [updateData]);
+
   // Usage tracking
   const incrementApiCalls = useCallback((cost: number) => {
     updateData(prev => {
@@ -937,29 +991,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
-  // Calculate streak for achievement checking
+  // Calculate streak for achievement checking (uses helper function)
   const calculateStreak = useCallback((sessions: TimerSession[]) => {
-    const dates = new Set(
-      sessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0])
-    );
-    let count = 0;
-    const checkDate = new Date();
-    while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
-      if (dates.has(dateStr)) {
-        count++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else if (count === 0) {
-        checkDate.setDate(checkDate.getDate() - 1);
-        if (dates.has(checkDate.toISOString().split('T')[0])) {
-          count++;
-          checkDate.setDate(checkDate.getDate() - 1);
-          continue;
-        }
-        break;
-      } else break;
-    }
-    return count;
+    return calculateStudyStreak(sessions);
   }, []);
 
   // Gamification: Earn XP
@@ -1030,6 +1064,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateSemesterGrade,
       deleteSemesterGrade,
       setTargetGPA,
+      addStateExam,
+      deleteStateExam,
       incrementApiCalls,
       updateUsageBudget,
       addQuestionBank,

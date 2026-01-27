@@ -13,12 +13,11 @@ function getSemesterAverage(semGrades: SemesterGrade[]) {
 }
 
 export default function GPAPage() {
-  const { data, addSemesterGrade, deleteSemesterGrade, setTargetGPA } = useApp();
-  const { grades, targetGPA } = data.gpaData;
+  const { data, addSemesterGrade, deleteSemesterGrade, setTargetGPA, addStateExam, deleteStateExam } = useApp();
+  const { grades, targetGPA, stateExams = [] } = data.gpaData;
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStateExamModal, setShowStateExamModal] = useState(false);
-  const [stateExams, setStateExams] = useState<{ name: string; grade: number }[]>([]);
   const [newGrade, setNewGrade] = useState({
     semester: 1,
     year: new Date().getFullYear(),
@@ -85,13 +84,13 @@ export default function GPAPage() {
       alert('Оценката трябва да е между 2 и 6!');
       return;
     }
-    setStateExams([...stateExams, newStateExam]);
+    addStateExam(newStateExam);
     setNewStateExam({ name: '', grade: 6 });
     setShowStateExamModal(false);
   };
 
   const handleDeleteStateExam = (index: number) => {
-    setStateExams(stateExams.filter((_, i) => i !== index));
+    deleteStateExam(index);
   };
 
   const getGradeColor = (grade: number) => {

@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
+import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat, Download } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
+import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@/lib/fetch-utils';
 
 type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
 
@@ -72,6 +73,17 @@ function QuizContent() {
   const topicsParam = searchParams.get('topics');
 
   const { data, addGrade, incrementApiCalls, updateTopic, trackTopicRead } = useApp();
+
+  // AbortController for cleanup on unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup effect - abort any pending requests on unmount
+  useEffect(() => {
+    abortControllerRef.current = new AbortController();
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Filter out archived subjects for selection
   const activeSubjects = useMemo(
@@ -365,6 +377,9 @@ function QuizContent() {
   };
 
   const generateQuiz = async () => {
+    // Prevent double-click
+    if (quizState.isGenerating) return;
+
     // Validate mode is selected
     if (!mode) {
       setQuizState(prev => ({ ...prev, error: 'Избери режим на теста.' }));
@@ -444,10 +459,11 @@ function QuizContent() {
         };
       }
 
-      const response = await fetch('/api/quiz', {
+      const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify(requestBody),
+        timeout: 60000 // 60s for quiz generation (can be slow)
       });
 
       const result = await response.json();
@@ -485,24 +501,24 @@ function QuizContent() {
       setQuizStartTime(now);
       setQuestionStartTime(now);
       setQuestionTimes(new Array(result.questions.length).fill(0));
-    } catch {
+    } catch (error) {
       setQuizState(prev => ({
         ...prev,
         isGenerating: false,
-        error: 'Грешка при генериране.'
+        error: getFetchErrorMessage(error)
       }));
     }
   };
 
   const requestHint = async () => {
-    if (hintsUsed >= MAX_HINTS || !topic?.material) return;
+    if (hintLoading || hintsUsed >= MAX_HINTS || !topic?.material) return;
 
     const apiKey = localStorage.getItem('claude-api-key');
     if (!apiKey) return;
 
     setHintLoading(true);
     try {
-      const response = await fetch('/api/quiz', {
+      const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -513,7 +529,8 @@ function QuizContent() {
           topicName: topic.name,
           userRecall: freeRecallText,
           hintContext: ''
-        })
+        }),
+        timeout: 30000
       });
 
       const result = await response.json();
@@ -530,6 +547,8 @@ function QuizContent() {
 
   // Request structural hint for open questions
   const requestOpenHint = async () => {
+    if (openHintLoading) return;
+
     const currentQuestion = quizState.questions[quizState.currentIndex];
     if (!currentQuestion || currentQuestion.type !== 'open') return;
 
@@ -538,7 +557,7 @@ function QuizContent() {
 
     setOpenHintLoading(true);
     try {
-      const response = await fetch('/api/quiz', {
+      const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -547,7 +566,8 @@ function QuizContent() {
           question: currentQuestion.question,
           bloomLevel: currentQuestion.bloomLevel || 3,
           concept: currentQuestion.concept
-        })
+        }),
+        timeout: 30000
       });
 
       const result = await response.json();
@@ -562,14 +582,14 @@ function QuizContent() {
   };
 
   const evaluateFreeRecall = async () => {
-    if (!freeRecallText.trim() || !topic?.material) return;
+    if (isEvaluating || !freeRecallText.trim() || !topic?.material) return;
 
     const apiKey = localStorage.getItem('claude-api-key');
     if (!apiKey) return;
 
     setIsEvaluating(true);
     try {
-      const response = await fetch('/api/quiz', {
+      const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -579,7 +599,8 @@ function QuizContent() {
           topicName: topic.name,
           subjectName: subject?.name,
           userRecall: freeRecallText
-        })
+        }),
+        timeout: 45000 // 45s for evaluation
       });
 
       const result = await response.json();
@@ -618,7 +639,7 @@ function QuizContent() {
       if (apiKey) {
         setIsEvaluatingOpen(true);
         try {
-          const response = await fetch('/api/quiz', {
+          const response = await fetchWithTimeout('/api/quiz', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -628,7 +649,8 @@ function QuizContent() {
               userAnswer: openAnswer,
               correctAnswer: currentQuestion.correctAnswer,
               bloomLevel: currentQuestion.bloomLevel || 3
-            })
+            }),
+            timeout: 30000
           });
 
           const result = await response.json();
@@ -734,6 +756,8 @@ function QuizContent() {
 
   // Analyze mistakes using AI
   const analyzeMistakes = async () => {
+    if (isAnalyzingMistakes) return;
+
     const apiKey = localStorage.getItem('claude-api-key');
     if (!topic || !subject || !apiKey) return;
 
@@ -786,7 +810,7 @@ function QuizContent() {
 
     setIsAnalyzingMistakes(true);
     try {
-      const response = await fetch('/api/quiz', {
+      const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -795,7 +819,8 @@ function QuizContent() {
           mistakes,
           topicName: topic.name,
           subjectName: subject.name
-        })
+        }),
+        timeout: 45000
       });
 
       const result = await response.json();
@@ -815,7 +840,7 @@ function QuizContent() {
     } catch (err) {
       console.error("Mistake analysis fetch error:", err);
       setMistakeAnalysis({
-        summary: "Мрежова грешка при анализа. Провери интернет връзката.",
+        summary: getFetchErrorMessage(err),
         weakConcepts: [],
         patterns: [],
         recommendations: [],
@@ -904,6 +929,7 @@ function QuizContent() {
   const handleSaveGrade = () => {
     // Prevent duplicate saves
     if (gradeSaved || isSavingGrade || !subjectId || !topicId || !topic) return;
+    if (quizState.questions.length === 0) return; // Guard against division by zero
     setIsSavingGrade(true);
     const score = calculateScore();
     const grade = getGradeFromScore(score, quizState.questions.length);
@@ -1285,8 +1311,9 @@ function QuizContent() {
   // Quiz Results
   if (quizState.showResult) {
     const score = calculateScore();
-    const grade = getGradeFromScore(score, quizState.questions.length);
-    const percentage = Math.round((score / quizState.questions.length) * 100);
+    const questionsCount = quizState.questions.length || 1; // Guard against division by zero
+    const grade = getGradeFromScore(score, questionsCount);
+    const percentage = Math.round((score / questionsCount) * 100);
 
     // Count wrong answers accurately for Anki export and analysis buttons
     const wrongCount = quizState.questions.filter((q, i) => {

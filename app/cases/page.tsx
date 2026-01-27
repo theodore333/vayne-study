@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
  Stethoscope, Play, ChevronRight, ArrowLeft, MessageCircle, User,
@@ -16,6 +16,7 @@ import {
  CaseInvestigation, DifferentialDiagnosis, TreatmentPlanItem,
  StepEvaluation, InteractiveClinicalCase, EXAM_SYSTEMS, INVESTIGATION_CATEGORIES
 } from '@/lib/types';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 // Demo case for testing
 const DEMO_CASE: InteractiveClinicalCase = {
@@ -101,6 +102,17 @@ function CasesContent() {
 
  const { data, incrementApiCalls } = useApp();
 
+ // AbortController for cleanup on unmount
+ const abortControllerRef = useRef<AbortController | null>(null);
+
+ // Cleanup effect - abort any pending requests on unmount
+ useEffect(() => {
+ abortControllerRef.current = new AbortController();
+ return () => {
+ abortControllerRef.current?.abort();
+ };
+ }, []);
+
  // Selection state
  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(subjectId);
  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(topicId);
@@ -184,7 +196,7 @@ function CasesContent() {
 
  // Generate case
  const handleGenerateCase = async () => {
- if (!subject || !apiKey) return;
+ if (!subject || !apiKey || isGenerating) return;
 
  // Get topics with material and pick a random one
  const topicsWithMaterial = subject.topics.filter(t => t.material && t.material.length > 200);
@@ -200,7 +212,7 @@ function CasesContent() {
  setError(null);
 
  try {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -211,7 +223,8 @@ function CasesContent() {
  subjectName: subject.name,
  subjectType: subject.subjectType || 'clinical',
  difficulty
- })
+ }),
+ timeout: 60000 // 60s for case generation
  });
 
  const result = await response.json();
@@ -245,7 +258,7 @@ function CasesContent() {
  setActiveCase(newCase);
  setCaseStartTime(Date.now());
  } catch (err) {
- setError(err instanceof Error ? err.message : 'Грешка при генериране');
+ setError(getFetchErrorMessage(err));
  } finally {
  setIsGenerating(false);
  }
@@ -290,7 +303,7 @@ function CasesContent() {
 
  // Handle patient response in history
  const handleSendQuestion = async () => {
- if (!activeCase || !historyInput.trim()) return;
+ if (isPatientResponding || !activeCase || !historyInput.trim()) return;
 
  const newMessage: CaseMessage = {
  id: Date.now().toString(),
@@ -316,7 +329,7 @@ function CasesContent() {
  patientResponseText = getDemoPatientResponse(historyInput);
  } else {
  // Real API call
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -326,7 +339,8 @@ function CasesContent() {
  conversationHistory: [...activeCase.historyMessages, newMessage],
  studentQuestion: historyInput,
  presentation: activeCase.presentation
- })
+ }),
+ timeout: 30000
  });
 
  if (!response.ok) {
@@ -359,7 +373,7 @@ function CasesContent() {
 
  // Reveal exam findings
  const handleRevealExam = async () => {
- if (!activeCase || selectedExamSystems.size === 0) return;
+ if (isRevealingExam || !activeCase || selectedExamSystems.size === 0) return;
 
  setIsRevealingExam(true);
 
@@ -375,7 +389,7 @@ function CasesContent() {
  return { system, finding: 'Без патологични отклонения', isNormal: true, isRelevant: false };
  });
  } else {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -384,7 +398,8 @@ function CasesContent() {
  selectedSystems: Array.from(selectedExamSystems),
  hiddenFindings: activeCase.hiddenData.keyExamFindings,
  presentation: activeCase.presentation
- })
+ }),
+ timeout: 30000
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
@@ -407,7 +422,7 @@ function CasesContent() {
 
  // Process investigation
  const handleOrderInvestigation = async () => {
- if (!activeCase || !selectedInvestigation || !investigationJustification.trim()) return;
+ if (isProcessingInvestigation || !activeCase || !selectedInvestigation || !investigationJustification.trim()) return;
 
  setIsProcessingInvestigation(true);
 
@@ -440,7 +455,7 @@ function CasesContent() {
  invResult = demoResults[selectedInvestigation] || 'Резултат: В референтни граници.';
  feedback = isAppropriate ? 'Добър избор!' : 'Не е от първа необходимост за този случай.';
  } else {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -450,7 +465,8 @@ function CasesContent() {
  caseContext: JSON.stringify(activeCase.hiddenData),
  presentation: activeCase.presentation,
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis
- })
+ }),
+ timeout: 30000
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
@@ -518,7 +534,7 @@ function CasesContent() {
 
  // Evaluate DDx
  const handleEvaluateDdx = async () => {
- if (!activeCase || ddxItems.length === 0) return;
+ if (isEvaluatingDdx || !activeCase || ddxItems.length === 0) return;
 
  setIsEvaluatingDdx(true);
 
@@ -545,7 +561,7 @@ function CasesContent() {
  evalAreasToImprove = hasCorrect ? [] : ['Винаги мислете за ОМИ при гръдна болка'];
  missedDiagnoses = activeCase.hiddenData.differentialDiagnoses.filter(d => !studentDiagnoses.some(sd => sd.includes(d.toLowerCase().split(' ')[0])));
  } else {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -555,7 +571,8 @@ function CasesContent() {
  correctDdx: activeCase.hiddenData.differentialDiagnoses,
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
  caseContext: JSON.stringify(activeCase.presentation)
- })
+ }),
+ timeout: 30000
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
@@ -591,7 +608,7 @@ function CasesContent() {
 
  // Evaluate final diagnosis
  const handleEvaluateDiagnosis = async () => {
- if (!activeCase || !finalDiagnosisInput.trim()) return;
+ if (isEvaluatingDiagnosis || !activeCase || !finalDiagnosisInput.trim()) return;
 
  setIsEvaluatingDiagnosis(true);
 
@@ -612,7 +629,7 @@ function CasesContent() {
  : `Неправилно. Отговорът е: ${activeCase.hiddenData.actualDiagnosis}`;
  learningPoints = ['ST елевация = STEMI', 'Време до PCI < 90 мин', 'Триада: болка + изпотяване + задух'];
  } else {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -622,7 +639,8 @@ function CasesContent() {
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
  studentDdx: activeCase.studentDdx,
  caseContext: JSON.stringify(activeCase.presentation)
- })
+ }),
+ timeout: 30000
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
@@ -676,7 +694,7 @@ function CasesContent() {
 
  // Evaluate treatment
  const handleEvaluateTreatment = async () => {
- if (!activeCase || treatmentItems.length === 0) return;
+ if (isEvaluatingTreatment || !activeCase || treatmentItems.length === 0) return;
 
  setIsEvaluatingTreatment(true);
 
@@ -709,7 +727,7 @@ function CasesContent() {
  ];
  missedElements = [];
  } else {
- const response = await fetch('/api/cases', {
+ const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -719,7 +737,8 @@ function CasesContent() {
  expectedTreatment: activeCase.hiddenData.treatmentPlan,
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
  caseContext: JSON.stringify(activeCase.presentation)
- })
+ }),
+ timeout: 30000
  });
  const result = await response.json();
  if (!response.ok) throw new Error(result.error);
@@ -762,7 +781,7 @@ function CasesContent() {
  nextSteps: 'Опитайте с реален случай с API ключ за по-разнообразни сценарии.'
  });
  } else {
- const summaryResponse = await fetch('/api/cases', {
+ const summaryResponse = await fetchWithTimeout('/api/cases', {
  method: 'POST',
  headers: { 'Content-Type': 'application/json' },
  body: JSON.stringify({
@@ -775,7 +794,8 @@ function CasesContent() {
  },
  evaluations: [...activeCase.evaluations, evaluation],
  timeSpentMinutes: Math.floor(elapsedTime / 60)
- })
+ }),
+ timeout: 30000
  });
  const summaryResult = await summaryResponse.json();
  if (summaryResponse.ok) {
@@ -1479,7 +1499,7 @@ function CasesContent() {
  // Filter subjects - only clinical and hybrid
  const clinicalSubjects = data.subjects.filter(s =>
     !s.archived &&
- s.subjectType === 'clinical' || s.subjectType === 'hybrid'
+    (s.subjectType === 'clinical' || s.subjectType === 'hybrid')
  );
 
  // Get topics with material for selected subject

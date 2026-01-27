@@ -493,7 +493,7 @@ function PracticeContent() {
   // Session Complete Screen
   if (sessionComplete) {
     const correctCount = answers.filter(a => a.correct).length;
-    const accuracy = Math.round((correctCount / answers.length) * 100);
+    const accuracy = answers.length > 0 ? Math.round((correctCount / answers.length) * 100) : 0;
 
     return (
       <div className="max-w-2xl mx-auto">

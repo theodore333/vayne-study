@@ -17,7 +17,7 @@ export function simulateExamOutcome(
   criticalTopics: string[];
   impactTopics: { topicId: string; topicName: string; impact: number }[];
 } {
-  if (topics.length === 0 || topicsOnExam <= 0) {
+  if (topics.length === 0 || topicsOnExam <= 0 || iterations <= 0) {
     return { bestCase: 2, worstCase: 2, expected: 2, variance: 0, criticalTopics: [], impactTopics: [] };
   }
 
@@ -863,9 +863,10 @@ export function generateDailyPlan(
         return days >= warningDays;
       });
 
-      if (decayingTopics.length > 0) {
+      if (decayingTopics.length > 0 && capacityForReview > 0) {
         const topicsToTake = Math.min(Math.ceil(capacityForReview * 0.3), decayingTopics.length, 5);
         const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
+        if (selectedTopics.length === 0) continue; // Guard against division by zero
         // Calculate average warning days for description
         const avgWarningDays = Math.round(
           selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length

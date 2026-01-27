@@ -5,6 +5,7 @@ import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
+import { getMaterialFromIDB, setMaterialInIDB, getAllMaterialsFromIDB, migrateFromLocalStorage, isIndexedDBAvailable } from './indexeddb-storage';
 
 // Storage error types
 export type StorageError = 'quota_exceeded' | 'unknown_error' | null;
@@ -89,6 +90,12 @@ interface LegacySubject {
 // Separate storage keys for optimization
 const MATERIALS_KEY = 'vayne-materials';
 const COMPRESSED_FLAG = 'vayne-compressed';
+const IDB_MIGRATED_KEY = 'vayne-idb-migrated';
+
+// In-memory cache for materials (loaded from IndexedDB at startup)
+let materialsCache: Record<string, string> = {};
+let materialsCacheLoaded = false;
+let materialsCachePromise: Promise<void> | null = null;
 
 const defaultDailyStatus: DailyStatus = {
   date: getTodayString(),
@@ -98,7 +105,8 @@ const defaultDailyStatus: DailyStatus = {
 
 const defaultGPAData: GPAData = {
   grades: [],
-  targetGPA: 5.5
+  targetGPA: 5.5,
+  stateExams: []
 };
 
 const defaultUsageData: UsageData = {
@@ -157,13 +165,56 @@ const defaultData: AppData = {
   clinicalCaseSessions: defaultClinicalCaseSessions
 };
 
-// Materials storage helpers
-function loadMaterials(): Record<string, string> {
+// Materials storage helpers - now using IndexedDB with in-memory cache
+
+/**
+ * Initialize materials cache from IndexedDB (or localStorage as fallback)
+ * Call this once at app startup
+ */
+export async function initMaterialsCache(): Promise<void> {
+  if (materialsCacheLoaded) return;
+  if (materialsCachePromise) return materialsCachePromise;
+
+  materialsCachePromise = (async () => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      // Check if we need to migrate from localStorage to IndexedDB
+      const migrated = localStorage.getItem(IDB_MIGRATED_KEY);
+      if (!migrated && isIndexedDBAvailable()) {
+        const result = await migrateFromLocalStorage();
+        if (result.migrated > 0) {
+          console.log(`Migrated ${result.migrated} materials, freed ${(result.freed / 1024).toFixed(1)}KB from localStorage`);
+        }
+        localStorage.setItem(IDB_MIGRATED_KEY, 'true');
+      }
+
+      // Load all materials from IndexedDB into cache
+      if (isIndexedDBAvailable()) {
+        materialsCache = await getAllMaterialsFromIDB();
+      } else {
+        // Fallback to localStorage
+        materialsCache = loadMaterialsFromLocalStorage();
+      }
+
+      materialsCacheLoaded = true;
+    } catch (error) {
+      console.error('Error initializing materials cache:', error);
+      // Fallback to localStorage
+      materialsCache = loadMaterialsFromLocalStorage();
+      materialsCacheLoaded = true;
+    }
+  })();
+
+  return materialsCachePromise;
+}
+
+// Legacy localStorage functions (for fallback and migration)
+function loadMaterialsFromLocalStorage(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
     const stored = localStorage.getItem(MATERIALS_KEY);
     if (!stored) return {};
-    // Materials are always compressed
     const decompressed = LZString.decompress(stored);
     return decompressed ? JSON.parse(decompressed) : {};
   } catch {
@@ -171,7 +222,7 @@ function loadMaterials(): Record<string, string> {
   }
 }
 
-function saveMaterials(materials: Record<string, string>): StorageError {
+function saveMaterialsToLocalStorage(materials: Record<string, string>): StorageError {
   if (typeof window === 'undefined') return null;
   try {
     const compressed = LZString.compress(JSON.stringify(materials));
@@ -188,19 +239,35 @@ function saveMaterials(materials: Record<string, string>): StorageError {
   }
 }
 
+/**
+ * Get material - synchronous from cache
+ */
 export function getMaterial(topicId: string): string {
-  const materials = loadMaterials();
-  return materials[topicId] || '';
+  // Return from cache (initialized at startup)
+  return materialsCache[topicId] || '';
 }
 
+/**
+ * Set material - updates cache and persists to IndexedDB asynchronously
+ */
 export function setMaterial(topicId: string, material: string): void {
-  const materials = loadMaterials();
+  // Update cache immediately
   if (material) {
-    materials[topicId] = material;
+    materialsCache[topicId] = material;
   } else {
-    delete materials[topicId];
+    delete materialsCache[topicId];
   }
-  saveMaterials(materials);
+
+  // Persist to IndexedDB asynchronously (or localStorage as fallback)
+  if (isIndexedDBAvailable()) {
+    setMaterialInIDB(topicId, material).catch(error => {
+      console.error('Error saving material to IndexedDB:', error);
+      // Fallback to localStorage
+      saveMaterialsToLocalStorage(materialsCache);
+    });
+  } else {
+    saveMaterialsToLocalStorage(materialsCache);
+  }
 }
 
 export function loadData(): AppData {
@@ -305,14 +372,13 @@ export function loadData(): AppData {
       localStorage.setItem('vayne-last-decay-date', today);
     }
 
-    // Load materials from separate storage and merge into topics
-    const materials = loadMaterials();
+    // Load materials from cache (initialized from IndexedDB at startup) and merge into topics
     data.subjects = data.subjects.map((subject: Subject) => ({
       ...subject,
       topics: subject.topics.map((topic: Topic) => ({
         ...topic,
-        // Load material from separate storage if available, fallback to topic.material (for migration)
-        material: materials[topic.id] || topic.material || ''
+        // Load material from cache if available, fallback to topic.material (for migration)
+        material: materialsCache[topic.id] || topic.material || ''
       }))
     }));
 
@@ -347,20 +413,21 @@ export function saveData(data: AppData): StorageError {
   if (typeof window === 'undefined') return null;
 
   try {
-    // Extract materials from topics and save separately
-    const materials: Record<string, string> = loadMaterials();
-
+    // Extract materials from topics and save to IndexedDB (via cache)
     // Create a copy of data without materials in topics (to reduce main storage size)
     const dataToSave = {
       ...data,
       subjects: data.subjects.map(subject => ({
         ...subject,
         topics: subject.topics.map(topic => {
-          // If topic has material, save it separately
+          // If topic has material, save it to IndexedDB via setMaterial
           if (topic.material && topic.material.length > 0) {
-            materials[topic.id] = topic.material;
+            // Update cache and persist asynchronously
+            if (materialsCache[topic.id] !== topic.material) {
+              setMaterial(topic.id, topic.material);
+            }
           }
-          // Return topic without material (material is loaded lazily)
+          // Return topic without material (material is loaded lazily from IndexedDB)
           return {
             ...topic,
             material: '', // Don't store in main data
@@ -369,12 +436,6 @@ export function saveData(data: AppData): StorageError {
         })
       }))
     };
-
-    // Save materials separately (always compressed)
-    const materialsError = saveMaterials(materials);
-    if (materialsError) {
-      return materialsError;
-    }
 
     // Compress and save main data
     const jsonString = JSON.stringify(dataToSave);

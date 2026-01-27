@@ -273,8 +273,8 @@ export function calculateTopicXp(oldStatus: TopicStatus, newStatus: TopicStatus,
     baseXp = XP_REWARDS.topicGrayToOrange;
   }
 
-  // Apply combo multiplier
-  const comboBonus = Math.floor(comboMultiplier * XP_REWARDS.comboBonus);
+  // Apply combo multiplier - only add bonus when actually in a combo (3+ actions)
+  const comboBonus = comboMultiplier > 1.0 ? Math.floor(comboMultiplier * XP_REWARDS.comboBonus) : 0;
   return baseXp + comboBonus;
 }
 
@@ -290,7 +290,8 @@ export function calculateQuizXp(score: number, comboMultiplier: number): number 
     baseXp = XP_REWARDS.quizGood;
   }
 
-  const comboBonus = Math.floor(comboMultiplier * XP_REWARDS.comboBonus);
+  // Only add combo bonus when actually in a combo (3+ actions)
+  const comboBonus = comboMultiplier > 1.0 ? Math.floor(comboMultiplier * XP_REWARDS.comboBonus) : 0;
   return baseXp + comboBonus;
 }
 

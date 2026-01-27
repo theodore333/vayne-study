@@ -285,9 +285,15 @@ export interface SemesterGrade {
   grade: number;
 }
 
+export interface StateExam {
+  name: string;
+  grade: number;
+}
+
 export interface GPAData {
   grades: SemesterGrade[];
   targetGPA: number;
+  stateExams: StateExam[];
 }
 
 export interface UsageData {

@@ -64,7 +64,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [apiKey, setApiKey] = useState<string | null | undefined>(undefined); // undefined = loading, null = no key
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rawResponse, setRawResponse] = useState<string | null>(null);
@@ -90,35 +91,77 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      setExtractedTopics(null);
-      setError(null);
-      setRawResponse(null);
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      addFiles(selectedFiles);
     }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
-      setExtractedTopics(null);
-      setError(null);
-      setRawResponse(null);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      addFiles(droppedFiles);
     }
   };
 
-  const handleExtractClick = () => {
-    if (!file || !apiKey) return;
+  const addFiles = (newFiles: File[]) => {
+    setFiles(prev => [...prev, ...newFiles]);
+    // Create previews for images
+    newFiles.forEach(file => {
+      if (file.type.startsWith('image/')) {
+        const url = URL.createObjectURL(file);
+        setFilePreviews(prev => [...prev, url]);
+      } else {
+        setFilePreviews(prev => [...prev, '']); // Empty string for non-images
+      }
+    });
+    setExtractedTopics(null);
+    setError(null);
+    setRawResponse(null);
+  };
 
-    // Calculate cost estimate
-    const estimate = estimateTokens(file);
-    setCostEstimate(estimate);
+  const removeFile = (index: number) => {
+    if (filePreviews[index]) {
+      URL.revokeObjectURL(filePreviews[index]);
+    }
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setFilePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllFiles = () => {
+    filePreviews.forEach(url => url && URL.revokeObjectURL(url));
+    setFiles([]);
+    setFilePreviews([]);
+    setExtractedTopics(null);
+  };
+
+  // Cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      filePreviews.forEach(url => url && URL.revokeObjectURL(url));
+    };
+  }, []);
+
+  const handleExtractClick = () => {
+    if (files.length === 0 || !apiKey) return;
+
+    // Calculate total cost estimate for all files
+    const totalEstimate = files.reduce((acc, file) => {
+      const estimate = estimateTokens(file);
+      return {
+        inputTokens: acc.inputTokens + estimate.inputTokens,
+        outputTokens: acc.outputTokens + estimate.outputTokens,
+        totalCost: acc.totalCost + estimate.totalCost,
+        isLarge: acc.isLarge || estimate.isLarge
+      };
+    }, { inputTokens: 0, outputTokens: 0, totalCost: 0, isLarge: false });
+
+    setCostEstimate(totalEstimate);
 
     // Show warning for large files
-    if (estimate.isLarge) {
+    if (totalEstimate.isLarge || files.length > 3) {
       setShowCostWarning(true);
     } else {
       // Small files - proceed directly
@@ -127,7 +170,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   };
 
   const handleExtract = async () => {
-    if (!file || !apiKey) return;
+    if (files.length === 0 || !apiKey) return;
 
     setShowCostWarning(false);
     setIsProcessing(true);
@@ -135,15 +178,24 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     setRawResponse(null);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('apiKey', apiKey);
-      formData.append('subjectName', subjectName);
+      // Convert all files to base64
+      const base64Files = await Promise.all(
+        files.map(file => new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        }))
+      );
 
-      const response = await fetchWithTimeout('/api/extract', {
+      const response = await fetchWithTimeout('/api/extract-syllabus', {
         method: 'POST',
-        body: formData,
-        timeout: 120000 // 2 minutes for file extraction
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: base64Files,
+          apiKey,
+          subjectName
+        })
       });
 
       // Get response text first to handle non-JSON responses
@@ -167,12 +219,45 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         return;
       }
 
-      setExtractedTopics(result.topics);
-      setSelectedTopics(new Set(result.topics.map((_: ExtractedTopic, i: number) => i)));
+      // Parse topics from the extracted text
+      const text = result.text || '';
+      const lines = text.split('\n').filter((line: string) => line.trim());
+      const topics: ExtractedTopic[] = [];
+      let topicNumber = 1;
+
+      for (const line of lines) {
+        // Skip section headers (## or lines that are just titles)
+        if (line.startsWith('##') || line.startsWith('#')) continue;
+
+        // Match numbered topics: "1. Topic name" or "1) Topic name"
+        const match = line.match(/^\s*(\d+)[\.\)]\s*(.+)/);
+        if (match) {
+          topics.push({
+            number: topicNumber++,
+            name: match[2].trim()
+          });
+        } else if (line.trim() && !line.startsWith('-')) {
+          // Non-numbered but non-empty lines that aren't bullet points
+          topics.push({
+            number: topicNumber++,
+            name: line.trim()
+          });
+        }
+      }
+
+      if (topics.length === 0) {
+        setError('Не бяха открити теми в документа');
+        setRawResponse(text);
+        return;
+      }
+
+      setExtractedTopics(topics);
+      setSelectedTopics(new Set(topics.map((_, i) => i)));
 
       // Track API usage
-      if (result.usage) {
-        incrementApiCalls(result.usage.cost);
+      if (result.inputTokens && result.outputTokens) {
+        const cost = (result.inputTokens * 0.015 + result.outputTokens * 0.075) / 1000; // Opus pricing
+        incrementApiCalls(cost);
       }
     } catch (err) {
       setError(getFetchErrorMessage(err));
@@ -274,11 +359,6 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     onClose();
   };
 
-  const getFileIcon = () => {
-    if (!file) return <Upload size={32} />;
-    if (file.type === 'application/pdf') return <FileText size={32} />;
-    return <Image size={32} />;
-  };
 
   // Loading API key (undefined = still loading)
   if (apiKey === undefined) {
@@ -348,8 +428,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
             onClick={() => fileInputRef.current?.click()}
             onDrop={handleDrop}
             onDragOver={(e) => e.preventDefault()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${
-              file
+            className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all ${
+              files.length > 0
                 ? 'border-purple-500/50 bg-purple-500/10'
                 : 'border-slate-700 hover:border-slate-600 hover:bg-slate-800/30'
             }`}
@@ -358,38 +438,62 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
               ref={fileInputRef}
               type="file"
               accept=".pdf,image/*"
+              multiple
               onChange={handleFileChange}
               className="hidden"
             />
-            <div className={`mx-auto mb-3 ${file ? 'text-purple-400' : 'text-slate-500'}`}>
-              {getFileIcon()}
+            <div className={`mx-auto mb-3 ${files.length > 0 ? 'text-purple-400' : 'text-slate-500'}`}>
+              <Upload size={32} />
             </div>
-            {file ? (
-              <div>
-                <p className="text-slate-200 font-medium">{file.name}</p>
-                <p className="text-sm text-slate-500 font-mono">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
-                {/* Show estimated cost */}
-                {(() => {
-                  const estimate = estimateTokens(file);
-                  return (
-                    <p className={`text-xs font-mono mt-1 ${estimate.isLarge ? 'text-amber-400' : 'text-slate-500'}`}>
-                      ~{estimate.inputTokens.toLocaleString()} токени • ~${estimate.totalCost.toFixed(6)}
-                      {estimate.isLarge && ' (голям файл)'}
-                    </p>
-                  );
-                })()}
-              </div>
-            ) : (
-              <div>
-                <p className="text-slate-400 font-medium">Качи PDF или снимка</p>
-                <p className="text-sm text-slate-500 font-mono">
-                  Кликни или пусни файл тук
-                </p>
-              </div>
-            )}
+            <p className="text-slate-400 font-medium">Качи PDF или снимки на конспект</p>
+            <p className="text-sm text-slate-500 font-mono">
+              Можеш да избереш няколко файла наведнъж
+            </p>
           </div>
+
+          {/* Uploaded Files Preview */}
+          {files.length > 0 && (
+            <div className="p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-cyan-300 font-mono">
+                  {files.length} {files.length === 1 ? 'файл' : 'файла'} избрани
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); clearAllFiles(); }}
+                  className="text-xs text-slate-400 hover:text-red-400 font-mono"
+                >
+                  Изчисти всички
+                </button>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {files.map((file, i) => (
+                  <div key={i} className="relative group">
+                    {filePreviews[i] ? (
+                      <img
+                        src={filePreviews[i]}
+                        alt={file.name}
+                        className="h-16 w-auto rounded border border-slate-600 object-cover"
+                      />
+                    ) : (
+                      <div className="h-16 w-16 rounded border border-slate-600 bg-slate-700 flex items-center justify-center" title={file.name}>
+                        <FileText size={20} className="text-slate-400" />
+                      </div>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={12} className="text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {/* Total size estimate */}
+              <div className="mt-2 text-xs text-slate-500 font-mono">
+                Общо: {(files.reduce((acc, f) => acc + f.size, 0) / 1024 / 1024).toFixed(2)} MB
+              </div>
+            </div>
+          )}
 
           {/* Error */}
           {error && (
@@ -424,8 +528,12 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
 
               <div className="bg-slate-800/50 rounded-lg p-3 mb-3 space-y-2">
                 <div className="flex justify-between text-sm font-mono">
-                  <span className="text-slate-400">Размер на файла:</span>
-                  <span className="text-slate-200">{(file!.size / 1024 / 1024).toFixed(2)} MB</span>
+                  <span className="text-slate-400">Брой файлове:</span>
+                  <span className="text-slate-200">{files.length}</span>
+                </div>
+                <div className="flex justify-between text-sm font-mono">
+                  <span className="text-slate-400">Общ размер:</span>
+                  <span className="text-slate-200">{(files.reduce((a, f) => a + f.size, 0) / 1024 / 1024).toFixed(2)} MB</span>
                 </div>
                 <div className="flex justify-between text-sm font-mono">
                   <span className="text-slate-400">Приблизително токени (input):</span>
@@ -464,21 +572,21 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
           )}
 
           {/* Extract Button */}
-          {!extractedTopics && !showCostWarning && (
+          {!extractedTopics && !showCostWarning && files.length > 0 && (
             <button
               onClick={handleExtractClick}
-              disabled={!file || isProcessing}
+              disabled={files.length === 0 || isProcessing}
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isProcessing ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Claude Sonnet чете документа...
+                  Claude Opus чете {files.length} {files.length === 1 ? 'файл' : 'файла'}...
                 </>
               ) : (
                 <>
                   <Sparkles size={18} />
-                  Извлечи теми с AI
+                  Извлечи теми от {files.length} {files.length === 1 ? 'файл' : 'файла'}
                 </>
               )}
             </button>

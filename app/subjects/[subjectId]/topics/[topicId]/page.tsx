@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 import MaterialEditor from '@/components/MaterialEditor';
 import { TextHighlight } from '@/lib/types';
@@ -39,6 +39,7 @@ export default function TopicDetailPage() {
   const [extractError, setExtractError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const [pastedImages, setPastedImages] = useState<string[]>([]); // Base64 previews
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null); // For enlarged view
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
 
@@ -138,6 +139,10 @@ export default function TopicDetailPage() {
 
   const clearPastedImages = () => {
     setPastedImages([]);
+  };
+
+  const removeImage = (index: number) => {
+    setPastedImages(prev => prev.filter((_, i) => i !== index));
   };
 
   useEffect(() => {
@@ -496,12 +501,22 @@ export default function TopicDetailPage() {
                 </div>
                 <div className="flex gap-2 flex-wrap mb-3">
                   {pastedImages.map((img, i) => (
-                    <img
-                      key={i}
-                      src={img}
-                      alt={`Pasted ${i + 1}`}
-                      className="h-20 w-auto rounded border border-cyan-700/50 object-cover"
-                    />
+                    <div key={i} className="relative group">
+                      <img
+                        src={img}
+                        alt={`Pasted ${i + 1}`}
+                        className="h-20 w-auto rounded border border-cyan-700/50 object-cover cursor-pointer hover:border-cyan-500 transition-all"
+                        onClick={() => setZoomedImage(img)}
+                        title="Кликни за увеличаване"
+                      />
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeImage(i); }}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Изтрий"
+                      >
+                        <X size={12} className="text-white" />
+                      </button>
+                    </div>
                   ))}
                 </div>
                 <button
@@ -806,6 +821,27 @@ export default function TopicDetailPage() {
         </div>
       </div>
     </div>
+
+    {/* Zoomed Image Modal */}
+    {zoomedImage && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90"
+        onClick={() => setZoomedImage(null)}
+      >
+        <button
+          onClick={() => setZoomedImage(null)}
+          className="absolute top-4 right-4 p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-white transition-colors"
+        >
+          <X size={24} />
+        </button>
+        <img
+          src={zoomedImage}
+          alt="Enlarged"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
     </>
   );
 }

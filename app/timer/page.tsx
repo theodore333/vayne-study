@@ -282,8 +282,6 @@ export default function TimerPage() {
       const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
 
-      console.log(`[Pending] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}, duration: ${pendingCompletion.duration}m`);
-
       setPomodoroPhase(nextPhase);
       setPomodoroTimeLeft(breakDuration * 60);
       setIsPaused(false);
@@ -349,8 +347,6 @@ export default function TimerPage() {
       const isLongBreak = newCount % settings.longBreakAfter === 0;
       const nextPhase: PomodoroPhase = isLongBreak ? 'longBreak' : 'shortBreak';
       const breakDuration = isLongBreak ? settings.longBreakDuration : settings.shortBreakDuration;
-
-      console.log(`[Pomodoro] Work complete. Count: ${newCount}, isLongBreak: ${isLongBreak}, nextPhase: ${nextPhase}`);
 
       // Show notification
       showNotification(
@@ -510,12 +506,9 @@ export default function TimerPage() {
     const timeWorked = fullDuration - actualRemaining;
     const minutesWorked = Math.floor(timeWorked / 60);
 
-    console.log(`[Pomodoro Stop] Phase: ${pomodoroPhase}, Full: ${fullDuration}s, Remaining: ${actualRemaining}s, Worked: ${timeWorked}s (${minutesWorked}m)`);
-
     // Record partial pomodoro if it was a work phase and at least 1 minute worked
     if (pomodoroPhase === 'work' && minutesWorked >= 1) {
       addPomodoroSession(minutesWorked, selectedSubject || undefined, selectedTopic);
-      console.log(`[Pomodoro Stop] Recorded ${minutesWorked} minutes`);
     }
 
     setIsRunning(false);

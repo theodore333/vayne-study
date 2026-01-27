@@ -40,7 +40,6 @@ export default function FloatingTimer() {
   const playSound = useCallback(() => {
     // Double-check we're not on timer page (race condition prevention)
     if (typeof window !== 'undefined' && window.location.pathname === '/timer') {
-      console.log('[FloatingTimer] Blocked sound - on timer page');
       return;
     }
 
@@ -74,8 +73,8 @@ export default function FloatingTimer() {
       playTone(523.25, now, 0.3);
       playTone(659.25, now + 0.15, 0.3);
       playTone(783.99, now + 0.3, 0.5);
-    } catch (e) {
-      console.log('Audio not available');
+    } catch {
+      // Audio not available - fail silently
     }
   }, []);
 

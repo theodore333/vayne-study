@@ -219,27 +219,40 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         return;
       }
 
-      // Parse topics from the extracted text
+      // Parse topics from the extracted text, preserving sections
       const text = result.text || '';
       const lines = text.split('\n').filter((line: string) => line.trim());
       const topics: ExtractedTopic[] = [];
-      let topicNumber = 1;
+      let globalIndex = 1;
 
       for (const line of lines) {
-        // Skip section headers (## or lines that are just titles)
-        if (line.startsWith('##') || line.startsWith('#')) continue;
+        // Check for section headers (## Section Name)
+        const sectionMatch = line.match(/^##\s*(.+)/);
+        if (sectionMatch) {
+          // Add section header as a special topic
+          topics.push({
+            number: `📚`,
+            name: sectionMatch[1].trim().toUpperCase()
+          });
+          globalIndex++;
+          continue;
+        }
+
+        // Skip # headers (single #)
+        if (line.startsWith('#') && !line.startsWith('##')) continue;
 
         // Match numbered topics: "1. Topic name" or "1) Topic name"
         const match = line.match(/^\s*(\d+)[\.\)]\s*(.+)/);
         if (match) {
           topics.push({
-            number: topicNumber++,
+            number: match[1], // Keep original number from document
             name: match[2].trim()
           });
-        } else if (line.trim() && !line.startsWith('-')) {
-          // Non-numbered but non-empty lines that aren't bullet points
+          globalIndex++;
+        } else if (line.trim() && !line.startsWith('-') && !line.startsWith('*')) {
+          // Non-numbered but non-empty lines
           topics.push({
-            number: topicNumber++,
+            number: globalIndex++,
             name: line.trim()
           });
         }
@@ -302,9 +315,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     e.stopPropagation();
     if (!extractedTopics) return;
     const newTopics = extractedTopics.filter((_, i) => i !== index);
-    // Renumber topics
-    const renumbered = newTopics.map((t, i) => ({ ...t, number: i + 1 }));
-    setExtractedTopics(renumbered);
+    // Keep original numbers - don't renumber!
+    setExtractedTopics(newTopics);
     // Update selected indices
     const newSelected = new Set<number>();
     selectedTopics.forEach(i => {
@@ -330,11 +342,46 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   const handleImport = () => {
     if (!extractedTopics) return;
 
-    const topicsToAdd = extractedTopics
-      .filter((_, i) => selectedTopics.has(i))
-      .map((t, index) => ({
-        number: typeof t.number === 'string' ? (parseFloat(t.number) || (index + 1)) : (t.number || (index + 1)),
-        name: t.name,
+    // Build topics with section prefixes
+    let currentSection = '';
+    let topicCounter = 1;
+    const topicsToAdd: Array<{
+      number: number;
+      name: string;
+      status: 'gray';
+      lastReview: null;
+      grades: never[];
+      avgGrade: null;
+      quizCount: number;
+      material: string;
+      materialImages: never[];
+      currentBloomLevel: 1;
+      quizHistory: never[];
+      readCount: number;
+      lastRead: null;
+      size: null;
+      sizeSetBy: null;
+      wrongAnswers: never[];
+      highlights: never[];
+    }> = [];
+
+    extractedTopics.forEach((t, i) => {
+      if (!selectedTopics.has(i)) return;
+
+      // Check if this is a section header
+      if (t.number === '📚') {
+        currentSection = t.name;
+        return; // Skip adding section header as a topic
+      }
+
+      // Build topic name with section prefix if there's a section
+      const topicName = currentSection
+        ? `[${currentSection}] ${t.name}`
+        : t.name;
+
+      topicsToAdd.push({
+        number: topicCounter++,
+        name: topicName,
         status: 'gray' as const,
         lastReview: null,
         grades: [],
@@ -342,18 +389,16 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         quizCount: 0,
         material: '',
         materialImages: [],
-        currentBloomLevel: 1 as const, // Start at Remember level
+        currentBloomLevel: 1 as const,
         quizHistory: [],
         readCount: 0,
         lastRead: null,
-        // Smart Scheduling fields
         size: null,
         sizeSetBy: null,
-        // Gap Analysis
         wrongAnswers: [],
-        // Reader Mode
         highlights: []
-      }));
+      });
+    });
 
     addTopics(subjectId, topicsToAdd);
     onClose();
@@ -623,37 +668,50 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
               </div>
 
               <div className="max-h-80 overflow-y-auto space-y-1 bg-slate-800/30 rounded-lg p-2">
-                {extractedTopics.map((topic, i) => (
+                {extractedTopics.map((topic, i) => {
+                  const isSection = topic.number === '📚';
+
+                  return (
                   <div
                     key={i}
-                    onClick={() => toggleTopic(i)}
+                    onClick={() => !isSection && toggleTopic(i)}
                     className={`group flex items-center gap-2 p-2 rounded-lg transition-all ${
-                      editingIndex === i
-                        ? 'bg-blue-500/20 border border-blue-500/30'
-                        : selectedTopics.has(i)
-                          ? 'bg-purple-500/20 border border-purple-500/30 cursor-pointer'
-                          : 'hover:bg-slate-700/50 border border-transparent cursor-pointer'
+                      isSection
+                        ? 'bg-amber-500/20 border border-amber-500/30'
+                        : editingIndex === i
+                          ? 'bg-blue-500/20 border border-blue-500/30'
+                          : selectedTopics.has(i)
+                            ? 'bg-purple-500/20 border border-purple-500/30 cursor-pointer'
+                            : 'hover:bg-slate-700/50 border border-transparent cursor-pointer'
                     }`}
                   >
-                    {/* Checkbox */}
-                    <div
-                      onClick={(e) => { e.stopPropagation(); toggleTopic(i); }}
-                      className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 cursor-pointer ${
-                        selectedTopics.has(i)
-                          ? 'bg-purple-500 border-purple-500'
-                          : 'border-slate-600 hover:border-slate-500'
-                      }`}
-                    >
-                      {selectedTopics.has(i) && <Check size={14} className="text-white" />}
-                    </div>
+                    {/* Checkbox - hide for sections */}
+                    {isSection ? (
+                      <div className="w-5 h-5 shrink-0" />
+                    ) : (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); toggleTopic(i); }}
+                        className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 cursor-pointer ${
+                          selectedTopics.has(i)
+                            ? 'bg-purple-500 border-purple-500'
+                            : 'border-slate-600 hover:border-slate-500'
+                        }`}
+                      >
+                        {selectedTopics.has(i) && <Check size={14} className="text-white" />}
+                      </div>
+                    )}
 
-                    {/* Number */}
-                    <span className="text-xs text-slate-500 font-mono w-6 shrink-0">
+                    {/* Number or section icon */}
+                    <span className={`text-xs font-mono w-6 shrink-0 ${isSection ? 'text-amber-400' : 'text-slate-500'}`}>
                       {topic.number}
                     </span>
 
-                    {/* Name - click to edit */}
-                    {editingIndex === i ? (
+                    {/* Name - click to edit (not for sections) */}
+                    {isSection ? (
+                      <span className="text-sm text-amber-300 flex-1 truncate font-semibold">
+                        {topic.name}
+                      </span>
+                    ) : editingIndex === i ? (
                       <input
                         type="text"
                         value={editValue}
@@ -676,8 +734,10 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
                       </span>
                     )}
 
-                    {/* Actions */}
-                    {editingIndex === i ? (
+                    {/* Actions - hide for sections */}
+                    {isSection ? (
+                      <div className="w-14 shrink-0" />
+                    ) : editingIndex === i ? (
                       <div className="flex gap-1 shrink-0">
                         <button
                           onClick={(e) => { e.stopPropagation(); saveEdit(); }}
@@ -709,7 +769,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
                       </div>
                     )}
                   </div>
-                ))}
+                );
+                })}
               </div>
 
               <button
@@ -718,7 +779,10 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
                 className="w-full py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white font-semibold rounded-lg hover:from-green-500 hover:to-emerald-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Check size={18} />
-                Импортирай {selectedTopics.size} теми
+                Импортирай {
+                  // Count only actual topics (not section headers)
+                  extractedTopics.filter((t, i) => selectedTopics.has(i) && t.number !== '📚').length
+                } теми
               </button>
             </div>
           )}

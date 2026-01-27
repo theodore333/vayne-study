@@ -167,7 +167,12 @@ export async function getCollectionStats(selectedDecks?: string[]): Promise<Coll
 export function getSelectedDecks(): string[] {
   if (typeof window === 'undefined') return [];
   const stored = localStorage.getItem('anki-selected-decks');
-  return stored ? JSON.parse(stored) : [];
+  if (!stored) return [];
+  try {
+    return JSON.parse(stored);
+  } catch {
+    return [];
+  }
 }
 
 // Save selected decks to localStorage

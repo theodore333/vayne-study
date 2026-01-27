@@ -337,14 +337,17 @@ export default function MaterialEditor({ value, onChange, placeholder, className
         }
         .material-editor-wrapper .ProseMirror table {
           border-collapse: collapse;
-          width: 100%;
           margin: 1rem 0;
+          display: block;
+          overflow-x: auto;
+          max-width: 100%;
         }
         .material-editor-wrapper .ProseMirror th,
         .material-editor-wrapper .ProseMirror td {
           border: 1px solid #475569;
           padding: 0.5rem;
           text-align: left;
+          white-space: nowrap;
         }
         .material-editor-wrapper .ProseMirror th {
           background: #334155;

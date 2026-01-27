@@ -277,14 +277,13 @@ export default function MaterialEditor({ value, onChange, placeholder, className
       </div>
 
       {/* Editor */}
-      <EditorContent
-        editor={editor}
-        className="bg-slate-800/50 border border-t-0 border-slate-700 rounded-b-lg"
-      />
+      <div className="max-h-64 overflow-y-auto bg-slate-800/50 border border-t-0 border-slate-700 rounded-b-lg">
+        <EditorContent editor={editor} />
+      </div>
 
       <style jsx global>{`
         .material-editor-wrapper .ProseMirror {
-          min-height: 200px;
+          min-height: 180px;
           padding: 1rem;
           color: #e2e8f0;
         }

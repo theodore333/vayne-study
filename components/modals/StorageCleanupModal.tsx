@@ -31,6 +31,15 @@ export default function StorageCleanupModal({ onClose }: StorageCleanupModalProp
   const storageUsage = getStorageUsage();
   const hasIndexedDB = isIndexedDBAvailable();
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   // Load IndexedDB usage
   useEffect(() => {
     if (hasIndexedDB) {

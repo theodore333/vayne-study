@@ -14,6 +14,15 @@ interface Props {
 const STORAGE_KEY = 'weekly-review-data';
 
 export default function WeeklyReviewModal({ onClose }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   const { data, incrementApiCalls } = useApp();
   const activeSubjects = useMemo(
     () => data.subjects.filter(s => !s.archived),

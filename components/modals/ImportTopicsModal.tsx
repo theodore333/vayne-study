@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, FileText, Upload, Sparkles, Loader2, BookOpen, Wrench, Layers } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { parseTopicsFromText } from '@/lib/algorithms';
@@ -34,6 +34,15 @@ interface AnalysisResult {
 }
 
 export default function ImportTopicsModal({ subjectId, subjectName, onClose }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   const { addTopics } = useApp();
   const [text, setText] = useState('');
   const [mode, setMode] = useState<'simple' | 'smart'>('simple');

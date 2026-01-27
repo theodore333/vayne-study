@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, BookOpen, Calendar, FileText, Beaker, Stethoscope, FlaskConical } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { PRESET_COLORS } from '@/lib/constants';
@@ -11,6 +11,14 @@ interface Props {
 }
 
 export default function AddSubjectModal({ onClose }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
   const { addSubject } = useApp();
   const [name, setName] = useState('');
   const [color, setColor] = useState(PRESET_COLORS[0]);

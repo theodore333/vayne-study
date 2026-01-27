@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Calendar, Clock, MapPin } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { CLASS_TYPES, DAYS } from '@/lib/constants';
@@ -11,6 +11,14 @@ interface Props {
 }
 
 export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
   const { data, addClass } = useApp();
   const activeSubjects = data.subjects.filter(s => !s.archived);
   const [subjectId, setSubjectId] = useState(activeSubjects[0]?.id || '');

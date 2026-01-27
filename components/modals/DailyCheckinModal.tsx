@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Thermometer, Palmtree } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
@@ -9,6 +9,14 @@ interface Props {
 }
 
 export default function DailyCheckinModal({ onClose }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
   const { data, updateDailyStatus } = useApp();
   const [sick, setSick] = useState(data.dailyStatus.sick);
   const [holiday, setHoliday] = useState(data.dailyStatus.holiday);

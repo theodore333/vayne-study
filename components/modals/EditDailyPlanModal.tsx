@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DailyTask, Topic, Subject } from '@/lib/types';
@@ -15,6 +15,14 @@ interface Props {
 }
 
 export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, onSave }: Props) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
   const { data } = useApp();
   const activeSubjects = useMemo(
     () => data.subjects.filter(s => !s.archived),

@@ -74,6 +74,15 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
   const [showCostWarning, setShowCostWarning] = useState(false);
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
@@ -23,6 +24,16 @@ export default function ConfirmDialog({
   cancelText = 'Отказ',
   variant = 'danger'
 }: ConfirmDialogProps) {
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleConfirm = () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Plus, Trash2, Check } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
@@ -17,6 +17,14 @@ export default function AddQuestionModal({
   existingBanks,
   onClose
 }: AddQuestionModalProps) {
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
   const { addQuestionBank, addQuestionsToBank } = useApp();
 
   // Bank selection

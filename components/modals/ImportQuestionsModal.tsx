@@ -67,6 +67,15 @@ export default function ImportQuestionsModal({
   const [fileParts, setFileParts] = useState<File[]>([]);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
+  // Close on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [onClose]);
+
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);

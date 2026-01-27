@@ -43,7 +43,6 @@ async function syncToVayneOS(type: string, data: unknown): Promise<SyncResult> {
       return { success: false, error: result.error || 'Sync failed' };
     }
 
-    console.log('[VAYNE-OS-SYNC] Success:', result);
     return {
       success: true,
       xpAwarded: result.xpAwarded,

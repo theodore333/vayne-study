@@ -166,7 +166,6 @@ export async function migrateFromLocalStorage(): Promise<{ migrated: number; fre
     // Remove from localStorage after successful migration
     if (migrated === topicIds.length) {
       localStorage.removeItem(MATERIALS_KEY);
-      console.log(`Migrated ${migrated} materials to IndexedDB, freed ${(freedBytes / 1024).toFixed(1)}KB`);
     }
 
     return { migrated, freed: freedBytes };

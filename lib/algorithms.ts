@@ -2,6 +2,18 @@ import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, Sc
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
 
 /**
+ * Fisher-Yates shuffle for unbiased random permutation
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+/**
  * Monte Carlo simulation for exam outcome
  * Simulates random topic selection to estimate grade distribution
  */
@@ -41,7 +53,7 @@ export function simulateExamOutcome(
   // Run simulations
   for (let i = 0; i < iterations; i++) {
     // Random selection of topics
-    const shuffled = [...topicScores].sort(() => Math.random() - 0.5);
+    const shuffled = shuffleArray(topicScores);
     const selected = shuffled.slice(0, actualTopicsOnExam);
     const avgScore = selected.reduce((sum, t) => sum + t.score, 0) / actualTopicsOnExam;
     results.push(avgScore);

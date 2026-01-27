@@ -182,10 +182,7 @@ export async function initMaterialsCache(): Promise<void> {
       // Check if we need to migrate from localStorage to IndexedDB
       const migrated = localStorage.getItem(IDB_MIGRATED_KEY);
       if (!migrated && isIndexedDBAvailable()) {
-        const result = await migrateFromLocalStorage();
-        if (result.migrated > 0) {
-          console.log(`Migrated ${result.migrated} materials, freed ${(result.freed / 1024).toFixed(1)}KB from localStorage`);
-        }
+        await migrateFromLocalStorage();
         localStorage.setItem(IDB_MIGRATED_KEY, 'true');
       }
 

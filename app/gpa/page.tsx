@@ -336,7 +336,7 @@ export default function GPAPage() {
                   <label className="block text-sm text-slate-400 mb-1 font-mono">Семестър</label>
                   <select
                     value={newGrade.semester}
-                    onChange={(e) => setNewGrade({ ...newGrade, semester: parseInt(e.target.value) })}
+                    onChange={(e) => setNewGrade({ ...newGrade, semester: parseInt(e.target.value) || 1 })}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(s => (

@@ -1,31 +1,36 @@
 'use client';
 
 import { AppData } from './types';
+import { fetchWithTimeout, isAbortOrTimeoutError } from './fetch-utils';
 
 const API_URL = '/api/data';
+const CLOUD_TIMEOUT = 10000; // 10 seconds
 
 export async function loadFromCloud(): Promise<AppData | null> {
   try {
-    const response = await fetch(API_URL);
+    const response = await fetchWithTimeout(API_URL, { timeout: CLOUD_TIMEOUT });
     if (!response.ok) {
       throw new Error('Failed to load from cloud');
     }
     const result = await response.json();
     return result.data || null;
   } catch (error) {
-    console.error('Cloud load error:', error);
+    if (!isAbortOrTimeoutError(error)) {
+      console.error('Cloud load error:', error);
+    }
     return null;
   }
 }
 
 export async function saveToCloud(data: AppData): Promise<boolean> {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetchWithTimeout(API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ data }),
+      timeout: CLOUD_TIMEOUT,
     });
 
     if (!response.ok) {
@@ -34,7 +39,9 @@ export async function saveToCloud(data: AppData): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error('Cloud save error:', error);
+    if (!isAbortOrTimeoutError(error)) {
+      console.error('Cloud save error:', error);
+    }
     return false;
   }
 }

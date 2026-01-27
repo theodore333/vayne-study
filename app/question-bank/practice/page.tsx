@@ -444,7 +444,7 @@ function PracticeContent() {
                   min={5}
                   max={stats.total}
                   value={customQuestionCount}
-                  onChange={(e) => setCustomQuestionCount(parseInt(e.target.value))}
+                  onChange={(e) => setCustomQuestionCount(parseInt(e.target.value) || 5)}
                   className="w-full accent-purple-500"
                 />
                 <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2 } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
+import MaterialEditor from '@/components/MaterialEditor';
 import { TextHighlight } from '@/lib/types';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -523,11 +524,10 @@ export default function TopicDetailPage() {
               </div>
             )}
 
-            <textarea
+            <MaterialEditor
               value={material}
-              onChange={(e) => handleMaterialChange(e.target.value)}
-              placeholder="Постави текст от учебник, лекции или бележки тук...&#10;&#10;💡 Съвети:&#10;• Ctrl+V - пействай screenshot директно&#10;• 'Качи PDF' - за PDF документи"
-              className="w-full h-64 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-blue-500 font-mono text-sm resize-none"
+              onChange={handleMaterialChange}
+              placeholder="Постави текст от учебник, лекции или бележки тук... Markdown форматиране (**bold**, *italic*, # headers) се рендерира автоматично."
             />
 
             <button

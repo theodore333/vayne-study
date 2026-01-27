@@ -104,8 +104,7 @@ export default function TopicDetailPage() {
           topicName: topic.name,
           subjectName: subject.name,
           existingMaterial: material
-        }),
-        timeout: 60000 // 60s for image processing
+        })
       });
 
       const result = await response.json();
@@ -215,8 +214,7 @@ export default function TopicDetailPage() {
 
       const response = await fetchWithTimeout('/api/extract-material', {
         method: 'POST',
-        body: formData,
-        timeout: 60000 // 60s for file processing
+        body: formData
       });
 
       const result = await response.json();
@@ -264,8 +262,7 @@ export default function TopicDetailPage() {
           material,
           topicName: topic.name,
           apiKey
-        }),
-        timeout: 30000 // 30s for size analysis
+        })
       });
 
       const result = await response.json();

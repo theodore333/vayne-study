@@ -68,8 +68,7 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
       const response = await fetchWithTimeout('/api/analyze-syllabus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, subjectName, apiKey }),
-        timeout: 60000 // 60s for syllabus analysis
+        body: JSON.stringify({ text, subjectName, apiKey })
       });
 
       const data = await response.json();

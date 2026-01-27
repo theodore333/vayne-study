@@ -692,8 +692,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         body: JSON.stringify({
           text: currentText,
           apiKey
-        }),
-        timeout: 60000 // 60s for text formatting
+        })
       });
 
       const data = await response.json();

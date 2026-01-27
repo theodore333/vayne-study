@@ -463,7 +463,7 @@ function QuizContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-        timeout: 60000, // 60s for quiz generation (can be slow)
+        // 60s for quiz generation (can be slow)
         signal: abortControllerRef.current?.signal
       });
 
@@ -531,7 +531,7 @@ function QuizContent() {
           userRecall: freeRecallText,
           hintContext: ''
         }),
-        timeout: 30000,
+        
         signal: abortControllerRef.current?.signal
       });
 
@@ -569,7 +569,7 @@ function QuizContent() {
           bloomLevel: currentQuestion.bloomLevel || 3,
           concept: currentQuestion.concept
         }),
-        timeout: 30000,
+        
         signal: abortControllerRef.current?.signal
       });
 
@@ -603,7 +603,6 @@ function QuizContent() {
           subjectName: subject?.name,
           userRecall: freeRecallText
         }),
-        timeout: 45000, // 45s for evaluation
         signal: abortControllerRef.current?.signal
       });
 
@@ -654,7 +653,7 @@ function QuizContent() {
               correctAnswer: currentQuestion.correctAnswer,
               bloomLevel: currentQuestion.bloomLevel || 3
             }),
-            timeout: 30000,
+            
             signal: abortControllerRef.current?.signal
           });
 
@@ -825,7 +824,6 @@ function QuizContent() {
           topicName: topic.name,
           subjectName: subject.name
         }),
-        timeout: 45000,
         signal: abortControllerRef.current?.signal
       });
 

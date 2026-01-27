@@ -224,8 +224,7 @@ export default function TodayPage() {
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
           apiKey
-        }),
-        timeout: 60000 // 60s for AI planning
+        })
       });
 
       const result = await response.json();

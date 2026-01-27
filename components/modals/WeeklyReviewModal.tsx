@@ -198,8 +198,7 @@ export default function WeeklyReviewModal({ onClose }: Props) {
           userFeedback: { overloaded, tooMuchRepetition, enoughNewMaterial },
           type: 'weekly-review',
           apiKey
-        }),
-        timeout: 60000 // 60s for AI advice
+        })
       });
 
       const result = await response.json();

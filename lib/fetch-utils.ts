@@ -3,7 +3,7 @@
  */
 
 export interface FetchWithTimeoutOptions extends RequestInit {
-  timeout?: number; // milliseconds, default 30000 (30s)
+  timeout?: number; // milliseconds, default 300000 (5 minutes)
 }
 
 export class FetchTimeoutError extends Error {
@@ -23,7 +23,7 @@ export class FetchAbortedError extends Error {
 /**
  * Fetch with automatic timeout
  * @param url - The URL to fetch
- * @param options - Fetch options with optional timeout (default 30s)
+ * @param options - Fetch options with optional timeout (default 5 minutes)
  * @returns Promise<Response>
  * @throws FetchTimeoutError if request times out
  * @throws FetchAbortedError if request is aborted externally
@@ -32,7 +32,7 @@ export async function fetchWithTimeout(
   url: string,
   options: FetchWithTimeoutOptions = {}
 ): Promise<Response> {
-  const { timeout = 30000, signal: externalSignal, ...fetchOptions } = options;
+  const { timeout = 300000, signal: externalSignal, ...fetchOptions } = options;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);

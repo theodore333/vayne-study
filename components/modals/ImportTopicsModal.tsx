@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, FileText, Upload, Sparkles, Loader2, BookOpen, Wrench, Layers } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, FileText, Upload, Sparkles, Loader2, BookOpen, Wrench, Layers, ImagePlus, Trash2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { parseTopicsFromText } from '@/lib/algorithms';
 import type { Topic, TopicStatus } from '@/lib/types';
@@ -54,7 +54,91 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
   const [includeMixed, setIncludeMixed] = useState(true);
   const [addSubheadings, setAddSubheadings] = useState(true);
 
+  // File upload state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<{ file: File; preview?: string }[]>([]);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+
   const parsedTopics = parseTopicsFromText(text);
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const newFiles = files.map(file => {
+      const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+      return { file, preview };
+    });
+    setUploadedFiles(prev => [...prev, ...newFiles]);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Remove a file
+  const removeFile = (index: number) => {
+    setUploadedFiles(prev => {
+      const newFiles = [...prev];
+      if (newFiles[index].preview) {
+        URL.revokeObjectURL(newFiles[index].preview!);
+      }
+      newFiles.splice(index, 1);
+      return newFiles;
+    });
+  };
+
+  // Extract text from uploaded files
+  const handleExtractFromFiles = async () => {
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      alert('Добави API ключ в Settings');
+      return;
+    }
+
+    setExtracting(true);
+    setExtractError(null);
+
+    try {
+      // Convert files to base64
+      const filePromises = uploadedFiles.map(async ({ file }) => {
+        return new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      });
+
+      const base64Files = await Promise.all(filePromises);
+
+      // Send to API for extraction
+      const response = await fetchWithTimeout('/api/extract-syllabus', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: base64Files,
+          apiKey,
+          subjectName
+        })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+
+      // Set extracted text
+      setText(prev => prev ? prev + '\n\n' + result.text : result.text);
+      setUploadedFiles([]);
+    } catch (err) {
+      setExtractError(getFetchErrorMessage(err));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  // Cleanup previews on unmount
+  useEffect(() => {
+    return () => {
+      uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
+    };
+  }, []);
 
   const handleAnalyze = async () => {
     const apiKey = localStorage.getItem('claude-api-key');
@@ -199,10 +283,100 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
 
         {/* Content */}
         <div className="p-6 flex-1 overflow-auto">
+          {/* File upload */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              Качи снимки/PDF на конспект
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,.pdf"
+              multiple
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={extracting}
+              className="w-full py-3 border-2 border-dashed border-slate-600 hover:border-purple-500 rounded-lg text-slate-400 hover:text-purple-400 transition-colors flex items-center justify-center gap-2 font-mono text-sm"
+            >
+              <ImagePlus size={18} />
+              Избери файлове (снимки или PDF)
+            </button>
+
+            {/* Uploaded files preview */}
+            {uploadedFiles.length > 0 && (
+              <div className="mt-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-cyan-300 font-mono">
+                    {uploadedFiles.length} {uploadedFiles.length === 1 ? 'файл' : 'файла'} избрани
+                  </span>
+                  <button
+                    onClick={() => setUploadedFiles([])}
+                    className="text-xs text-slate-400 hover:text-slate-200"
+                  >
+                    Изчисти всички
+                  </button>
+                </div>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {uploadedFiles.map((f, i) => (
+                    <div key={i} className="relative group">
+                      {f.preview ? (
+                        <img
+                          src={f.preview}
+                          alt={f.file.name}
+                          className="h-16 w-auto rounded border border-slate-600 object-cover"
+                        />
+                      ) : (
+                        <div className="h-16 w-16 rounded border border-slate-600 bg-slate-700 flex items-center justify-center">
+                          <FileText size={20} className="text-slate-400" />
+                        </div>
+                      )}
+                      <button
+                        onClick={() => removeFile(i)}
+                        className="absolute -top-2 -right-2 w-5 h-5 bg-red-600 hover:bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={12} className="text-white" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={handleExtractFromFiles}
+                  disabled={extracting}
+                  className="w-full py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg font-mono text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {extracting ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Извличане на текст...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      Извлечи конспект от файловете
+                    </>
+                  )}
+                </button>
+                {extractError && (
+                  <p className="mt-2 text-sm text-red-400 font-mono">{extractError}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex-1 h-px bg-slate-700" />
+            <span className="text-xs text-slate-500 font-mono">или</span>
+            <div className="flex-1 h-px bg-slate-700" />
+          </div>
+
           {/* Text input */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
-              Постави конспект
+              Постави текст директно
             </label>
             <textarea
               value={text}
@@ -211,7 +385,7 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
 2. Клетъчна структура (упражнение)
 3. ДНК репликация
 ...`}
-              rows={8}
+              rows={6}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-purple-500 font-mono text-sm resize-none"
             />
           </div>

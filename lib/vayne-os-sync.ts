@@ -14,6 +14,8 @@
 
 'use client';
 
+import { fetchWithTimeout, isAbortOrTimeoutError } from './fetch-utils';
+
 interface SyncResult {
   success: boolean;
   xpAwarded?: number;
@@ -24,12 +26,13 @@ interface SyncResult {
 // Generic sync function - uses local proxy
 async function syncToVayneOS(type: string, data: unknown): Promise<SyncResult> {
   try {
-    const response = await fetch('/api/vayne-sync', {
+    const response = await fetchWithTimeout('/api/vayne-sync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ type, data }),
+      timeout: 10000, // 10 second timeout
     });
 
     const result = await response.json();
@@ -48,7 +51,9 @@ async function syncToVayneOS(type: string, data: unknown): Promise<SyncResult> {
       xpAwarded: result.xpAwarded,
     };
   } catch (error) {
-    console.error('[VAYNE-OS-SYNC] Error:', error);
+    if (!isAbortOrTimeoutError(error)) {
+      console.error('[VAYNE-OS-SYNC] Error:', error);
+    }
     return { success: false, error: 'Network error' };
   }
 }

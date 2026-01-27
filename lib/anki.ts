@@ -21,18 +21,27 @@ async function invoke<T>(action: string, params?: Record<string, unknown>): Prom
     params
   };
 
-  const response = await fetch(ANKI_CONNECT_URL, {
-    method: 'POST',
-    body: JSON.stringify(request),
-  });
+  // Add 5 second timeout for AnkiConnect requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-  const data: AnkiConnectResponse<T> = await response.json();
+  try {
+    const response = await fetch(ANKI_CONNECT_URL, {
+      method: 'POST',
+      body: JSON.stringify(request),
+      signal: controller.signal,
+    });
 
-  if (data.error) {
-    throw new Error(data.error);
+    const data: AnkiConnectResponse<T> = await response.json();
+
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    return data.result;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return data.result;
 }
 
 // Check if AnkiConnect is available

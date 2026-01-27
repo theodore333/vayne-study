@@ -89,8 +89,7 @@ export default function TimerPage() {
         const state = JSON.parse(saved);
         const now = Date.now();
 
-        // Always restore count and phase (even if paused)
-        setPomodoroPhase(state.phase || 'work');
+        // Always restore count
         setPomodoroCount(state.count || 0);
         setTimerMode('pomodoro');
 
@@ -99,23 +98,29 @@ export default function TimerPage() {
         const EXPIRY_MARGIN = 1000; // 1 second
 
         if (state.endTime && state.endTime > now + EXPIRY_MARGIN) {
-          // Timer is still running with enough time left
+          // Timer is still running with enough time left - restore phase
+          setPomodoroPhase(state.phase || 'work');
           setPomodoroEndTime(state.endTime);
           setIsRunning(true);
         } else if (state.endTime && state.endTime <= now + EXPIRY_MARGIN) {
           // Timer expired (or nearly expired) while tab was closed - mark for completion (no sound)
           // Use saved duration if available, otherwise fall back to current settings
+          setPomodoroPhase(state.phase || 'work');
           const duration = state.duration || (state.phase === 'work' ? 25 : state.phase === 'shortBreak' ? 5 : 15);
           setPendingCompletion({ phase: state.phase, count: state.count || 0, duration });
           setPomodoroEndTime(null);
           setIsRunning(false);
         } else if (state.pausedTimeLeft && state.pausedTimeLeft > 0) {
-          // Timer was paused - restore the remaining time
+          // Timer was paused - restore the remaining time and phase
+          setPomodoroPhase(state.phase || 'work');
           setPomodoroTimeLeft(state.pausedTimeLeft);
           setIsPaused(true);
           setIsRunning(false);
+        } else {
+          // No active timer - always start fresh with work phase
+          // This prevents showing break phase when user opens app fresh
+          setPomodoroPhase('work');
         }
-        // If no endTime and no pausedTimeLeft, timer was stopped - just restore count/phase
       }
     } catch (e) {
       console.error('Failed to restore pomodoro state:', e);

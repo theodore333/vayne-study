@@ -5,6 +5,7 @@ import { X, Upload, FileText, Loader2, Sparkles, AlertCircle, Check, Settings, C
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
 import { Topic } from '@/lib/types';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 interface ImportQuestionsModalProps {
   subjectId: string;
@@ -184,9 +185,10 @@ export default function ImportQuestionsModal({
           formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
           formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
 
-          const response = await fetch('/api/extract-questions', {
+          const response = await fetchWithTimeout('/api/extract-questions', {
             method: 'POST',
-            body: formData
+            body: formData,
+            timeout: 180000 // 3 minutes for question extraction per part
           });
 
           const responseText = await response.text();
@@ -236,9 +238,10 @@ export default function ImportQuestionsModal({
       formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
       formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
 
-      const response = await fetch('/api/extract-questions', {
+      const response = await fetchWithTimeout('/api/extract-questions', {
         method: 'POST',
-        body: formData
+        body: formData,
+        timeout: 180000 // 3 minutes for question extraction
       });
 
       const responseText = await response.text();

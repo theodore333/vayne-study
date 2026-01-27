@@ -5,6 +5,7 @@ import { X, FileText, Upload, Sparkles, Loader2, BookOpen, Wrench, Layers } from
 import { useApp } from '@/lib/context';
 import { parseTopicsFromText } from '@/lib/algorithms';
 import type { Topic, TopicStatus } from '@/lib/types';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 interface Props {
   subjectId: string;
@@ -64,10 +65,11 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
 
     setAnalyzing(true);
     try {
-      const response = await fetch('/api/analyze-syllabus', {
+      const response = await fetchWithTimeout('/api/analyze-syllabus', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, subjectName, apiKey })
+        body: JSON.stringify({ text, subjectName, apiKey }),
+        timeout: 60000 // 60s for syllabus analysis
       });
 
       const data = await response.json();
@@ -76,7 +78,7 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
       setAnalysis(data);
       setMode('smart');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Грешка при анализ');
+      alert(getFetchErrorMessage(error));
     } finally {
       setAnalyzing(false);
     }

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Upload, FileText, Image, Loader2, Sparkles, AlertCircle, Check, Settings, Edit2, Trash2, Plus, AlertTriangle, DollarSign } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 interface ImportFileModalProps {
   subjectId: string;
@@ -139,9 +140,10 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
       formData.append('apiKey', apiKey);
       formData.append('subjectName', subjectName);
 
-      const response = await fetch('/api/extract', {
+      const response = await fetchWithTimeout('/api/extract', {
         method: 'POST',
-        body: formData
+        body: formData,
+        timeout: 120000 // 2 minutes for file extraction
       });
 
       // Get response text first to handle non-JSON responses
@@ -173,7 +175,7 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
         incrementApiCalls(result.usage.cost);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(getFetchErrorMessage(err));
     } finally {
       setIsProcessing(false);
     }

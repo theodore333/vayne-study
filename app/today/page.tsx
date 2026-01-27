@@ -11,6 +11,7 @@ import WeeklyReviewModal from '@/components/modals/WeeklyReviewModal';
 import Link from 'next/link';
 import { DailyTask } from '@/lib/types';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 export default function TodayPage() {
   const { data, isLoading, incrementApiCalls } = useApp();
@@ -214,7 +215,7 @@ export default function TodayPage() {
     setAiPlanReasoning(null);
 
     try {
-      const response = await fetch('/api/ai-plan', {
+      const response = await fetchWithTimeout('/api/ai-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -223,7 +224,8 @@ export default function TodayPage() {
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
           apiKey
-        })
+        }),
+        timeout: 60000 // 60s for AI planning
       });
 
       const result = await response.json();
@@ -249,7 +251,7 @@ export default function TodayPage() {
       }
     } catch (error) {
       console.error('Failed to generate AI plan:', error);
-      alert('Грешка при генериране на AI план.');
+      alert(getFetchErrorMessage(error));
     } finally {
       setLoadingAiPlan(false);
     }

@@ -5,6 +5,7 @@ import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkl
 import { useApp } from '@/lib/context';
 import { TopicStatus } from '@/lib/types';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getDeckNames, getSelectedDecks, saveSelectedDecks } from '@/lib/anki';
+import { fetchWithTimeout } from '@/lib/fetch-utils';
 
 interface ImportResult {
   matched: number;
@@ -64,10 +65,11 @@ export default function SettingsPage() {
     setTestResult(null);
 
     try {
-      const response = await fetch('/api/test-key', {
+      const response = await fetchWithTimeout('/api/test-key', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey })
+        body: JSON.stringify({ apiKey }),
+        timeout: 15000 // 15s for API key test
       });
 
       if (response.ok) {

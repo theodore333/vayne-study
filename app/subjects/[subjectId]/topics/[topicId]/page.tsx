@@ -10,6 +10,7 @@ import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { getDaysSince } from '@/lib/algorithms';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 export default function TopicDetailPage() {
   const params = useParams();
@@ -94,7 +95,7 @@ export default function TopicDetailPage() {
 
     try {
       // Convert base64 images to blobs and send
-      const response = await fetch('/api/extract-material', {
+      const response = await fetchWithTimeout('/api/extract-material', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -103,7 +104,8 @@ export default function TopicDetailPage() {
           topicName: topic.name,
           subjectName: subject.name,
           existingMaterial: material
-        })
+        }),
+        timeout: 60000 // 60s for image processing
       });
 
       const result = await response.json();
@@ -128,7 +130,7 @@ export default function TopicDetailPage() {
       }
 
     } catch (err) {
-      setExtractError(err instanceof Error ? err.message : 'Грешка');
+      setExtractError(getFetchErrorMessage(err));
     } finally {
       setIsExtracting(false);
     }
@@ -211,9 +213,10 @@ export default function TopicDetailPage() {
       formData.append('subjectName', subject.name);
       formData.append('existingMaterial', material);
 
-      const response = await fetch('/api/extract-material', {
+      const response = await fetchWithTimeout('/api/extract-material', {
         method: 'POST',
-        body: formData
+        body: formData,
+        timeout: 60000 // 60s for file processing
       });
 
       const result = await response.json();
@@ -237,7 +240,7 @@ export default function TopicDetailPage() {
       }
 
     } catch (err) {
-      setExtractError(err instanceof Error ? err.message : 'Грешка');
+      setExtractError(getFetchErrorMessage(err));
     } finally {
       setIsExtracting(false);
       // Reset file input
@@ -254,14 +257,15 @@ export default function TopicDetailPage() {
     setIsAnalyzingSize(true);
 
     try {
-      const response = await fetch('/api/analyze-size', {
+      const response = await fetchWithTimeout('/api/analyze-size', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           material,
           topicName: topic.name,
           apiKey
-        })
+        }),
+        timeout: 30000 // 30s for size analysis
       });
 
       const result = await response.json();
@@ -275,7 +279,7 @@ export default function TopicDetailPage() {
         updateTopicSize(subjectId, topic.id, result.size, 'ai');
       }
     } catch (err) {
-      setExtractError(err instanceof Error ? err.message : 'Грешка');
+      setExtractError(getFetchErrorMessage(err));
     } finally {
       setIsAnalyzingSize(false);
     }

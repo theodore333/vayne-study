@@ -349,7 +349,7 @@ export default function GPAPage() {
                   <input
                     type="number"
                     value={newGrade.year}
-                    onChange={(e) => setNewGrade({ ...newGrade, year: parseInt(e.target.value) })}
+                    onChange={(e) => setNewGrade({ ...newGrade, year: parseInt(e.target.value) || new Date().getFullYear() })}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
                   />
                 </div>
@@ -371,7 +371,7 @@ export default function GPAPage() {
                 <input
                   type="number"
                   value={newGrade.grade}
-                  onChange={(e) => setNewGrade({ ...newGrade, grade: parseFloat(e.target.value) })}
+                  onChange={(e) => setNewGrade({ ...newGrade, grade: parseFloat(e.target.value) || 6 })}
                   min={2}
                   max={6}
                   step={0.01}
@@ -426,7 +426,7 @@ export default function GPAPage() {
                 <input
                   type="number"
                   value={newStateExam.grade}
-                  onChange={(e) => setNewStateExam({ ...newStateExam, grade: parseFloat(e.target.value) })}
+                  onChange={(e) => setNewStateExam({ ...newStateExam, grade: parseFloat(e.target.value) || 6 })}
                   min={2}
                   max={6}
                   step={0.01}

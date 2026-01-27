@@ -218,8 +218,19 @@ function markdownToHtml(markdown: string): string {
 
   // Helper to sanitize URLs (prevent javascript: and data: XSS)
   const sanitizeUrl = (url: string): string => {
-    const trimmed = url.trim().toLowerCase();
-    if (trimmed.startsWith('javascript:') || trimmed.startsWith('data:') || trimmed.startsWith('vbscript:')) {
+    // Decode URL-encoded characters to catch obfuscation attempts
+    let decoded = url;
+    try {
+      decoded = decodeURIComponent(url);
+    } catch {
+      // If decoding fails, use original (it might not be encoded)
+    }
+    const trimmed = decoded.trim().toLowerCase().replace(/\s/g, '');
+    // Block dangerous protocols
+    if (trimmed.startsWith('javascript:') ||
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('vbscript:') ||
+        trimmed.startsWith('file:')) {
       return '#'; // Neutralize dangerous URLs
     }
     return url;

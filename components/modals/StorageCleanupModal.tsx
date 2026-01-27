@@ -21,7 +21,7 @@ interface StorageCleanupModalProps {
 }
 
 export default function StorageCleanupModal({ onClose }: StorageCleanupModalProps) {
-  const { data, updateTopic } = useApp();
+  const { data, updateTopic, cleanOldTimerSessions } = useApp();
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
   const [completed, setCompleted] = useState(false);
@@ -257,8 +257,13 @@ export default function StorageCleanupModal({ onClose }: StorageCleanupModalProp
             });
             break;
 
-          // Note: old_timer_sessions requires modifying timerSessions array
-          // which needs a new context method - skip for now
+          case 'old_timer_sessions':
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - 60);
+            const oldSessions = data.timerSessions.filter(s => new Date(s.startTime) < cutoffDate);
+            totalSaved += JSON.stringify(oldSessions).length * 2;
+            cleanOldTimerSessions(cutoffDate);
+            break;
         }
       }
 

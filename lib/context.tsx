@@ -68,6 +68,7 @@ interface AppContextType {
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
   updateStudyGoals: (goals: Partial<StudyGoals>) => void;
   updateAcademicPeriod: (period: Partial<AcademicPeriod>) => void;
+  cleanOldTimerSessions: (cutoffDate: Date) => void;
 
   // Timer with distraction note
   stopTimerWithNote: (rating: number | null, distractionNote?: string) => void;
@@ -486,11 +487,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     grade: number,
     quizMeta?: { bloomLevel?: number; questionsCount?: number; correctAnswers?: number; weight?: number }
   ) => {
-    // Validate grade is in Bulgarian scale (2-6)
-    const validGrade = Math.max(2, Math.min(6, grade));
-    if (grade !== validGrade) {
-      console.warn(`Invalid grade ${grade} clamped to ${validGrade}`);
+    // Validate grade is in Bulgarian scale (2-6), handle NaN/Infinity
+    if (!Number.isFinite(grade)) {
+      console.warn(`Invalid grade ${grade}, using default 2`);
+      grade = 2;
     }
+    const validGrade = Math.max(2, Math.min(6, grade));
 
     updateData(prev => {
       // Find old status and current Bloom level for quiz history
@@ -541,7 +543,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             let newBloomLevel = t.currentBloomLevel || 1;
 
             // Count quizzes AT the current Bloom level with good scores (>= 70%)
-            const quizHistory = t.quizHistory || [];
+            // Include the current quiz in the check (it will be added to history below)
+            const quizHistory = [...(t.quizHistory || []), quizResult];
             const quizzesAtCurrentLevel = quizHistory.filter(
               q => q.bloomLevel === newBloomLevel && q.score >= 70
             );
@@ -991,6 +994,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // Clean old timer sessions (for storage cleanup)
+  const cleanOldTimerSessions = useCallback((cutoffDate: Date) => {
+    updateData(prev => ({
+      ...prev,
+      timerSessions: prev.timerSessions.filter(s => new Date(s.startTime) >= cutoffDate)
+    }));
+  }, [updateData]);
+
   // Calculate streak for achievement checking (uses helper function)
   const calculateStreak = useCallback((sessions: TimerSession[]) => {
     return calculateStudyStreak(sessions);
@@ -1076,6 +1087,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updatePomodoroSettings,
       updateStudyGoals,
       updateAcademicPeriod,
+      cleanOldTimerSessions,
       stopTimerWithNote,
       earnXp,
       newAchievements,

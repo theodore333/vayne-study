@@ -59,12 +59,21 @@ export default function APIError({ error, onRetry, showApiKeyLink = true }: APIE
 
   const info = getErrorInfo();
 
+  // Static Tailwind classes (dynamic classes don't compile)
+  const colorClasses = {
+    amber: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-300' },
+    orange: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-300' },
+    blue: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-300' },
+    red: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-300' },
+  };
+  const colors = colorClasses[info.color as keyof typeof colorClasses] || colorClasses.red;
+
   return (
-    <div className={`p-4 rounded-lg border bg-${info.color}-500/10 border-${info.color}-500/30`}>
+    <div className={`p-4 rounded-lg border ${colors.bg} ${colors.border}`}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5">{info.icon}</div>
         <div className="flex-1">
-          <h3 className={`text-sm font-semibold font-mono text-${info.color}-300`}>
+          <h3 className={`text-sm font-semibold font-mono ${colors.text}`}>
             {info.title}
           </h3>
           <p className="text-xs text-slate-400 font-mono mt-1">

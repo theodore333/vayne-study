@@ -279,10 +279,19 @@ export function loadData(): AppData {
     if (isCompressed) {
       const decompressed = LZString.decompress(stored);
       if (!decompressed) {
-        console.error('Failed to decompress data');
-        return defaultData;
+        // Decompression failed - try to parse as uncompressed JSON (recovery attempt)
+        console.warn('Decompression failed, attempting to parse as raw JSON');
+        try {
+          JSON.parse(stored); // Test if it's valid JSON
+          // If we get here, stored is valid JSON - compression flag was incorrect
+          localStorage.setItem(COMPRESSED_FLAG, 'false');
+        } catch {
+          console.error('Data recovery failed - returning default data');
+          return defaultData;
+        }
+      } else {
+        stored = decompressed;
       }
-      stored = decompressed;
     }
 
     const data = JSON.parse(stored);

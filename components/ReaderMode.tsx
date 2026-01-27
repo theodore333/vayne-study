@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 const lowlight = createLowlight(common);
 
@@ -602,13 +603,14 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     setIsFormatting(true);
 
     try {
-      const response = await fetch('/api/format-text', {
+      const response = await fetchWithTimeout('/api/format-text', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: currentText,
           apiKey
-        })
+        }),
+        timeout: 60000 // 60s for text formatting
       });
 
       const data = await response.json();
@@ -634,7 +636,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
     } catch (error) {
       console.error('Format error:', error);
-      alert(error instanceof Error ? error.message : 'Грешка при форматиране');
+      alert(getFetchErrorMessage(error));
     } finally {
       setIsFormatting(false);
     }

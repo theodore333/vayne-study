@@ -6,6 +6,7 @@ import { useApp } from '@/lib/context';
 import { WeeklyReviewData } from '@/lib/types';
 import { getDaysSince } from '@/lib/algorithms';
 import { NEW_MATERIAL_QUOTA } from '@/lib/constants';
+import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 interface Props {
   onClose: () => void;
@@ -183,7 +184,7 @@ export default function WeeklyReviewModal({ onClose }: Props) {
     setLoadingAdvice(true);
 
     try {
-      const response = await fetch('/api/ai-advice', {
+      const response = await fetchWithTimeout('/api/ai-advice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -197,7 +198,8 @@ export default function WeeklyReviewModal({ onClose }: Props) {
           userFeedback: { overloaded, tooMuchRepetition, enoughNewMaterial },
           type: 'weekly-review',
           apiKey
-        })
+        }),
+        timeout: 60000 // 60s for AI advice
       });
 
       const result = await response.json();
@@ -211,7 +213,7 @@ export default function WeeklyReviewModal({ onClose }: Props) {
       }
     } catch (error) {
       console.error('Failed to fetch AI advice:', error);
-      setAiAdvice('Грешка при свързване с AI.');
+      setAiAdvice(getFetchErrorMessage(error));
     } finally {
       setLoadingAdvice(false);
     }

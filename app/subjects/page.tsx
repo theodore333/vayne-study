@@ -108,6 +108,7 @@ function SubjectsContent() {
   };
 
   const selectAllFiltered = () => {
+    if (!filteredTopics) return;
     setSelectedTopicsForBulk(filteredTopics.map(t => t.id));
   };
 

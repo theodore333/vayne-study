@@ -382,6 +382,10 @@ export function calculateDailyWorkload(
 
     const examDate = new Date(subject.examDate);
     examDate.setHours(0, 0, 0, 0);
+
+    // Skip past exams
+    if (examDate < today) continue;
+
     const daysLeft = Math.max(1, Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
 
     // Count non-green topics

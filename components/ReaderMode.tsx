@@ -607,20 +607,27 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Handle scroll progress
+  // Handle scroll progress with throttling for performance
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
+    let ticking = false;
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const progress = scrollHeight > clientHeight
-        ? (scrollTop / (scrollHeight - clientHeight)) * 100
-        : 100;
-      setScrollProgress(progress);
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          const progress = scrollHeight > clientHeight
+            ? (scrollTop / (scrollHeight - clientHeight)) * 100
+            : 100;
+          setScrollProgress(progress);
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
-    container.addEventListener('scroll', handleScroll);
+    container.addEventListener('scroll', handleScroll, { passive: true });
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
@@ -758,7 +765,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col">
       {/* Progress bar */}
       <div className="fixed top-0 left-0 right-0 h-1 bg-stone-200 z-50">
-        <div className="h-full bg-amber-500 transition-all duration-150" style={{ width: `${scrollProgress}%` }} />
+        <div className="h-full bg-amber-500" style={{ width: `${scrollProgress}%` }} />
       </div>
 
       {/* Header */}

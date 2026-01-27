@@ -159,7 +159,7 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-opus-4-5-20251101',
       max_tokens: 16000,
       messages: [{ role: 'user', content }],
       stream: true

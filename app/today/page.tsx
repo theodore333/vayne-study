@@ -16,8 +16,18 @@ import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 export default function TodayPage() {
   const { data, isLoading, incrementApiCalls } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
-  const [completedTasks, setCompletedTasks] = useState<Set<string>>(new Set());
-  const [completedTopics, setCompletedTopics] = useState<Set<string>>(new Set());
+  const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem(`completed-tasks-${todayStr}`);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
+  const [completedTopics, setCompletedTopics] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    const todayStr = new Date().toISOString().split('T')[0];
+    const stored = localStorage.getItem(`completed-topics-${todayStr}`);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
 
   // API key state
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -107,6 +117,15 @@ export default function TodayPage() {
 
   // Check which topics have been reviewed today
   const today = new Date().toISOString().split('T')[0];
+
+  // Save completed tasks/topics to localStorage
+  useEffect(() => {
+    localStorage.setItem(`completed-tasks-${today}`, JSON.stringify([...completedTasks]));
+  }, [completedTasks, today]);
+
+  useEffect(() => {
+    localStorage.setItem(`completed-topics-${today}`, JSON.stringify([...completedTopics]));
+  }, [completedTopics, today]);
 
   // Filter out archived subjects
   const activeSubjects = useMemo(

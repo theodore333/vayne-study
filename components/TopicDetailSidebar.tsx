@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Star, BookOpen, Trash2, FileText, Save } from 'lucide-react';
 import { Topic, TopicStatus } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -21,13 +21,11 @@ export default function TopicDetailSidebar({ topic, subjectId, subjectColor, onC
   const [material, setMaterial] = useState(topic.material || '');
   const [materialSaved, setMaterialSaved] = useState(true);
 
-  // Track previous topic ID to reset state when topic changes (React 18+ pattern)
-  const prevTopicIdRef = useRef(topic.id);
-  if (prevTopicIdRef.current !== topic.id) {
-    prevTopicIdRef.current = topic.id;
+  // Reset material state when topic changes
+  useEffect(() => {
     setMaterial(topic.material || '');
     setMaterialSaved(true);
-  }
+  }, [topic.id, topic.material]);
 
   const handleStatusChange = (status: TopicStatus) => {
     setTopicStatus(subjectId, topic.id, status);

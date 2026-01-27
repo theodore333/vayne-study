@@ -42,6 +42,10 @@ export default function TodayPage() {
   const [loadingAiPlan, setLoadingAiPlan] = useState(false);
   const [aiPlanReasoning, setAiPlanReasoning] = useState<string | null>(null);
 
+  // Bonus plan state (when 100% complete)
+  const [bonusPlanMode, setBonusPlanMode] = useState<'tomorrow' | 'review' | 'weak' | null>(null);
+  const [loadingBonusPlan, setLoadingBonusPlan] = useState(false);
+
   // Load API key
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
@@ -221,6 +225,64 @@ export default function TodayPage() {
     }));
     setCustomPlan(plan);
     setPlanIsCustomized(true);
+  };
+
+  // Generate bonus AI plan (when 100% complete)
+  const handleGenerateBonusPlan = async (mode: 'tomorrow' | 'review' | 'weak') => {
+    if (!apiKey) {
+      alert('Добави API ключ в Settings за да използваш AI планиране.');
+      return;
+    }
+
+    setBonusPlanMode(mode);
+    setLoadingBonusPlan(true);
+
+    try {
+      const response = await fetchWithTimeout('/api/ai-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjects: activeSubjects,
+          schedule: data.schedule,
+          dailyStatus: data.dailyStatus,
+          studyGoals: data.studyGoals,
+          apiKey,
+          bonusMode: mode // Tell the API this is a bonus plan
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        alert(`Грешка: ${result.error}`);
+      } else if (result.tasks) {
+        // Save as custom plan (replaces current)
+        const todayStr = new Date().toISOString().split('T')[0];
+        const customPlanKey = `custom-daily-plan-${todayStr}`;
+        localStorage.setItem(customPlanKey, JSON.stringify({
+          date: todayStr,
+          tasks: result.tasks,
+          isCustomized: true
+        }));
+        setCustomPlan(result.tasks);
+        setPlanIsCustomized(true);
+        setAiPlanReasoning(result.reasoning || null);
+
+        // Reset completed states for new plan
+        setCompletedTasks(new Set());
+        setCompletedTopics(new Set());
+
+        if (result.cost) {
+          incrementApiCalls(result.cost);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate bonus plan:', error);
+      alert(getFetchErrorMessage(error));
+    } finally {
+      setLoadingBonusPlan(false);
+      setBonusPlanMode(null);
+    }
   };
 
   // Generate AI plan
@@ -581,11 +643,81 @@ export default function TodayPage() {
         )}
       </div>
 
-      {/* Completion Message */}
-      {topicProgressPercent === 100 && dailyPlan.length > 0 && (
-        <div className="p-6 rounded-xl bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-700/30 text-center">
-          <div className="text-4xl mb-2">🎉</div>
-          <p className="text-green-300 font-mono text-lg">Всички задачи за днес са завършени!</p>
+      {/* Completion Message with Bonus Options */}
+      {topicProgressPercent === 100 && activePlan.length > 0 && (
+        <div className="p-6 rounded-xl bg-gradient-to-r from-green-900/30 to-emerald-900/30 border border-green-700/30">
+          <div className="text-center mb-4">
+            <div className="text-4xl mb-2">🎉</div>
+            <p className="text-green-300 font-mono text-lg">Всички задачи за днес са завършени!</p>
+          </div>
+
+          {/* Bonus Plan Options */}
+          <div className="mt-6 pt-4 border-t border-green-700/30">
+            <p className="text-center text-slate-400 font-mono text-sm mb-4">Искаш ли да продължиш?</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                onClick={() => handleGenerateBonusPlan('tomorrow')}
+                disabled={loadingBonusPlan || !apiKey}
+                className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingBonusPlan && bonusPlanMode === 'tomorrow' ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin" />
+                    <span className="text-blue-300 font-mono text-sm">Генерирам...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl mb-2">📅</div>
+                    <div className="text-blue-300 font-mono text-sm font-medium">Утрешен материал</div>
+                    <div className="text-slate-500 font-mono text-xs mt-1">Започни напред</div>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleGenerateBonusPlan('review')}
+                disabled={loadingBonusPlan || !apiKey}
+                className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingBonusPlan && bonusPlanMode === 'review' ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full animate-spin" />
+                    <span className="text-purple-300 font-mono text-sm">Генерирам...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl mb-2">🔄</div>
+                    <div className="text-purple-300 font-mono text-sm font-medium">Екстра преговор</div>
+                    <div className="text-slate-500 font-mono text-xs mt-1">Затвърди наученото</div>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => handleGenerateBonusPlan('weak')}
+                disabled={loadingBonusPlan || !apiKey}
+                className="p-4 rounded-xl bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loadingBonusPlan && bonusPlanMode === 'weak' ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-4 h-4 border-2 border-orange-400/30 border-t-orange-400 rounded-full animate-spin" />
+                    <span className="text-orange-300 font-mono text-sm">Генерирам...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-2xl mb-2">🎯</div>
+                    <div className="text-orange-300 font-mono text-sm font-medium">Слаби теми</div>
+                    <div className="text-slate-500 font-mono text-xs mt-1">Фокус върху gaps</div>
+                  </>
+                )}
+              </button>
+            </div>
+            {!apiKey && (
+              <p className="text-center text-slate-500 font-mono text-xs mt-3">
+                Добави API ключ в Settings за AI планиране
+              </p>
+            )}
+          </div>
         </div>
       )}
 

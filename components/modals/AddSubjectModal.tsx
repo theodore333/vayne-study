@@ -147,7 +147,7 @@ export default function AddSubjectModal({ onClose }: Props) {
               min={new Date().toISOString().split('T')[0]}
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-blue-500 font-mono"
             />
-            {examDate && new Date(examDate) < new Date(new Date().toDateString()) && (
+            {examDate && examDate < new Date().toISOString().split('T')[0] && (
               <p className="text-xs text-red-400 mt-1 font-mono">⚠️ Датата е в миналото</p>
             )}
           </div>

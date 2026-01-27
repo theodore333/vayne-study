@@ -247,8 +247,8 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
 
     const topicsToAdd = extractedTopics
       .filter((_, i) => selectedTopics.has(i))
-      .map(t => ({
-        number: typeof t.number === 'string' ? parseFloat(t.number) || 0 : t.number,
+      .map((t, index) => ({
+        number: typeof t.number === 'string' ? (parseFloat(t.number) || (index + 1)) : (t.number || (index + 1)),
         name: t.name,
         status: 'gray' as const,
         lastReview: null,

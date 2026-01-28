@@ -278,6 +278,11 @@ export interface StudyGoals {
   useWeekendHours: boolean;   // Use different hours for weekends
   vacationMode: boolean;      // Between semesters - reduced workload
   vacationMultiplier: number; // Multiplier for vacation mode (default 0.4 = 40%)
+  // FSRS Settings
+  fsrsEnabled?: boolean;           // Enable FSRS spaced repetition (default true)
+  fsrsTargetRetention?: number;    // Target retrievability 0.7-0.95 (default 0.85)
+  fsrsMaxReviewsPerDay?: number;   // Max reviews per day 1-20 (default 8)
+  fsrsMaxInterval?: number;        // Max interval in days 30-365 (default 180)
 }
 
 export interface AcademicPeriod {

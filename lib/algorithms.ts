@@ -7,8 +7,8 @@ import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_
 // Key difference: Longer base intervals since topics are bigger than cards
 // ============================================================================
 
-// FSRS Parameters (tuned for topics, not flashcards)
-const FSRS_PARAMS = {
+// FSRS Default Parameters (tuned for topics, not flashcards)
+const FSRS_DEFAULTS = {
   // Initial stability values by first rating
   w: [0.4, 0.6, 2.4, 5.8],  // Again, Hard, Good, Easy → initial S
   // Stability growth factors
@@ -26,6 +26,19 @@ const FSRS_PARAMS = {
   minInterval: 1,           // Minimum 1 day between reviews
   maxInterval: 180,         // Max 6 months for well-known topics
 };
+
+// Get FSRS params merged with user settings
+export function getFSRSParams(studyGoals?: StudyGoals) {
+  return {
+    ...FSRS_DEFAULTS,
+    targetR: studyGoals?.fsrsTargetRetention ?? FSRS_DEFAULTS.targetR,
+    maxDailyReviews: studyGoals?.fsrsMaxReviewsPerDay ?? FSRS_DEFAULTS.maxDailyReviews,
+    maxInterval: studyGoals?.fsrsMaxInterval ?? FSRS_DEFAULTS.maxInterval,
+  };
+}
+
+// For backwards compatibility
+const FSRS_PARAMS = FSRS_DEFAULTS;
 
 /**
  * Calculate retrievability (probability of recall) at time t

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus } from '@/lib/types';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getDeckNames, getSelectedDecks, saveSelectedDecks } from '@/lib/anki';
@@ -458,6 +458,116 @@ export default function SettingsPage() {
               <p className="text-xs text-cyan-300 font-mono">
                 Vacation mode: {Math.round((studyGoals.dailyMinutes * studyGoals.vacationMultiplier) / 60)}ч дневно вместо {Math.round(studyGoals.dailyMinutes / 60)}ч,
                 по-дълги decay интервали, фокус върху нов материал.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* FSRS Spaced Repetition Settings */}
+      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2 mb-4">
+          <Brain size={20} className="text-purple-400" />
+          FSRS Spaced Repetition
+        </h2>
+
+        <p className="text-sm text-slate-400 font-mono mb-4">
+          Настройки за алгоритъма за оптимално преговаряне. По-висока retention = повече reviews.
+        </p>
+
+        {/* Enable/Disable FSRS */}
+        <div className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg mb-4">
+          <div>
+            <p className="text-slate-200 font-mono">FSRS алгоритъм</p>
+            <p className="text-xs text-slate-500 font-mono mt-1">
+              {studyGoals.fsrsEnabled !== false
+                ? 'Активен - оптимални интервали за преговор'
+                : 'Изключен - ползва се legacy decay система'
+              }
+            </p>
+          </div>
+          <button
+            onClick={() => updateStudyGoals({ fsrsEnabled: studyGoals.fsrsEnabled === false })}
+            className={`relative w-12 h-6 rounded-full transition-colors ${
+              studyGoals.fsrsEnabled !== false ? 'bg-purple-600' : 'bg-slate-600'
+            }`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+              studyGoals.fsrsEnabled !== false ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+
+        {studyGoals.fsrsEnabled !== false && (
+          <div className="space-y-4">
+            {/* Target Retention */}
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">
+                Target Retention ({Math.round((studyGoals.fsrsTargetRetention ?? 0.85) * 100)}%)
+              </label>
+              <input
+                type="range"
+                min={70}
+                max={95}
+                step={5}
+                value={(studyGoals.fsrsTargetRetention ?? 0.85) * 100}
+                onChange={(e) => updateStudyGoals({ fsrsTargetRetention: parseInt(e.target.value) / 100 })}
+                className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
+              />
+              <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
+                <span>70% (малко reviews)</span>
+                <span>85%</span>
+                <span>95% (много reviews)</span>
+              </div>
+            </div>
+
+            {/* Max Reviews Per Day */}
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">
+                Max reviews на ден ({studyGoals.fsrsMaxReviewsPerDay ?? 8})
+              </label>
+              <input
+                type="range"
+                min={3}
+                max={20}
+                step={1}
+                value={studyGoals.fsrsMaxReviewsPerDay ?? 8}
+                onChange={(e) => updateStudyGoals({ fsrsMaxReviewsPerDay: parseInt(e.target.value) })}
+                className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
+              />
+              <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
+                <span>3 (минимум)</span>
+                <span>8</span>
+                <span>20 (интензивно)</span>
+              </div>
+            </div>
+
+            {/* Max Interval */}
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">
+                Max интервал ({studyGoals.fsrsMaxInterval ?? 180} дни)
+              </label>
+              <input
+                type="range"
+                min={30}
+                max={365}
+                step={30}
+                value={studyGoals.fsrsMaxInterval ?? 180}
+                onChange={(e) => updateStudyGoals({ fsrsMaxInterval: parseInt(e.target.value) })}
+                className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
+              />
+              <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
+                <span>30д (агресивно)</span>
+                <span>180д</span>
+                <span>365д (relaxed)</span>
+              </div>
+            </div>
+
+            <div className="p-3 bg-purple-900/20 border border-purple-800/30 rounded-lg">
+              <p className="text-xs text-purple-300 font-mono">
+                При {Math.round((studyGoals.fsrsTargetRetention ?? 0.85) * 100)}% retention:
+                темите се преговарят когато вероятността да ги помниш падне до {Math.round((studyGoals.fsrsTargetRetention ?? 0.85) * 100)}%.
+                Max {studyGoals.fsrsMaxReviewsPerDay ?? 8} теми на ден предпазва от review hell.
               </p>
             </div>
           </div>

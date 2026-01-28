@@ -163,6 +163,15 @@ export const QUIZ_LENGTH_PRESETS: Record<QuizLengthPreset, {
 // Topic section for organizing theory vs practice
 export type TopicSection = 'theoretical' | 'practical';
 
+// FSRS Memory State for spaced repetition
+export interface FSRSState {
+  stability: number;       // S - how long memory lasts (days), starts at 1
+  difficulty: number;      // D - inherent topic difficulty (0.1-1.0)
+  lastReview: string;      // ISO date of last review
+  reps: number;            // successful review count
+  lapses: number;          // times forgotten (score < 60%)
+}
+
 export interface Topic {
   id: string;
   number: number;
@@ -174,6 +183,8 @@ export interface Topic {
   quizCount: number;
   material: string;
   materialImages: string[];
+  // FSRS Spaced Repetition (optional, migrates from old system)
+  fsrs?: FSRSState;
   // Bloom's Taxonomy tracking
   currentBloomLevel: BloomLevel; // Current mastery level
   quizHistory: QuizResult[]; // History of quiz results by Bloom level

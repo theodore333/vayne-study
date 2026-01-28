@@ -8,7 +8,7 @@ import MaterialEditor from '@/components/MaterialEditor';
 import { TextHighlight } from '@/lib/types';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
-import { getDaysSince } from '@/lib/algorithms';
+import { getDaysSince, calculateRetrievability, getDaysUntilReview } from '@/lib/algorithms';
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
@@ -662,6 +662,36 @@ export default function TopicDetailPage() {
                 <div className="mt-2 text-xs text-slate-500 font-mono">
                   {topic.quizCount} {topic.quizCount === 1 ? 'тест' : 'теста'}
                 </div>
+
+                {/* FSRS Memory Indicator */}
+                {topic.fsrs && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-500">🧠 Памет:</span>
+                      <span className={`font-medium ${
+                        calculateRetrievability(topic.fsrs) >= 0.9 ? 'text-green-400' :
+                        calculateRetrievability(topic.fsrs) >= 0.7 ? 'text-yellow-400' :
+                        'text-orange-400'
+                      }`}>
+                        {Math.round(calculateRetrievability(topic.fsrs) * 100)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-mono mt-1">
+                      <span className="text-slate-500">Стабилност:</span>
+                      <span className="text-slate-300">{Math.round(topic.fsrs.stability)} дни</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs font-mono mt-1">
+                      <span className="text-slate-500">Преговор след:</span>
+                      <span className={`${
+                        getDaysUntilReview(topic.fsrs) <= 0 ? 'text-red-400' :
+                        getDaysUntilReview(topic.fsrs) <= 2 ? 'text-orange-400' :
+                        'text-slate-300'
+                      }`}>
+                        {getDaysUntilReview(topic.fsrs) <= 0 ? 'Сега!' : `${getDaysUntilReview(topic.fsrs)} дни`}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

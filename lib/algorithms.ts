@@ -1,5 +1,201 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
+
+// ============================================================================
+// FSRS (Free Spaced Repetition Scheduler) for Topics
+// Adapted from FSRS v4 algorithm for larger knowledge units (topics vs flashcards)
+// Key difference: Longer base intervals since topics are bigger than cards
+// ============================================================================
+
+// FSRS Parameters (tuned for topics, not flashcards)
+const FSRS_PARAMS = {
+  // Initial stability values by first rating
+  w: [0.4, 0.6, 2.4, 5.8],  // Again, Hard, Good, Easy → initial S
+  // Stability growth factors
+  factor: 2.5,              // Base growth factor
+  decay: -0.5,              // Decay rate for stability increase
+  // Topic-specific adjustments (topics need less frequent review than cards)
+  topicMultiplier: 1.5,     // Topics get 50% longer intervals than cards
+  // Difficulty bounds
+  minD: 0.1,
+  maxD: 1.0,
+  // Retrievability threshold for scheduling
+  targetR: 0.85,            // Schedule review when R drops to 85% (vs 90% for cards)
+  // Anti-review-hell settings
+  maxDailyReviews: 8,       // Cap reviews per day
+  minInterval: 1,           // Minimum 1 day between reviews
+  maxInterval: 180,         // Max 6 months for well-known topics
+};
+
+/**
+ * Calculate retrievability (probability of recall) at time t
+ * R(t) = e^(-t/S) where S is stability
+ */
+export function calculateRetrievability(fsrs: FSRSState): number {
+  const daysSinceReview = getDaysSince(fsrs.lastReview);
+  if (daysSinceReview === 0) return 1.0;
+
+  const R = Math.exp(-daysSinceReview / fsrs.stability);
+  return Math.max(0, Math.min(1, R));
+}
+
+/**
+ * Calculate days until retrievability drops to target threshold
+ * Solving: targetR = e^(-t/S) → t = -S * ln(targetR)
+ */
+export function getDaysUntilReview(fsrs: FSRSState): number {
+  const daysUntil = -fsrs.stability * Math.log(FSRS_PARAMS.targetR);
+  const daysSinceReview = getDaysSince(fsrs.lastReview);
+  return Math.max(0, Math.round(daysUntil - daysSinceReview));
+}
+
+/**
+ * Check if topic needs review based on retrievability
+ */
+export function topicNeedsReview(topic: Topic): boolean {
+  if (!topic.fsrs) return false; // No FSRS state = use old decay system
+
+  const R = calculateRetrievability(topic.fsrs);
+  return R <= FSRS_PARAMS.targetR;
+}
+
+/**
+ * Initialize FSRS state for a topic (called after first quiz)
+ */
+export function initializeFSRS(quizScore: number): FSRSState {
+  // Convert score (0-100) to rating (0-3): Again, Hard, Good, Easy
+  const rating = quizScore < 60 ? 0 : quizScore < 75 ? 1 : quizScore < 90 ? 2 : 3;
+
+  // Initial stability based on first performance
+  const initialS = FSRS_PARAMS.w[rating] * FSRS_PARAMS.topicMultiplier;
+
+  // Initial difficulty estimate (adjusted by performance)
+  // Good/Easy performance → lower difficulty, Again/Hard → higher
+  const initialD = 0.5 + (2 - rating) * 0.15; // 0.8, 0.65, 0.5, 0.35
+
+  return {
+    stability: Math.max(1, initialS),
+    difficulty: Math.max(FSRS_PARAMS.minD, Math.min(FSRS_PARAMS.maxD, initialD)),
+    lastReview: new Date().toISOString().split('T')[0],
+    reps: rating >= 1 ? 1 : 0, // Count as rep only if not "Again"
+    lapses: rating === 0 ? 1 : 0
+  };
+}
+
+/**
+ * Update FSRS state after a quiz
+ * Core FSRS algorithm adapted for topics
+ */
+export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState {
+  const rating = quizScore < 60 ? 0 : quizScore < 75 ? 1 : quizScore < 90 ? 2 : 3;
+  const R = calculateRetrievability(currentFsrs);
+
+  let newS: number;
+  let newD: number;
+  let newReps = currentFsrs.reps;
+  let newLapses = currentFsrs.lapses;
+
+  if (rating === 0) {
+    // LAPSE: Failed recall - reduce stability significantly
+    newLapses++;
+    // Stability drops to fraction based on difficulty
+    newS = Math.max(1, currentFsrs.stability * 0.3 * (1 - currentFsrs.difficulty * 0.5));
+    // Difficulty increases on lapse
+    newD = Math.min(FSRS_PARAMS.maxD, currentFsrs.difficulty + 0.1);
+  } else {
+    // SUCCESS: Grow stability
+    newReps++;
+
+    // Stability growth formula (simplified FSRS)
+    // Higher R at review → less stability growth (reviewed too early)
+    // Lower difficulty → more stability growth
+    const growthFactor = FSRS_PARAMS.factor * (1 - currentFsrs.difficulty * 0.3);
+    const retrievabilityBonus = 1 + (1 - R) * 0.5; // Bonus for reviewing when R is lower
+    const ratingBonus = 1 + (rating - 1) * 0.15; // Easy = more growth
+
+    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS_PARAMS.topicMultiplier;
+    newS = Math.min(FSRS_PARAMS.maxInterval, Math.max(FSRS_PARAMS.minInterval, newS));
+
+    // Difficulty decreases slightly on success
+    const dChange = (rating - 2) * 0.05; // Hard: +0.05, Good: 0, Easy: -0.05
+    newD = Math.max(FSRS_PARAMS.minD, Math.min(FSRS_PARAMS.maxD, currentFsrs.difficulty - dChange));
+  }
+
+  return {
+    stability: Math.round(newS * 10) / 10,
+    difficulty: Math.round(newD * 100) / 100,
+    lastReview: new Date().toISOString().split('T')[0],
+    reps: newReps,
+    lapses: newLapses
+  };
+}
+
+/**
+ * Get topics that need review today, sorted by urgency
+ * Includes anti-review-hell protection
+ */
+export function getTopicsNeedingFSRSReview(
+  subjects: Subject[],
+  maxReviews: number = FSRS_PARAMS.maxDailyReviews
+): Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> {
+  const needsReview: Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> = [];
+
+  for (const subject of subjects) {
+    if (subject.archived) continue;
+
+    for (const topic of subject.topics) {
+      if (!topic.fsrs) continue;
+
+      const R = calculateRetrievability(topic.fsrs);
+
+      // Include if below threshold
+      if (R <= FSRS_PARAMS.targetR) {
+        // Urgency: how far below threshold (lower R = more urgent)
+        const urgency = (FSRS_PARAMS.targetR - R) / FSRS_PARAMS.targetR;
+        needsReview.push({ topic, subject, urgency, retrievability: R });
+      }
+    }
+  }
+
+  // Sort by urgency (most urgent first)
+  needsReview.sort((a, b) => b.urgency - a.urgency);
+
+  // Anti-review-hell: cap daily reviews
+  return needsReview.slice(0, maxReviews);
+}
+
+/**
+ * Migrate topic from old decay system to FSRS
+ * Uses existing quiz history to estimate initial state
+ */
+export function migrateToFSRS(topic: Topic): FSRSState | null {
+  // Need at least one quiz to initialize
+  if (topic.quizHistory.length === 0) return null;
+
+  // Use most recent quiz for initial rating
+  const recentQuiz = topic.quizHistory[topic.quizHistory.length - 1];
+  const fsrs = initializeFSRS(recentQuiz.score);
+
+  // Adjust stability based on status (proxy for past performance)
+  if (topic.status === 'green') {
+    fsrs.stability *= 2; // Green topics have proven retention
+    fsrs.difficulty = Math.max(0.2, fsrs.difficulty - 0.1);
+  } else if (topic.status === 'yellow') {
+    fsrs.stability *= 1.3;
+  } else if (topic.status === 'orange') {
+    fsrs.difficulty = Math.min(0.8, fsrs.difficulty + 0.1);
+  }
+
+  // Use actual last review date if available
+  if (topic.lastReview) {
+    fsrs.lastReview = topic.lastReview;
+  }
+
+  // Estimate reps from quiz count
+  fsrs.reps = Math.min(topic.quizCount, 10);
+
+  return fsrs;
+}
 
 /**
  * Fisher-Yates shuffle for unbiased random permutation
@@ -857,20 +1053,60 @@ export function generateDailyPlan(
     }
   }
 
-  // 3. MEDIUM: Decay warning - only if we have remaining capacity
-  // Uses adaptive decay thresholds based on topic mastery
+  // 3. MEDIUM: Spaced Repetition Reviews (FSRS + legacy decay)
+  // FSRS topics: use retrievability-based scheduling (optimal intervals)
+  // Legacy topics: use adaptive decay thresholds
   // In vacation mode, extend thresholds by 50% (more relaxed review schedule)
   const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
 
   if (capacityForReview > 0) {
+    // 3a. FSRS-based reviews (priority - these are scientifically scheduled)
+    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForReview, FSRS_PARAMS.maxDailyReviews));
+
+    if (fsrsReviews.length > 0) {
+      // Group by subject
+      const bySubject = new Map<string, typeof fsrsReviews>();
+      for (const item of fsrsReviews) {
+        const existing = bySubject.get(item.subject.id) || [];
+        existing.push(item);
+        bySubject.set(item.subject.id, existing);
+      }
+
+      for (const [subjectId, items] of bySubject) {
+        if (capacityForReview <= 0) break;
+        const subject = subjects.find(s => s.id === subjectId);
+        if (!subject) continue;
+
+        const topicsToTake = Math.min(items.length, capacityForReview, 4);
+        const selectedTopics = items.slice(0, topicsToTake).map(i => i.topic);
+        const avgR = Math.round(items.slice(0, topicsToTake).reduce((s, i) => s + i.retrievability, 0) / topicsToTake * 100);
+
+        tasks.push({
+          id: generateId(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          subjectColor: subject.color,
+          type: 'medium',
+          typeLabel: '🧠 FSRS Review',
+          description: `Spaced repetition (${avgR}% retrievability)`,
+          topics: selectedTopics,
+          estimatedMinutes: selectedTopics.length * 15, // Reviews are faster
+          completed: false
+        });
+        capacityForReview -= selectedTopics.length;
+      }
+    }
+
+    // 3b. Legacy decay-based reviews (for topics without FSRS state)
     for (const subject of subjects) {
       if (capacityForReview <= 0) break;
 
-      // Use adaptive decay warning days based on mastery
+      // Only consider topics WITHOUT fsrs state (legacy)
       const decayingTopics = subject.topics.filter(t => {
         if (t.status === 'gray') return false;
+        if (t.fsrs) return false; // Skip FSRS topics, already handled
         const days = getDaysSince(t.lastReview);
-        const baseWarningDays = getDecayWarningDays(t);  // Adaptive threshold
+        const baseWarningDays = getDecayWarningDays(t);
         const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
         return days >= warningDays;
       });
@@ -878,8 +1114,7 @@ export function generateDailyPlan(
       if (decayingTopics.length > 0 && capacityForReview > 0) {
         const topicsToTake = Math.min(Math.ceil(capacityForReview * 0.3), decayingTopics.length, 5);
         const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
-        if (selectedTopics.length === 0) continue; // Guard against division by zero
-        // Calculate average warning days for description
+        if (selectedTopics.length === 0) continue;
         const avgWarningDays = Math.round(
           selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
         );
@@ -890,7 +1125,7 @@ export function generateDailyPlan(
           subjectColor: subject.color,
           type: 'medium',
           typeLabel: '⚠️ Риск от забравяне',
-          description: `Преговор на теми без review ${avgWarningDays}+ дни (адаптивен праг)`,
+          description: `Преговор на теми без review ${avgWarningDays}+ дни`,
           topics: selectedTopics,
           estimatedMinutes: selectedTopics.length * 20,
           completed: false

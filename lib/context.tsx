@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
-import { generateId, getTodayString, gradeToStatus } from './algorithms';
+import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
 interface AppContextType {
@@ -558,6 +558,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             }
 
+            // Update or initialize FSRS state
+            const newFsrs = t.fsrs
+              ? updateFSRS(t.fsrs, score)  // Existing FSRS state - update
+              : initializeFSRS(score);     // First quiz - initialize
+
             return {
               ...t,
               grades: newGrades,
@@ -566,7 +571,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               status: gradeToStatus(avgGrade),
               lastReview: new Date().toISOString(),
               currentBloomLevel: newBloomLevel,
-              quizHistory: [...(t.quizHistory || []), quizResult]
+              quizHistory: [...(t.quizHistory || []), quizResult],
+              fsrs: newFsrs  // FSRS spaced repetition state
             };
           })
         };

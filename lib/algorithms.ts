@@ -961,19 +961,44 @@ export function generateDailyPlan(
 
   if (remainingTopics === 0) return tasks;
 
-  // NEW: Reserve quota for gray topics (new material)
-  // This ensures progress with new material even when there's review pressure
+  // DYNAMIC QUOTA for new material based on urgency
+  // More gray topics + closer exam = higher quota for new material
+  const totalTopics = subjects.reduce((sum, s) => sum + s.topics.length, 0);
   const totalGrayTopics = subjects.reduce((sum, s) =>
     sum + s.topics.filter(t => t.status === 'gray').length, 0);
+  const grayPercentage = totalTopics > 0 ? totalGrayTopics / totalTopics : 0;
+
+  // Find closest exam
+  const closestExamDays = Math.min(
+    ...subjects
+      .filter(s => s.examDate)
+      .map(s => getDaysUntil(s.examDate))
+      .filter(d => d > 0),
+    Infinity
+  );
+
+  // Calculate dynamic quota (30-50%)
+  let newMaterialQuota = NEW_MATERIAL_QUOTA; // base 25%
+  if (grayPercentage > 0.6) {
+    newMaterialQuota = 0.45; // 60%+ gray → 45% quota
+  } else if (grayPercentage > 0.4 && closestExamDays < 14) {
+    newMaterialQuota = 0.50; // 40%+ gray AND exam <14 days → 50% quota
+  } else if (grayPercentage > 0.4) {
+    newMaterialQuota = 0.40; // 40%+ gray → 40% quota
+  } else if (closestExamDays < 7 && grayPercentage > 0.2) {
+    newMaterialQuota = 0.40; // Exam <7 days AND 20%+ gray → 40%
+  } else {
+    newMaterialQuota = 0.30; // Default 30%
+  }
+
   const reservedForNew = Math.min(
-    Math.ceil(remainingTopics * NEW_MATERIAL_QUOTA),
+    Math.ceil(remainingTopics * newMaterialQuota),
     totalGrayTopics
   );
-  // Capacity for Tier 1-3 (exams, exercises, decay prevention)
-  // FIX: Ensure this never goes negative
-  let capacityForReview = Math.max(0, remainingTopics - reservedForNew);
-  // Track how much of reserved capacity is actually used
-  let usedNewMaterialSlots = 0;
+
+  // Capacity for Tier 1-2 (critical exams, exercises)
+  // New material is now Tier 3, FSRS is Tier 4
+  let capacityForPriority = Math.max(0, remainingTopics - reservedForNew);
 
   const today = new Date();
   const tomorrow = new Date(today);
@@ -993,7 +1018,7 @@ export function generateDailyPlan(
     if (!subject || subject.topics.length === 0) continue;
 
     const subjectWork = subjectWorkload.get(subject.id);
-    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, capacityForReview) : Math.min(5, capacityForReview);
+    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, capacityForPriority) : Math.min(5, capacityForPriority);
 
     // Select topics with related grouping
     const candidates = subject.topics.filter(t => t.status !== 'green');
@@ -1012,13 +1037,13 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20, // ~20 min per topic
         completed: false
       });
-      capacityForReview -= weakTopics.length;
+      capacityForPriority -= weakTopics.length;
     }
   }
 
   // 2. HIGH: Subjects with exams - use their calculated daily workload
   for (const subjectWork of workload.bySubject) {
-    if (capacityForReview <= 0) break;
+    if (capacityForPriority <= 0) break;
 
     const subject = subjects.find(s => s.id === subjectWork.subjectId);
     if (!subject) continue;
@@ -1026,7 +1051,7 @@ export function generateDailyPlan(
     // Skip if already added as critical
     if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
 
-    const topicsToTake = Math.min(subjectWork.topics, capacityForReview);
+    const topicsToTake = Math.min(subjectWork.topics, capacityForPriority);
 
     // Check exam format for special recommendations
     const examFormat = parseExamFormat(subject.examFormat);
@@ -1062,95 +1087,15 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20,
         completed: false
       });
-      capacityForReview -= weakTopics.length;
+      capacityForPriority -= weakTopics.length;
     }
   }
 
-  // 3. MEDIUM: Spaced Repetition Reviews (FSRS + legacy decay)
-  // FSRS topics: use retrievability-based scheduling (optimal intervals)
-  // Legacy topics: use adaptive decay thresholds
-  // In vacation mode, extend thresholds by 50% (more relaxed review schedule)
-  const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
-
-  if (capacityForReview > 0) {
-    // 3a. FSRS-based reviews (priority - these are scientifically scheduled)
-    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForReview, FSRS_PARAMS.maxDailyReviews));
-
-    if (fsrsReviews.length > 0) {
-      // Group by subject
-      const bySubject = new Map<string, typeof fsrsReviews>();
-      for (const item of fsrsReviews) {
-        const existing = bySubject.get(item.subject.id) || [];
-        existing.push(item);
-        bySubject.set(item.subject.id, existing);
-      }
-
-      for (const [subjectId, items] of bySubject) {
-        if (capacityForReview <= 0) break;
-        const subject = subjects.find(s => s.id === subjectId);
-        if (!subject) continue;
-
-        const topicsToTake = Math.min(items.length, capacityForReview, 4);
-        const selectedTopics = items.slice(0, topicsToTake).map(i => i.topic);
-        const avgR = Math.round(items.slice(0, topicsToTake).reduce((s, i) => s + i.retrievability, 0) / topicsToTake * 100);
-
-        tasks.push({
-          id: generateId(),
-          subjectId: subject.id,
-          subjectName: subject.name,
-          subjectColor: subject.color,
-          type: 'medium',
-          typeLabel: '🧠 FSRS Review',
-          description: `Spaced repetition (${avgR}% retrievability)`,
-          topics: selectedTopics,
-          estimatedMinutes: selectedTopics.length * 15, // Reviews are faster
-          completed: false
-        });
-        capacityForReview -= selectedTopics.length;
-      }
-    }
-
-    // 3b. Legacy decay-based reviews (for topics without FSRS state)
-    for (const subject of subjects) {
-      if (capacityForReview <= 0) break;
-
-      // Only consider topics WITHOUT fsrs state (legacy)
-      const decayingTopics = subject.topics.filter(t => {
-        if (t.status === 'gray') return false;
-        if (t.fsrs) return false; // Skip FSRS topics, already handled
-        const days = getDaysSince(t.lastReview);
-        const baseWarningDays = getDecayWarningDays(t);
-        const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
-        return days >= warningDays;
-      });
-
-      if (decayingTopics.length > 0 && capacityForReview > 0) {
-        const topicsToTake = Math.min(Math.ceil(capacityForReview * 0.3), decayingTopics.length, 5);
-        const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
-        if (selectedTopics.length === 0) continue;
-        const avgWarningDays = Math.round(
-          selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
-        );
-        tasks.push({
-          id: generateId(),
-          subjectId: subject.id,
-          subjectName: subject.name,
-          subjectColor: subject.color,
-          type: 'medium',
-          typeLabel: '⚠️ Риск от забравяне',
-          description: `Преговор на теми без review ${avgWarningDays}+ дни`,
-          topics: selectedTopics,
-          estimatedMinutes: selectedTopics.length * 20,
-          completed: false
-        });
-        capacityForReview -= selectedTopics.length;
-      }
-    }
-  }
-
-  // 4. NORMAL: New material - use reserved quota + any remaining capacity
-  // This ensures guaranteed progress with new material (gray topics)
-  const availableForNew = reservedForNew + Math.max(0, capacityForReview);
+  // 3. NEW MATERIAL - Higher priority than reviews!
+  // Coverage is more important than retention polish
+  // Uses dynamic quota (30-50%) based on gray% and exam proximity
+  const availableForNew = reservedForNew + Math.max(0, capacityForPriority);
+  let capacityAfterNew = capacityForPriority; // Track remaining for FSRS
 
   if (availableForNew > 0) {
     // Collect all gray topics from subjects with exams, sorted by urgency
@@ -1194,15 +1139,15 @@ export function generateDailyPlan(
             existingTask.estimatedMinutes += selectedTopics.length * 20;
             existingTask.description += ' + нов материал';
           } else {
-            // Create new task
+            // Create new task - NOW MEDIUM PRIORITY (tier 3)
             tasks.push({
               id: generateId(),
               subjectId: subject.id,
               subjectName: subject.name,
               subjectColor: subject.color,
-              type: 'normal',
-              typeLabel: '📚 Нов материал (квота)',
-              description: `Започни нови теми (${Math.round(NEW_MATERIAL_QUOTA * 100)}% дневна квота)`,
+              type: 'medium',
+              typeLabel: `📚 Нов материал (${Math.round(newMaterialQuota * 100)}%)`,
+              description: `Покрий нови теми - ${Math.round(grayPercentage * 100)}% непокрити`,
               topics: selectedTopics,
               estimatedMinutes: selectedTopics.length * 20,
               completed: false
@@ -1210,8 +1155,89 @@ export function generateDailyPlan(
           }
 
           newMaterialBudget -= selectedTopics.length;
-          usedNewMaterialSlots += selectedTopics.length;
+          capacityAfterNew -= selectedTopics.length;
         }
+      }
+    }
+  }
+
+  // 4. FSRS Reviews - After new material, use remaining capacity
+  // Reviews are "polish" - important but not as urgent as coverage
+  const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
+  const fsrsParams = getFSRSParams(studyGoals);
+
+  if (capacityAfterNew > 0) {
+    // 4a. FSRS-based reviews
+    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityAfterNew, fsrsParams.maxDailyReviews));
+
+    if (fsrsReviews.length > 0) {
+      // Group by subject
+      const bySubject = new Map<string, typeof fsrsReviews>();
+      for (const item of fsrsReviews) {
+        const existing = bySubject.get(item.subject.id) || [];
+        existing.push(item);
+        bySubject.set(item.subject.id, existing);
+      }
+
+      for (const [subjectId, items] of bySubject) {
+        if (capacityAfterNew <= 0) break;
+        const subject = subjects.find(s => s.id === subjectId);
+        if (!subject) continue;
+
+        const topicsToTake = Math.min(items.length, capacityAfterNew, 4);
+        const selectedTopics = items.slice(0, topicsToTake).map(i => i.topic);
+        const avgR = Math.round(items.slice(0, topicsToTake).reduce((s, i) => s + i.retrievability, 0) / topicsToTake * 100);
+
+        tasks.push({
+          id: generateId(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          subjectColor: subject.color,
+          type: 'normal',
+          typeLabel: '🧠 FSRS Review',
+          description: `Spaced repetition (${avgR}% памет)`,
+          topics: selectedTopics,
+          estimatedMinutes: selectedTopics.length * 15, // Reviews are faster
+          completed: false
+        });
+        capacityAfterNew -= selectedTopics.length;
+      }
+    }
+
+    // 4b. Legacy decay-based reviews (for topics without FSRS state)
+    for (const subject of subjects) {
+      if (capacityAfterNew <= 0) break;
+
+      // Only consider topics WITHOUT fsrs state (legacy)
+      const decayingTopics = subject.topics.filter(t => {
+        if (t.status === 'gray') return false;
+        if (t.fsrs) return false; // Skip FSRS topics, already handled
+        const days = getDaysSince(t.lastReview);
+        const baseWarningDays = getDecayWarningDays(t);
+        const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
+        return days >= warningDays;
+      });
+
+      if (decayingTopics.length > 0 && capacityAfterNew > 0) {
+        const topicsToTake = Math.min(Math.ceil(capacityAfterNew * 0.3), decayingTopics.length, 5);
+        const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
+        if (selectedTopics.length === 0) continue;
+        const avgWarningDays = Math.round(
+          selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
+        );
+        tasks.push({
+          id: generateId(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          subjectColor: subject.color,
+          type: 'normal',
+          typeLabel: '⚠️ Преговор',
+          description: `Теми без review ${avgWarningDays}+ дни`,
+          topics: selectedTopics,
+          estimatedMinutes: selectedTopics.length * 20,
+          completed: false
+        });
+        capacityAfterNew -= selectedTopics.length;
       }
     }
   }

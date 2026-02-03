@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
 
 // ============================================================================
@@ -948,7 +948,8 @@ export function generateDailyPlan(
   schedule: ScheduleClass[],
   dailyStatus: DailyStatus,
   studyGoals?: StudyGoals,
-  ankiDueCards?: number
+  ankiDueCards?: number,
+  developmentProjects?: DevelopmentProject[]
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
@@ -1249,6 +1250,60 @@ export function generateDailyPlan(
         completed: false
       });
       capacityAfterNew -= selectedTopics.length;
+    }
+  }
+
+  // 6. PROJECTS - Development projects (lowest priority, no exam pressure)
+  // Only show if there's remaining capacity and active projects exist
+  if (developmentProjects && developmentProjects.length > 0 && capacityAfterNew > 0) {
+    const activeProjects = developmentProjects
+      .filter(p => p.status === 'active')
+      .sort((a, b) => {
+        // Sort by priority (high first), then by progress (less complete first)
+        const priorityOrder = { high: 0, medium: 1, low: 2 };
+        if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
+          return priorityOrder[a.priority] - priorityOrder[b.priority];
+        }
+        return a.progressPercent - b.progressPercent;
+      });
+
+    // Take max 2 projects per day to avoid overwhelm
+    const projectsToShow = activeProjects.slice(0, 2);
+
+    for (const project of projectsToShow) {
+      if (capacityAfterNew <= 0) break;
+
+      // Get incomplete modules
+      const incompleteModules = project.modules
+        .filter(m => m.status !== 'completed')
+        .sort((a, b) => a.order - b.order)
+        .slice(0, 3); // Max 3 modules per project
+
+      if (incompleteModules.length > 0 || project.modules.length === 0) {
+        const estimatedMinutes = incompleteModules.length > 0
+          ? incompleteModules.length * 30 // ~30 min per module
+          : 30; // Default 30 min if no modules
+
+        tasks.push({
+          id: generateId(),
+          subjectId: '', // No subject
+          subjectName: project.name,
+          subjectColor: '#06b6d4', // Cyan for projects
+          type: 'project',
+          typeLabel: `🚀 Проект`,
+          description: incompleteModules.length > 0
+            ? `${incompleteModules.length} модула за изпълнение`
+            : project.description || 'Продължи с проекта',
+          topics: [], // No topics
+          estimatedMinutes,
+          completed: false,
+          projectId: project.id,
+          projectName: project.name,
+          projectModules: incompleteModules
+        });
+
+        capacityAfterNew -= 1; // Count as 1 task slot
+      }
     }
   }
 

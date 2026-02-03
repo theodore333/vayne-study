@@ -462,12 +462,16 @@ export interface DailyTask {
   subjectId: string;
   subjectName: string;
   subjectColor: string;
-  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal';
+  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal' | 'project';
   typeLabel: string;
   description: string;
   topics: Topic[];
   estimatedMinutes: number;
   completed: boolean;
+  // Project-specific fields (for type='project')
+  projectId?: string;
+  projectName?: string;
+  projectModules?: ProjectModule[];
 }
 
 // Custom daily plan (edited by user)

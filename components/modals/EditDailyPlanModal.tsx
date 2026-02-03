@@ -113,7 +113,8 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
     critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
     high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
     medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-    normal: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' }
+    normal: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
+    project: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' }
   };
 
   return (

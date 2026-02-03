@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -14,7 +14,7 @@ import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 export default function TodayPage() {
-  const { data, isLoading, incrementApiCalls } = useApp();
+  const { data, isLoading, incrementApiCalls, updateProjectModule } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -166,9 +166,10 @@ export default function TodayPage() {
       data.schedule,
       data.dailyStatus,
       data.studyGoals,
-      ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined
+      ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined,
+      data.developmentProjects
     ),
-    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats]
+    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects]
   );
 
   // Calculate syllabus progress/workload
@@ -361,7 +362,8 @@ export default function TodayPage() {
     critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
     high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
     medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },
-    normal: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' }
+    normal: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
+    project: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' }
   };
 
   const formatDate = () => {
@@ -722,6 +724,7 @@ export default function TodayPage() {
                       <p className={"text-sm mb-3 " + (isCompleted ? "text-slate-600" : "text-slate-400")}>
                         {task.description}
                       </p>
+                      {/* Render topics for subject tasks */}
                       {task.topics.length > 0 && (
                         <div className="space-y-1.5">
                           {task.topics.map((topic) => {
@@ -755,6 +758,59 @@ export default function TodayPage() {
                             );
                           })}
                         </div>
+                      )}
+                      {/* Render modules for project tasks */}
+                      {task.type === 'project' && task.projectModules && task.projectModules.length > 0 && (
+                        <div className="space-y-1.5">
+                          {task.projectModules.map((module) => {
+                            const isModuleDone = module.status === 'completed';
+                            return (
+                              <div key={module.id} className={`flex items-center gap-2 p-2 rounded-lg transition-all overflow-hidden ${
+                                isModuleDone ? 'bg-green-500/10' : 'hover:bg-slate-800/50'
+                              }`}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (task.projectId) {
+                                      updateProjectModule(task.projectId, module.id, {
+                                        status: isModuleDone ? 'available' : 'completed'
+                                      });
+                                    }
+                                  }}
+                                  className="shrink-0"
+                                >
+                                  {isModuleDone ? (
+                                    <CheckCircle2 size={18} className="text-green-500" />
+                                  ) : (
+                                    <Circle size={18} className="text-slate-600 hover:text-slate-400" />
+                                  )}
+                                </button>
+                                <Link
+                                  href={`/projects`}
+                                  className={`flex-1 min-w-0 overflow-hidden text-xs font-mono group ${
+                                    isModuleDone ? 'line-through text-slate-500' : 'text-slate-300 hover:text-cyan-400'
+                                  }`}
+                                  title={module.title}
+                                >
+                                  <Rocket size={12} className="inline mr-1.5 text-cyan-400" />
+                                  <span className="group-hover:underline">
+                                    {module.title.length > 45 ? module.title.slice(0, 45) + '...' : module.title}
+                                  </span>
+                                </Link>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {/* Empty state for projects without modules */}
+                      {task.type === 'project' && (!task.projectModules || task.projectModules.length === 0) && (
+                        <Link
+                          href="/projects"
+                          className="block p-2 rounded-lg bg-cyan-500/5 hover:bg-cyan-500/10 text-xs font-mono text-cyan-400 transition-all"
+                        >
+                          <Rocket size={12} className="inline mr-1.5" />
+                          Отвори проекта за повече детайли
+                        </Link>
                       )}
                     </div>
                   </div>

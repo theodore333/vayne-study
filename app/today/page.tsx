@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode, calculateDailyTopics } from '@/lib/algorithms';
+import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -181,6 +181,12 @@ export default function TodayPage() {
   const syllabusProgress = useMemo(
     () => calculateDailyTopics(activeSubjects, data.dailyStatus, data.studyGoals),
     [activeSubjects, data.dailyStatus, data.studyGoals]
+  );
+
+  // FSRS scheduled reviews - topics that need review based on retrievability
+  const fsrsReviews = useMemo(
+    () => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85),
+    [activeSubjects, data.studyGoals.fsrsTargetRetention]
   );
 
   // Calculate study streak
@@ -625,6 +631,71 @@ export default function TodayPage() {
         </div>
       )}
 
+      {/* FSRS Scheduled Reviews */}
+      {fsrsReviews.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Brain size={20} className="text-purple-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100 font-mono">FSRS Преговор</h3>
+                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниска запаметеност</p>
+              </div>
+            </div>
+            {fsrsReviews.length > 1 && (
+              <Link
+                href={`/quiz?multi=true&topics=${fsrsReviews.slice(0, 5).map(r => `${r.subject.id}:${r.topic.id}`).join(',')}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+              >
+                <Brain size={12} />
+                Mix Quiz ({Math.min(5, fsrsReviews.length)})
+              </Link>
+            )}
+          </div>
+
+          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            {fsrsReviews.slice(0, 8).map(({ topic, subject, retrievability }) => (
+              <div
+                key={topic.id}
+                className="flex items-center gap-3 p-2 bg-slate-800/30 rounded-lg"
+              >
+                <div
+                  className="w-2 h-8 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: subject.color }}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-slate-200 truncate">{topic.name}</div>
+                  <div className="text-[10px] text-slate-500">{subject.name}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`text-sm font-mono font-bold ${
+                    retrievability < 0.5 ? 'text-red-400' :
+                    retrievability < 0.7 ? 'text-orange-400' :
+                    'text-yellow-400'
+                  }`}>
+                    {Math.round(retrievability * 100)}%
+                  </div>
+                  <Link
+                    href={`/quiz?subject=${subject.id}&topic=${topic.id}`}
+                    className="px-2 py-1 text-[10px] font-mono bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 rounded transition-colors"
+                  >
+                    Quiz
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {fsrsReviews.length > 8 && (
+            <div className="mt-2 text-center">
+              <span className="text-xs text-slate-500 font-mono">
+                +{fsrsReviews.length - 8} още теми
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Daily Plan Tasks */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
         <div className="p-6 border-b border-[#1e293b]">
@@ -719,6 +790,36 @@ export default function TodayPage() {
                         <span className={"text-xs font-mono px-2 py-1 rounded " + colors.bg + " " + colors.text + " border " + colors.border}>
                           {task.typeLabel}
                         </span>
+                        {/* Cognitive Load Indicator */}
+                        {(() => {
+                          const grayCount = task.topics.filter(t => t.status === 'gray').length;
+                          const yellowCount = task.topics.filter(t => t.status === 'yellow').length;
+                          const totalTopics = task.topics.length;
+
+                          if (totalTopics === 0) return null;
+
+                          const grayRatio = grayCount / totalTopics;
+
+                          if (grayRatio > 0.5 || task.type === 'critical') {
+                            return (
+                              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30" title="Тежко - нов материал">
+                                🔥 Тежко
+                              </span>
+                            );
+                          } else if (grayRatio > 0 || yellowCount > 0) {
+                            return (
+                              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title="Умерено - преговор + ново">
+                                ⚡ Умерено
+                              </span>
+                            );
+                          } else {
+                            return (
+                              <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" title="Леко - консолидация">
+                                💚 Леко
+                              </span>
+                            );
+                          }
+                        })()}
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: task.subjectColor }} />

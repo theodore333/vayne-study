@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, ReactNode } from 'react';
-import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useMemo, ReactNode } from 'react';
+import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw, Flame, Brain, BarChart3, Zap } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts } from '@/lib/algorithms';
+import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview } from '@/lib/algorithms';
+import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
@@ -100,10 +101,53 @@ export default function Dashboard() {
     { green: 0, yellow: 0, orange: 0, gray: 0 }
   );
 
+  // Analytics data
+  const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
+  const longestStreak = useMemo(() => getLongestStreak(data.timerSessions), [data.timerSessions]);
+  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85), [activeSubjects, data.studyGoals.fsrsTargetRetention]);
+  const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
       <StatsGrid subjects={activeSubjects} totalTopics={totalTopics} alertsCount={alerts.length} />
+
+      {/* Quick Analytics Widgets */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <QuickStatWidget
+          icon={<Flame size={18} className="text-orange-400" />}
+          label="Streak"
+          value={`${currentStreak} дни`}
+          subValue={`Рекорд: ${longestStreak}`}
+          color="orange"
+          href="/analytics"
+        />
+        <QuickStatWidget
+          icon={<Brain size={18} className="text-purple-400" />}
+          label="FSRS ревю"
+          value={fsrsReviews.length.toString()}
+          subValue="теми за преговор"
+          color="purple"
+          href="/today"
+        />
+        <QuickStatWidget
+          icon={<Zap size={18} className="text-yellow-400" />}
+          label="Ниво"
+          value={`Lv. ${analyticsSummary.level}`}
+          subValue={`${analyticsSummary.xpTotal} XP`}
+          color="yellow"
+          href="/analytics"
+        />
+        <QuickStatWidget
+          icon={<BarChart3 size={18} className="text-blue-400" />}
+          label="Тестове"
+          value={analyticsSummary.totalQuizzes.toString()}
+          subValue={`Ср: ${analyticsSummary.averageQuizScore}%`}
+          color="blue"
+          href="/analytics"
+        />
+      </div>
+
       {ankiStats && <AnkiWidget stats={ankiStats} onRefresh={refreshAnkiStats} loading={ankiLoading} />}
       <StatusOverview statusCounts={statusCounts} totalTopics={totalTopics} />
       <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
@@ -284,5 +328,38 @@ function AlertsSection({ alerts }: AlertsSectionProps) {
         ))}
       </ul>
     </div>
+  );
+}
+
+interface QuickStatWidgetProps {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  subValue: string;
+  color: 'orange' | 'purple' | 'yellow' | 'blue' | 'green';
+  href: string;
+}
+
+function QuickStatWidget({ icon, label, value, subValue, color, href }: QuickStatWidgetProps) {
+  const colors = {
+    orange: 'border-orange-500/30 hover:border-orange-500/50 bg-orange-500/10',
+    purple: 'border-purple-500/30 hover:border-purple-500/50 bg-purple-500/10',
+    yellow: 'border-yellow-500/30 hover:border-yellow-500/50 bg-yellow-500/10',
+    blue: 'border-blue-500/30 hover:border-blue-500/50 bg-blue-500/10',
+    green: 'border-green-500/30 hover:border-green-500/50 bg-green-500/10',
+  };
+
+  return (
+    <Link
+      href={href}
+      className={`p-4 rounded-xl border ${colors[color]} transition-all hover:scale-[1.02]`}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        {icon}
+        <span className="text-xs text-slate-400 font-mono">{label}</span>
+      </div>
+      <div className="text-xl font-bold text-slate-100 font-mono">{value}</div>
+      <div className="text-xs text-slate-500 font-mono">{subValue}</div>
+    </Link>
   );
 }

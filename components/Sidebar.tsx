@@ -1,8 +1,13 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle, Clock, GraduationCap, Brain, Settings, FileQuestion, PanelLeftClose, PanelLeft, Stethoscope, Rocket } from 'lucide-react';
+import {
+  LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle,
+  Clock, GraduationCap, Settings, FileQuestion, PanelLeftClose, PanelLeft,
+  Stethoscope, Rocket, ChevronDown, ChevronRight, BarChart3
+} from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -15,34 +20,112 @@ const icons = {
   TrendingUp,
   Clock,
   GraduationCap,
-  Brain,
   Settings,
   FileQuestion,
   Stethoscope,
-  Rocket
+  Rocket,
+  BarChart3
 };
 
-const NAV_ITEMS = [
-  { href: '/', label: 'Табло', icon: 'LayoutDashboard' },
-  { href: '/today', label: 'Днешен план', icon: 'Target' },
-  { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
-  { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
-  { href: '/projects', label: 'Проекти', icon: 'Rocket' },
-  { href: '/question-bank', label: 'Question Bank', icon: 'FileQuestion' },
-  { href: '/cases', label: 'Клинични Случаи', icon: 'Stethoscope' },
-  { href: '/timer', label: 'Таймер', icon: 'Clock' },
-  { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
-  { href: '/gpa', label: 'GPA Калкулатор', icon: 'GraduationCap' },
-  { href: '/settings', label: 'Настройки', icon: 'Settings' }
+// Grouped navigation structure
+const NAV_GROUPS = [
+  {
+    id: 'dashboard',
+    label: 'Табло',
+    icon: 'LayoutDashboard',
+    href: '/', // Direct link, no children
+  },
+  {
+    id: 'learning',
+    label: 'Учене',
+    icon: 'BookOpen',
+    children: [
+      { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
+      { href: '/projects', label: 'Проекти', icon: 'Rocket' },
+      { href: '/question-bank', label: 'Сборници', icon: 'FileQuestion' },
+    ]
+  },
+  {
+    id: 'planning',
+    label: 'Планиране',
+    icon: 'Calendar',
+    children: [
+      { href: '/today', label: 'Днешен план', icon: 'Target' },
+      { href: '/schedule', label: 'График', icon: 'Calendar' },
+    ]
+  },
+  {
+    id: 'analytics',
+    label: 'Анализи',
+    icon: 'BarChart3',
+    children: [
+      { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
+      { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
+      { href: '/gpa', label: 'GPA', icon: 'GraduationCap' },
+    ]
+  },
+  {
+    id: 'tools',
+    label: 'Инструменти',
+    icon: 'Settings',
+    children: [
+      { href: '/timer', label: 'Таймер', icon: 'Clock' },
+      { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
+      { href: '/settings', label: 'Настройки', icon: 'Settings' },
+    ]
+  }
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { data, isLoading, sidebarCollapsed, setSidebarCollapsed } = useApp();
 
+  // Track which groups are expanded
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    // Initialize from localStorage or default to all expanded
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('vayne-sidebar-expanded');
+      if (saved) {
+        return new Set(JSON.parse(saved));
+      }
+    }
+    return new Set(['learning', 'planning']); // Default expanded
+  });
+
+  // Auto-expand group containing current page
+  useEffect(() => {
+    for (const group of NAV_GROUPS) {
+      if (group.children) {
+        const isInGroup = group.children.some(item => pathname === item.href || pathname.startsWith(item.href + '/'));
+        if (isInGroup && !expandedGroups.has(group.id)) {
+          setExpandedGroups(prev => new Set([...prev, group.id]));
+        }
+      }
+    }
+  }, [pathname]);
+
+  // Save expanded state to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('vayne-sidebar-expanded', JSON.stringify([...expandedGroups]));
+    }
+  }, [expandedGroups]);
+
+  const toggleGroup = (groupId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupId)) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
   if (isLoading) {
     return (
-      <aside className={`fixed left-0 top-0 h-screen ${sidebarCollapsed ? 'w-[60px]' : 'w-[280px]'} bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col transition-all duration-200`}>
+      <aside className={`fixed left-0 top-0 h-screen ${sidebarCollapsed ? 'w-[60px]' : 'w-[260px]'} bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col transition-all duration-200`}>
         <div className="p-6 border-b border-[#1e293b]">
           <div className="flex items-center gap-3">
             <span className="text-2xl">⚡</span>
@@ -71,16 +154,18 @@ export default function Sidebar() {
     console.error('Failed to get alerts:', e);
   }
 
-  // Sort subjects by exam date (nearest first) - matches default sorting in subjects page
+  // Sort subjects by exam date (nearest first)
   const sortedSubjects = [...activeSubjects].sort((a, b) => {
     const daysA = getDaysUntil(a.examDate);
     const daysB = getDaysUntil(b.examDate);
-    // Put subjects without exam dates at the end
     if (daysA === Infinity && daysB === Infinity) return 0;
     if (daysA === Infinity) return 1;
     if (daysB === Infinity) return -1;
     return daysA - daysB;
   });
+
+  // Check if a nav item is active
+  const isItemActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
 
   // Collapsed sidebar
   if (sidebarCollapsed) {
@@ -100,22 +185,24 @@ export default function Sidebar() {
           </button>
         </div>
 
-        {/* Navigation Icons */}
+        {/* Navigation Icons - show group icons */}
         <nav className="p-2 border-b border-[#1e293b]">
           <ul className="space-y-1">
-            {NAV_ITEMS.map(item => {
-              const Icon = icons[item.icon as keyof typeof icons];
-              const isActive = pathname === item.href;
+            {NAV_GROUPS.map(group => {
+              const Icon = icons[group.icon as keyof typeof icons];
+              const isActive = group.href
+                ? isItemActive(group.href)
+                : group.children?.some(item => isItemActive(item.href));
               return (
-                <li key={item.href}>
+                <li key={group.id}>
                   <Link
-                    href={item.href}
+                    href={group.href || group.children?.[0]?.href || '/'}
                     className={`flex items-center justify-center p-2.5 rounded-lg transition-all ${
                       isActive
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                         : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                     }`}
-                    title={item.label}
+                    title={group.label}
                   >
                     <Icon size={18} />
                   </Link>
@@ -127,7 +214,7 @@ export default function Sidebar() {
 
         {/* Subject colors */}
         <div className="flex-1 overflow-y-auto p-2">
-          {sortedSubjects.map(subject => (
+          {sortedSubjects.slice(0, 6).map(subject => (
             <Link
               key={subject.id}
               href={`/subjects?id=${subject.id}`}
@@ -155,9 +242,9 @@ export default function Sidebar() {
   }
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40 transition-all duration-200">
+    <aside className="fixed left-0 top-0 h-screen w-[260px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40 transition-all duration-200">
       {/* Logo */}
-      <div className="p-6 border-b border-[#1e293b]">
+      <div className="p-5 border-b border-[#1e293b]">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-3 group">
             <span className="text-2xl group-hover:animate-pulse">⚡</span>
@@ -173,28 +260,80 @@ export default function Sidebar() {
             <PanelLeftClose size={18} />
           </button>
         </div>
-        <p className="text-xs text-slate-500 mt-1 font-mono">Study Command Center</p>
       </div>
 
-      {/* Navigation */}
-      <nav className="p-4 border-b border-[#1e293b]">
-        <ul className="space-y-1">
-          {NAV_ITEMS.map(item => {
-            const Icon = icons[item.icon as keyof typeof icons];
-            const isActive = pathname === item.href;
+      {/* Grouped Navigation */}
+      <nav className="p-3 border-b border-[#1e293b] flex-shrink-0">
+        <ul className="space-y-0.5">
+          {NAV_GROUPS.map(group => {
+            const GroupIcon = icons[group.icon as keyof typeof icons];
+            const isExpanded = expandedGroups.has(group.id);
+            const hasChildren = group.children && group.children.length > 0;
+            const isGroupActive = group.href
+              ? isItemActive(group.href)
+              : group.children?.some(item => isItemActive(item.href));
+
+            // Direct link (no children)
+            if (group.href) {
+              return (
+                <li key={group.id}>
+                  <Link
+                    href={group.href}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all font-mono text-sm ${
+                      isGroupActive
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
+                    }`}
+                  >
+                    <GroupIcon size={18} />
+                    {group.label}
+                  </Link>
+                </li>
+              );
+            }
+
+            // Expandable group
             return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all font-mono text-sm ${
-                    isActive
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              <li key={group.id}>
+                <button
+                  onClick={() => toggleGroup(group.id)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all font-mono text-sm ${
+                    isGroupActive
+                      ? 'text-blue-400'
                       : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200'
                   }`}
                 >
-                  <Icon size={18} />
-                  {item.label}
-                </Link>
+                  <GroupIcon size={18} />
+                  <span className="flex-1 text-left">{group.label}</span>
+                  {hasChildren && (
+                    isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
+                  )}
+                </button>
+
+                {/* Children */}
+                {hasChildren && isExpanded && (
+                  <ul className="ml-4 mt-0.5 space-y-0.5 border-l border-slate-700/50 pl-3">
+                    {group.children.map(item => {
+                      const ItemIcon = icons[item.icon as keyof typeof icons];
+                      const isActive = isItemActive(item.href);
+                      return (
+                        <li key={item.href}>
+                          <Link
+                            href={item.href}
+                            className={`flex items-center gap-2 px-2 py-1.5 rounded-md transition-all font-mono text-xs ${
+                              isActive
+                                ? 'bg-blue-500/20 text-blue-400'
+                                : 'text-slate-500 hover:bg-slate-800/50 hover:text-slate-300'
+                            }`}
+                          >
+                            <ItemIcon size={14} />
+                            {item.label}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </li>
             );
           })}
@@ -202,14 +341,14 @@ export default function Sidebar() {
       </nav>
 
       {/* Subject List */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 font-mono">
-          Предмети
+      <div className="flex-1 overflow-y-auto p-3">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono px-1">
+          Предмети ({sortedSubjects.length})
         </h3>
         {sortedSubjects.length === 0 ? (
-          <p className="text-sm text-slate-600 font-mono">Няма добавени предмети</p>
+          <p className="text-xs text-slate-600 font-mono px-1">Няма добавени</p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-1.5">
             {sortedSubjects.map(subject => {
               const progress = getSubjectProgress(subject);
               const daysUntil = getDaysUntil(subject.examDate);
@@ -217,19 +356,24 @@ export default function Sidebar() {
                 <li key={subject.id}>
                   <Link
                     href={`/subjects?id=${subject.id}`}
-                    className="block p-3 rounded-lg bg-slate-800/30 hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-700"
+                    className="block p-2 rounded-lg bg-slate-800/20 hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-700/50"
                   >
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1.5">
                       <div
-                        className="w-3 h-3 rounded-full"
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                         style={{ backgroundColor: subject.color }}
                       />
-                      <span className="text-sm text-slate-200 font-medium truncate flex-1">
+                      <span className="text-xs text-slate-200 font-medium truncate flex-1">
                         {subject.name}
                       </span>
+                      {daysUntil !== Infinity && (
+                        <span className={`text-[10px] font-mono flex-shrink-0 ${daysUntil <= 7 ? 'text-red-400' : 'text-slate-500'}`}>
+                          {daysUntil <= 0 ? 'ДНЕС' : `${daysUntil}д`}
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all"
                           style={{
@@ -238,25 +382,9 @@ export default function Sidebar() {
                           }}
                         />
                       </div>
-                      <span className="text-xs text-slate-500 font-mono">
+                      <span className="text-[10px] text-slate-500 font-mono w-7 text-right">
                         {progress.percentage}%
                       </span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <div className="flex gap-1">
-                        {Object.entries(progress.counts).map(([status, count]) => (
-                          count > 0 && (
-                            <span key={status} className="font-mono" style={{ color: STATUS_CONFIG[status as keyof typeof STATUS_CONFIG].text }}>
-                              {STATUS_CONFIG[status as keyof typeof STATUS_CONFIG].emoji}{count}
-                            </span>
-                          )
-                        ))}
-                      </div>
-                      {daysUntil !== Infinity && (
-                        <span className={`font-mono ${daysUntil <= 7 ? 'text-red-400' : 'text-slate-500'}`}>
-                          {daysUntil <= 0 ? 'ДНЕС' : `${daysUntil}д`}
-                        </span>
-                      )}
                     </div>
                   </Link>
                 </li>
@@ -268,17 +396,17 @@ export default function Sidebar() {
 
       {/* Alerts */}
       {alerts.length > 0 && (
-        <div className="p-4 border-t border-[#1e293b]">
-          <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle size={14} className="text-red-400" />
-              <span className="text-xs font-semibold text-red-400 uppercase font-mono">
+        <div className="p-3 border-t border-[#1e293b]">
+          <div className="bg-red-900/20 border border-red-800/30 rounded-lg p-2">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle size={12} className="text-red-400" />
+              <span className="text-[10px] font-semibold text-red-400 uppercase font-mono">
                 Внимание
               </span>
             </div>
-            <ul className="space-y-1">
+            <ul className="space-y-0.5">
               {alerts.map((alert, i) => (
-                <li key={i} className="text-xs text-red-300 font-mono">
+                <li key={i} className="text-[10px] text-red-300 font-mono leading-tight">
                   {alert.message}
                 </li>
               ))}

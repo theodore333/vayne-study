@@ -1,5 +1,5 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule } from './types';
-import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent } from './types';
+import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
 
 // ============================================================================
 // FSRS (Free Spaced Repetition Scheduler) for Topics
@@ -223,6 +223,69 @@ export function getModulesNeedingFSRSReview(
 
   // Cap at maxReviews (default 4 for modules)
   return needsReview.slice(0, maxReviews);
+}
+
+/**
+ * Get upcoming academic events (колоквиуми, контролни, etc.)
+ * Returns events sorted by urgency, used in Tier 2.5 of daily planner
+ */
+export function getUpcomingAcademicEvents(
+  events: AcademicEvent[],
+  subjects: Subject[],
+  maxDaysAhead: number = 21
+): Array<{
+  event: AcademicEvent;
+  subject: Subject;
+  daysUntil: number;
+  urgency: 'high' | 'medium' | 'low';
+}> {
+  const result: Array<{
+    event: AcademicEvent;
+    subject: Subject;
+    daysUntil: number;
+    urgency: 'high' | 'medium' | 'low';
+  }> = [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (const event of events) {
+    const eventDate = new Date(event.date);
+    eventDate.setHours(0, 0, 0, 0);
+
+    const daysUntil = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Skip past events or events too far in the future
+    if (daysUntil <= 0 || daysUntil > maxDaysAhead) continue;
+
+    const subject = subjects.find(s => s.id === event.subjectId);
+    if (!subject || subject.archived) continue;
+
+    const config = ACADEMIC_EVENT_CONFIG[event.type];
+
+    // Calculate urgency based on event type config
+    let urgency: 'high' | 'medium' | 'low';
+    if (daysUntil <= config.urgencyDays.high) {
+      urgency = 'high';
+    } else if (daysUntil <= config.urgencyDays.medium) {
+      urgency = 'medium';
+    } else {
+      urgency = 'low';
+    }
+
+    result.push({ event, subject, daysUntil, urgency });
+  }
+
+  // Sort by urgency (high first), then by days until (sooner first)
+  const urgencyOrder = { high: 0, medium: 1, low: 2 };
+  result.sort((a, b) => {
+    if (urgencyOrder[a.urgency] !== urgencyOrder[b.urgency]) {
+      return urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+    }
+    return a.daysUntil - b.daysUntil;
+  });
+
+  return result;
 }
 
 /**
@@ -997,7 +1060,8 @@ export function generateDailyPlan(
   dailyStatus: DailyStatus,
   studyGoals?: StudyGoals,
   ankiDueCards?: number,
-  developmentProjects?: DevelopmentProject[]
+  developmentProjects?: DevelopmentProject[],
+  academicEvents?: AcademicEvent[]
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
@@ -1147,6 +1211,54 @@ export function generateDailyPlan(
         completed: false
       });
       capacityForPriority -= weakTopics.length;
+    }
+  }
+
+  // 2.5 ACADEMIC EVENTS - Колоквиуми, контролни, etc. (medium priority)
+  // Between exams and FSRS reviews - user specified "среден приоритет"
+  if (academicEvents && academicEvents.length > 0 && capacityForPriority > 0) {
+    const upcomingEvents = getUpcomingAcademicEvents(academicEvents, subjects);
+
+    for (const { event, subject, daysUntil, urgency } of upcomingEvents) {
+      if (capacityForPriority <= 0) break;
+
+      // Skip if subject already has a critical task (exercises tomorrow)
+      if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
+
+      const config = ACADEMIC_EVENT_CONFIG[event.type];
+      const topicsToReview = Math.min(3, capacityForPriority);
+
+      // For events, prioritize yellow/orange topics (consolidation of learned material)
+      // Events test what you've learned, not new material
+      const candidates = subject.topics.filter(t =>
+        t.status === 'yellow' || t.status === 'orange'
+      );
+
+      // If no yellow/orange topics, include green topics that need review
+      const finalCandidates = candidates.length >= topicsToReview
+        ? candidates
+        : [...candidates, ...subject.topics.filter(t => t.status === 'green')];
+
+      const selectedTopics = selectTopicsWithRelations(finalCandidates, topicsToReview, inCrunchMode);
+
+      if (selectedTopics.length > 0) {
+        const eventName = event.name || config.label;
+        const taskType = urgency === 'high' ? 'high' : 'medium';
+
+        tasks.push({
+          id: generateId(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          subjectColor: subject.color,
+          type: taskType,
+          typeLabel: `${config.icon} ${eventName} след ${daysUntil}д`,
+          description: `Подготовка за ${config.label.toLowerCase()}`,
+          topics: selectedTopics,
+          estimatedMinutes: selectedTopics.length * 25, // ~25 min per topic for consolidation
+          completed: false
+        });
+        capacityForPriority -= selectedTopics.length;
+      }
     }
   }
 

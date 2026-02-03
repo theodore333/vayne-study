@@ -1,4 +1,4 @@
-import { ClassType, TopicStatus, TopicSize, ProjectType, ProjectCategory, ProjectPriority } from './types';
+import { ClassType, TopicStatus, TopicSize, ProjectType, ProjectCategory, ProjectPriority, AcademicEventType } from './types';
 
 export const STATUS_CONFIG: Record<TopicStatus, {
   bg: string;
@@ -155,3 +155,54 @@ export const MEDICAL_SPECIALTIES = [
   'Радиология', 'Патология', 'Онкология', 'Урология', 'Ендокринология',
   'Гастроентерология', 'Пулмология', 'Нефрология', 'Ревматология', 'Инфекциозни болести'
 ];
+
+// Academic Events Configuration
+export const ACADEMIC_EVENT_CONFIG: Record<AcademicEventType, {
+  label: string;
+  labelShort: string;
+  icon: string;
+  color: string;
+  defaultWeight: number;
+  urgencyDays: { high: number; medium: number };
+}> = {
+  colloquium: {
+    label: 'Колоквиум',
+    labelShort: 'Колокв.',
+    icon: '📋',
+    color: '#a78bfa',
+    defaultWeight: 1.0,
+    urgencyDays: { high: 5, medium: 14 }
+  },
+  control_test: {
+    label: 'Контролно',
+    labelShort: 'Контр.',
+    icon: '✅',
+    color: '#f472b6',
+    defaultWeight: 0.8,
+    urgencyDays: { high: 3, medium: 7 }
+  },
+  practical_exam: {
+    label: 'Практически изпит',
+    labelShort: 'Практ.',
+    icon: '🔬',
+    color: '#4ade80',
+    defaultWeight: 1.0,
+    urgencyDays: { high: 5, medium: 10 }
+  },
+  seminar: {
+    label: 'Семинар',
+    labelShort: 'Сем.',
+    icon: '📚',
+    color: '#38bdf8',
+    defaultWeight: 0.5,
+    urgencyDays: { high: 2, medium: 5 }
+  },
+  other: {
+    label: 'Друго',
+    labelShort: 'Друго',
+    icon: '📌',
+    color: '#94a3b8',
+    defaultWeight: 0.5,
+    urgencyDays: { high: 3, medium: 7 }
+  }
+};

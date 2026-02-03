@@ -422,6 +422,8 @@ export interface AppData {
   // Phase 1: Vayne Doctor
   developmentProjects: DevelopmentProject[];
   careerProfile: CareerProfile | null;
+  // Academic Events (Колоквиуми, Контролни)
+  academicEvents: AcademicEvent[];
 }
 
 export interface PredictedGrade {
@@ -766,4 +768,19 @@ export interface CareerProfile {
   longTermGoals: string[];
   createdAt: string;
   updatedAt: string;
+}
+
+// ================ ACADEMIC EVENTS (Колоквиуми, Контролни, etc.) ================
+
+export type AcademicEventType = 'colloquium' | 'control_test' | 'practical_exam' | 'seminar' | 'other';
+
+export interface AcademicEvent {
+  id: string;
+  type: AcademicEventType;
+  subjectId: string;
+  date: string;              // ISO date
+  name?: string;             // "Колоквиум 1", "Контролно №2"
+  description?: string;
+  weight: number;            // 0.5 = light, 1.0 = normal, 1.5 = important
+  createdAt: string;
 }

@@ -29,7 +29,8 @@
       "Bash(npx vercel --prod)",
       "Bash(npx next lint)",
       "Bash(ls -la \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-User-vayne-study\\\\tasks\"\" 2>/dev/null || dir /b \"C:UsersUserAppDataLocalTempclaudeC--Users-User-vayne-studytasks\"\")",
-      "Bash(railway status:*)"
+      "Bash(railway status:*)",
+      "Bash(echo:*)"
     ]
   }
 }

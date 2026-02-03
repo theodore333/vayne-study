@@ -171,9 +171,10 @@ export default function TodayPage() {
       data.dailyStatus,
       data.studyGoals,
       ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined,
-      data.developmentProjects
+      data.developmentProjects,
+      data.academicEvents
     ),
-    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects]
+    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents]
   );
 
   // Calculate syllabus progress/workload

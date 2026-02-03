@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
@@ -108,6 +108,11 @@ interface AppContextType {
 
   // Career Profile (Phase 1: Vayne Doctor)
   updateCareerProfile: (profile: Partial<CareerProfile>) => void;
+
+  // Academic Events (Колоквиуми, Контролни)
+  addAcademicEvent: (event: Omit<AcademicEvent, 'id' | 'createdAt'>) => void;
+  updateAcademicEvent: (id: string, updates: Partial<AcademicEvent>) => void;
+  deleteAcademicEvent: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -203,7 +208,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     // Phase 1: Vayne Doctor
     developmentProjects: [],
-    careerProfile: null
+    careerProfile: null,
+    // Academic Events
+    academicEvents: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1367,6 +1374,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // ================ Academic Events (Колоквиуми, Контролни) ================
+
+  const addAcademicEvent = useCallback((event: Omit<AcademicEvent, 'id' | 'createdAt'>) => {
+    updateData(prev => ({
+      ...prev,
+      academicEvents: [...prev.academicEvents, {
+        ...event,
+        id: generateId(),
+        createdAt: new Date().toISOString()
+      }]
+    }));
+  }, [updateData]);
+
+  const updateAcademicEvent = useCallback((id: string, updates: Partial<AcademicEvent>) => {
+    updateData(prev => ({
+      ...prev,
+      academicEvents: prev.academicEvents.map(e =>
+        e.id === id ? { ...e, ...updates } : e
+      )
+    }));
+  }, [updateData]);
+
+  const deleteAcademicEvent = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      academicEvents: prev.academicEvents.filter(e => e.id !== id)
+    }));
+  }, [updateData]);
+
   // Calculate streak for achievement checking (uses helper function)
   const calculateStreak = useCallback((sessions: TimerSession[]) => {
     return calculateStudyStreak(sessions);
@@ -1480,7 +1516,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addModuleWrongAnswer,
       updateModuleHighlights,
       // Career Profile
-      updateCareerProfile
+      updateCareerProfile,
+      // Academic Events
+      addAcademicEvent,
+      updateAcademicEvent,
+      deleteAcademicEvent
     }}>
       {children}
     </AppContext.Provider>

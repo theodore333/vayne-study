@@ -165,7 +165,9 @@ const defaultData: AppData = {
   clinicalCaseSessions: defaultClinicalCaseSessions,
   // Phase 1: Vayne Doctor
   developmentProjects: [],
-  careerProfile: null
+  careerProfile: null,
+  // Academic Events
+  academicEvents: []
 };
 
 // Materials storage helpers - now using IndexedDB with in-memory cache
@@ -316,6 +318,9 @@ export function loadData(): AppData {
     // Phase 1: Vayne Doctor migrations
     if (!data.developmentProjects) data.developmentProjects = [];
     if (data.careerProfile === undefined) data.careerProfile = null;
+
+    // Academic Events migration
+    if (!data.academicEvents) data.academicEvents = [];
 
     // Phase 2: Migrate ProjectModule to have learning infrastructure
     if (data.developmentProjects && data.developmentProjects.length > 0) {

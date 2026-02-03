@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode } from '@/lib/algorithms';
+import { generateDailyPlan, detectCrunchMode, calculateDailyTopics } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -161,8 +161,20 @@ export default function TodayPage() {
   );
 
   const dailyPlan = useMemo(
-    () => generateDailyPlan(activeSubjects, data.schedule, data.dailyStatus, data.studyGoals),
-    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals]
+    () => generateDailyPlan(
+      activeSubjects,
+      data.schedule,
+      data.dailyStatus,
+      data.studyGoals,
+      ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined
+    ),
+    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats]
+  );
+
+  // Calculate syllabus progress/workload
+  const syllabusProgress = useMemo(
+    () => calculateDailyTopics(activeSubjects, data.dailyStatus, data.studyGoals),
+    [activeSubjects, data.dailyStatus, data.studyGoals]
   );
 
   // Calculate study streak
@@ -495,6 +507,116 @@ export default function TodayPage() {
         </div>
       )}
 
+      {/* Syllabus Progress Widget */}
+      {syllabusProgress.bySubject.length > 0 && (
+        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <TrendingUp size={20} className="text-emerald-400" />
+            <h3 className="text-sm font-semibold text-slate-100 font-mono">Прогрес по конспект</h3>
+          </div>
+          <div className="space-y-3">
+            {syllabusProgress.bySubject.map(subject => {
+              const subjectData = activeSubjects.find(s => s.id === subject.subjectId);
+              const totalTopics = subjectData?.topics.length || 0;
+              const greenTopics = subjectData?.topics.filter(t => t.status === 'green').length || 0;
+              const progressPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
+
+              return (
+                <div key={subject.subjectId} className="bg-slate-800/30 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: subjectData?.color || '#64748b' }}
+                      />
+                      <span className="text-sm font-medium text-slate-200 font-mono">{subject.subjectName}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {subject.urgency === 'critical' && (
+                        <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-mono flex items-center gap-1">
+                          <AlertTriangle size={10} />
+                          Критично
+                        </span>
+                      )}
+                      {subject.urgency === 'high' && (
+                        <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded font-mono">
+                          Спешно
+                        </span>
+                      )}
+                      {subject.warning && (
+                        <span className="text-xs text-red-400 font-mono">{subject.warning}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="h-1.5 bg-slate-700 rounded-full mb-2 overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${progressPercent}%`,
+                        backgroundColor: progressPercent >= 80 ? '#22c55e' : progressPercent >= 50 ? '#eab308' : '#f97316'
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                    <span>
+                      {greenTopics}/{totalTopics} готови ({progressPercent}%)
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span>{subject.remaining} остават</span>
+                      <span>{subject.daysLeft}д до изпит</span>
+                      <span className={subject.topics > 5 ? 'text-red-400' : subject.topics > 3 ? 'text-yellow-400' : 'text-emerald-400'}>
+                        {subject.topics} теми/ден
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Overall status */}
+          <div className="mt-4 pt-3 border-t border-slate-700/50">
+            {(() => {
+              const avgTopicsPerDay = syllabusProgress.bySubject.reduce((sum, s) => sum + s.topics, 0) / Math.max(1, syllabusProgress.bySubject.length);
+              const hasCritical = syllabusProgress.bySubject.some(s => s.urgency === 'critical');
+              const hasWarnings = syllabusProgress.bySubject.some(s => s.warning);
+
+              if (hasWarnings) {
+                return (
+                  <div className="flex items-center gap-2 text-red-400 text-sm font-mono">
+                    <AlertTriangle size={16} />
+                    <span>Изоставаш! Някои предмети имат нереалистичен workload.</span>
+                  </div>
+                );
+              } else if (hasCritical) {
+                return (
+                  <div className="flex items-center gap-2 text-orange-400 text-sm font-mono">
+                    <Flame size={16} />
+                    <span>Критични изпити наближават - фокусирай се!</span>
+                  </div>
+                );
+              } else if (avgTopicsPerDay <= 3) {
+                return (
+                  <div className="flex items-center gap-2 text-emerald-400 text-sm font-mono">
+                    <CheckCircle2 size={16} />
+                    <span>По график си! Средно {avgTopicsPerDay.toFixed(1)} теми/ден.</span>
+                  </div>
+                );
+              } else {
+                return (
+                  <div className="flex items-center gap-2 text-yellow-400 text-sm font-mono">
+                    <TrendingUp size={16} />
+                    <span>Малко натоварено ({avgTopicsPerDay.toFixed(1)} теми/ден), но изпълнимо.</span>
+                  </div>
+                );
+              }
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Daily Plan Tasks */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">

@@ -1,6 +1,6 @@
 # Vayne Study - Project Context for Claude
 
-**Last Updated:** January 2026
+**Last Updated:** January 29, 2026
 **Project:** Study Command Center for Medical Students (MU Sofia)
 **Stack:** Next.js 16, React, TypeScript, TailwindCSS, Anthropic API
 
@@ -11,12 +11,15 @@
 ```
 Прочети файла C:\Users\User\vayne-study\CLAUDE_CONTEXT.md за контекст на проекта.
 
-След това искам да имплементираме Smart Scheduling feature от PLANNED_FEATURES.md:
+Имплементирано е:
+- FSRS spaced repetition (lib/algorithms.ts)
+- 4-tier daily plan (Critical → High → New Material → FSRS)
+- Bonus AI plan при 100% completion
+
+Следващи стъпки от PLANNED_FEATURES.md:
 - Topic Size classification (small/medium/large)
 - Topic Relations (clustering)
 - Crunch Mode за time pressure
-
-Прочети PLANNED_FEATURES.md секция "Smart Scheduling & Prioritization" за детайлите.
 ```
 
 ---
@@ -40,7 +43,7 @@ Vayne Study е учебно приложение за медицински ст�
 - `lib/types.ts` - TypeScript типове (Subject, Topic, AppData, etc.)
 - `lib/context.tsx` - React context за state management
 - `lib/storage.ts` - localStorage с lz-string compression
-- `lib/algorithms.ts` - Decay, weighted workload, priority calculations
+- `lib/algorithms.ts` - Decay, weighted workload, priority calculations, FSRS, daily plan generation
 - `lib/constants.ts` - Storage keys, defaults
 
 ### Pages
@@ -149,6 +152,10 @@ interface Topic {
 2. **Pomodoro fixes** - Background tab support, notifications
 3. **Smart Scheduling plan** - Documented in PLANNED_FEATURES.md
 4. **Weighted workload** - AI advice uses status weights
+5. **FSRS implementation** - Spaced repetition for topics with Anki-like settings
+6. **Daily plan tiers** - 4-tier priority (Critical → High → New Material → FSRS)
+7. **Task persistence** - Daily plan completion state persists in localStorage
+8. **Bonus AI plan** - Option to generate extra plan after 100% completion
 
 ---
 
@@ -166,6 +173,96 @@ git add -A
 git commit -m "message"
 git push origin master
 ```
+
+---
+
+## FSRS Spaced Repetition System (January 2026)
+
+### Overview
+FSRS (Free Spaced Repetition Scheduler) - модерен алгоритъм от Anki 23+, адаптиран за теми (вместо flashcards).
+
+### Core Algorithm
+```typescript
+// Forgetting curve: R(t) = e^(-t/S)
+// R = retrievability (probability of recall)
+// S = stability (how long memory lasts in days)
+// t = time since last review
+
+interface FSRSState {
+  stability: number;       // S - days until 90% forgetting
+  difficulty: number;      // D - inherent topic difficulty (0.1-1.0)
+  lastReview: string;      // ISO date of last review
+  reps: number;            // successful review count
+  lapses: number;          // times forgotten (score < 60%)
+}
+```
+
+### Key Functions (lib/algorithms.ts)
+- `calculateRetrievability(fsrs)` - Current memory strength (0-100%)
+- `getDaysUntilReview(fsrs, targetRetention)` - Days until review needed
+- `topicNeedsReview(fsrs, goals)` - Boolean check against user settings
+- `initializeFSRS(score)` - Create initial state from first quiz
+- `updateFSRS(fsrs, score)` - Update state after quiz
+- `getTopicsNeedingFSRSReview(subjects, goals)` - Get all topics needing review
+
+### Anti-Review-Hell Protections
+1. **Topic multiplier 1.5x** - Longer intervals than flashcards (topics are larger units)
+2. **Max reviews per day** - Default 8, user configurable (3-20)
+3. **Max interval cap** - Default 180 days, user configurable (30-365)
+4. **Minimum stability** - 0.5 days floor
+
+### User Settings (app/settings/page.tsx)
+```typescript
+// In StudyGoals type:
+fsrsEnabled?: boolean;           // Toggle on/off (default: true)
+fsrsTargetRetention?: number;    // 0.70-0.95 (default: 0.85 = 85%)
+fsrsMaxReviewsPerDay?: number;   // 3-20 (default: 8)
+fsrsMaxInterval?: number;        // 30-365 days (default: 180)
+```
+
+### Integration Points
+1. **Quiz completion** (lib/context.tsx) - Updates FSRS state
+2. **Topic page** - Shows memory indicator (%, stability, days until review)
+3. **Daily plan** - Includes FSRS reviews as Tier 4
+
+---
+
+## Daily Plan Priority System (January 2026)
+
+### 5-Tier Priority Order
+```
+Tier 1: CRITICAL (urgentExercises)
+  - Упражнения утре → трябва да се подготвя
+
+Tier 2: HIGH (highPriority)
+  - Изпит след 4-7 дни, тема gray/orange
+
+Tier 3: FSRS REVIEWS
+  - Теми, нуждаещи се от преговор по FSRS
+  - Поддържа дългосрочна памет
+
+Tier 4: NEW MATERIAL
+  - Нов материал (gray теми), динамична квота
+
+Tier 5: LEGACY DECAY
+  - Теми без FSRS state (стари теми)
+```
+
+### Dynamic New Material Quota
+```typescript
+// Base quota: 25% of daily tasks
+// Increases based on:
+// - grayPercentage > 60% → 45%
+// - grayPercentage > 40% && exam < 14 days → 50%
+// - grayPercentage > 40% → 40%
+// - exam < 7 days && grayPercentage > 20% → 40%
+// - Otherwise → 30%
+```
+
+### Rationale
+- **New material before FSRS** - Covering syllabus is priority
+- **FSRS still runs** - Just lower priority than new topics
+- **Dynamic quota** - More new material when behind schedule
 
 ---
 

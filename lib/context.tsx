@@ -345,6 +345,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         subjects: prev.subjects.filter(s => s.id !== id),
         schedule: prev.schedule.filter(c => c.subjectId !== id),
+        // Cascade delete: remove orphaned academic events
+        academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
+        // Cascade delete: remove orphaned question banks
+        questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
         userProgress: {
           ...prev.userProgress,
           stats: {

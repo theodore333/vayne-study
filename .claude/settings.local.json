@@ -30,7 +30,15 @@
       "Bash(npx next lint)",
       "Bash(ls -la \"C:\\\\Users\\\\User\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-User-vayne-study\\\\tasks\"\" 2>/dev/null || dir /b \"C:UsersUserAppDataLocalTempclaudeC--Users-User-vayne-studytasks\"\")",
       "Bash(railway status:*)",
-      "Bash(echo:*)"
+      "Bash(echo:*)",
+      "Bash(ls:*)",
+      "Bash(head -15 echo \"\" echo \"3. CHECKING FOR MISSING ERROR BOUNDARIES...\" grep -l \"ErrorBoundary\\\\|error\\\\.tsx\" app/)",
+      "Bash(head -10 echo \"\" echo \"3. LOADING STATES CHECK:\" for page in app/*/page.tsx)",
+      "Bash(do if grep -q \"isLoading\" \"$page\")",
+      "Bash(then echo \" OK: $page\" else echo \" MISSING: $page\" fi done)",
+      "Bash(__NEW_LINE_e349d62d6deeb858__ echo \"1. Subject topic relations:\")",
+      "Bash(__NEW_LINE_4977802e613e96a9__ echo \"2. Checking orphan data scenarios...\")",
+      "Bash(__NEW_LINE_4977802e613e96a9__ echo \"3. Cascade delete check \\(what happens when subject deleted\\):\")"
     ]
   }
 }

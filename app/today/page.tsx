@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -9,7 +9,8 @@ import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
 import WeeklyReviewModal from '@/components/modals/WeeklyReviewModal';
 import Link from 'next/link';
-import { DailyTask } from '@/lib/types';
+import { DailyTask, ProjectModule, DevelopmentProject } from '@/lib/types';
+import ModuleDetailModal from '@/components/modals/ModuleDetailModal';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
@@ -45,6 +46,9 @@ export default function TodayPage() {
   // Bonus plan state (when 100% complete)
   const [bonusPlanMode, setBonusPlanMode] = useState<'tomorrow' | 'review' | 'weak' | null>(null);
   const [loadingBonusPlan, setLoadingBonusPlan] = useState(false);
+
+  // Module detail modal state
+  const [selectedModule, setSelectedModule] = useState<{ module: ProjectModule; project: DevelopmentProject } | null>(null);
 
   // Load API key
   useEffect(() => {
@@ -785,9 +789,17 @@ export default function TodayPage() {
                                     <Circle size={18} className="text-slate-600 hover:text-slate-400" />
                                   )}
                                 </button>
-                                <Link
-                                  href={`/projects`}
-                                  className={`flex-1 min-w-0 overflow-hidden text-xs font-mono group ${
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const project = data.developmentProjects.find(p => p.id === task.projectId);
+                                    if (project) {
+                                      // Find the full module from project (task.projectModules might be stale)
+                                      const fullModule = project.modules.find(m => m.id === module.id) || module;
+                                      setSelectedModule({ module: fullModule, project });
+                                    }
+                                  }}
+                                  className={`flex-1 min-w-0 overflow-hidden text-left text-xs font-mono group ${
                                     isModuleDone ? 'line-through text-slate-500' : 'text-slate-300 hover:text-cyan-400'
                                   }`}
                                   title={module.title}
@@ -796,7 +808,7 @@ export default function TodayPage() {
                                   <span className="group-hover:underline">
                                     {module.title.length > 45 ? module.title.slice(0, 45) + '...' : module.title}
                                   </span>
-                                </Link>
+                                </button>
                               </div>
                             );
                           })}
@@ -912,6 +924,14 @@ export default function TodayPage() {
 
       {showWeeklyReviewModal && (
         <WeeklyReviewModal onClose={() => setShowWeeklyReviewModal(false)} />
+      )}
+
+      {selectedModule && (
+        <ModuleDetailModal
+          module={selectedModule.module}
+          project={selectedModule.project}
+          onClose={() => setSelectedModule(null)}
+        />
       )}
     </div>
   );

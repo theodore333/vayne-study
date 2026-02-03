@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession, DevelopmentProject, ProjectModule } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
@@ -316,6 +316,36 @@ export function loadData(): AppData {
     // Phase 1: Vayne Doctor migrations
     if (!data.developmentProjects) data.developmentProjects = [];
     if (data.careerProfile === undefined) data.careerProfile = null;
+
+    // Phase 2: Migrate ProjectModule to have learning infrastructure
+    if (data.developmentProjects && data.developmentProjects.length > 0) {
+      data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({
+        ...project,
+        modules: project.modules.map((module: ProjectModule) => ({
+          ...module,
+          // Learning Material
+          material: module.material ?? '',
+          materialImages: module.materialImages ?? [],
+          // Quiz Tracking
+          grades: module.grades ?? [],
+          avgGrade: module.avgGrade ?? null,
+          quizCount: module.quizCount ?? 0,
+          quizHistory: module.quizHistory ?? [],
+          currentBloomLevel: module.currentBloomLevel ?? 1,
+          lastReview: module.lastReview ?? null,
+          // Gap Analysis
+          wrongAnswers: module.wrongAnswers ?? [],
+          // Reading Progress
+          readCount: module.readCount ?? 0,
+          lastRead: module.lastRead ?? null,
+          // Size
+          size: module.size ?? null,
+          sizeSetBy: module.sizeSetBy ?? null,
+          // Highlights
+          highlights: module.highlights ?? [],
+        }))
+      }));
+    }
 
     // Migrate: Calculate stats from existing data
     if (data.userProgress && data.subjects) {

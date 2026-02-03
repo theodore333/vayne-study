@@ -72,7 +72,16 @@ function QuizContent() {
   const isMultiMode = searchParams.get('multi') === 'true';
   const topicsParam = searchParams.get('topics');
 
-  const { data, addGrade, incrementApiCalls, updateTopic, trackTopicRead } = useApp();
+  // Module quiz params (Projects 2.0)
+  const projectId = searchParams.get('project');
+  const moduleId = searchParams.get('module');
+
+  const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule } = useApp();
+
+  // Get project and module if this is a module quiz
+  const project = projectId ? data.developmentProjects.find(p => p.id === projectId) : null;
+  const module = project && moduleId ? project.modules.find(m => m.id === moduleId) : null;
+  const isModuleQuiz = !!project && !!module;
 
   // AbortController for cleanup on unmount
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -180,6 +189,33 @@ function QuizContent() {
 
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
+
+  // Unified quiz target - either topic or module
+  const quizTarget = useMemo(() => {
+    if (isModuleQuiz && module) {
+      return {
+        name: module.title,
+        material: module.material,
+        currentBloomLevel: module.currentBloomLevel || 1,
+        quizHistory: module.quizHistory || [],
+        wrongAnswers: module.wrongAnswers || [],
+        isModule: true,
+        projectName: project?.name
+      };
+    }
+    if (topic) {
+      return {
+        name: topic.name,
+        material: topic.material,
+        currentBloomLevel: topic.currentBloomLevel || 1,
+        quizHistory: topic.quizHistory || [],
+        wrongAnswers: topic.wrongAnswers || [],
+        isModule: false,
+        projectName: undefined
+      };
+    }
+    return null;
+  }, [isModuleQuiz, module, project, topic]);
 
   // Validation state - detect when params don't match existing data
   const [invalidParamsWarning, setInvalidParamsWarning] = useState<string | null>(null);
@@ -932,7 +968,12 @@ function QuizContent() {
 
   const handleSaveGrade = () => {
     // Prevent duplicate saves
-    if (gradeSaved || isSavingGrade || !subjectId || !topicId || !topic) return;
+    // Support both topic quizzes and module quizzes
+    const isValidTopicQuiz = !isModuleQuiz && subjectId && topicId && topic;
+    const isValidModuleQuiz = isModuleQuiz && projectId && moduleId && module;
+
+    if (gradeSaved || isSavingGrade) return;
+    if (!isValidTopicQuiz && !isValidModuleQuiz) return;
     if (quizState.questions.length === 0) return; // Guard against division by zero
     setIsSavingGrade(true);
     const score = calculateScore();
@@ -942,12 +983,23 @@ function QuizContent() {
     // Pass quiz metadata for accurate history tracking
     // Use preset weight for consistent quiz weighting
     const quizWeight = mode === 'custom' ? 1.0 : QUIZ_LENGTH_PRESETS[quizLength].weight;
-    addGrade(subjectId, topicId, grade, {
-      bloomLevel: topic.currentBloomLevel || 1,
-      questionsCount: quizState.questions.length,
-      correctAnswers: score,
-      weight: quizWeight
-    });
+
+    // Save grade using appropriate function
+    if (isModuleQuiz && projectId && moduleId && module) {
+      addModuleGrade(projectId, moduleId, grade, {
+        bloomLevel: module.currentBloomLevel || 1,
+        questionsCount: quizState.questions.length,
+        correctAnswers: score,
+        weight: quizWeight
+      });
+    } else if (subjectId && topicId && topic) {
+      addGrade(subjectId, topicId, grade, {
+        bloomLevel: topic.currentBloomLevel || 1,
+        questionsCount: quizState.questions.length,
+        correctAnswers: score,
+        weight: quizWeight
+      });
+    }
     // Note: Don't track as "read" here - quizzes test knowledge, not reading
 
     // Collect wrong answers AND track correctly answered concepts
@@ -1002,7 +1054,7 @@ function QuizContent() {
 
     // Handle wrong answers based on mode
     let mergedWrongAnswers: WrongAnswer[];
-    const existingWrongAnswers = topic.wrongAnswers || [];
+    const existingWrongAnswers = isModuleQuiz ? (module?.wrongAnswers || []) : (topic?.wrongAnswers || []);
 
     if (mode === 'drill_weakness') {
       // For drill_weakness mode: only increment drillCount for questions that were ACTUALLY in this quiz
@@ -1037,8 +1089,9 @@ function QuizContent() {
 
     // Determine the Bloom level this quiz was taken AT (not new level - that's calculated by context.tsx)
     // For assessment mode, find the highest level with >= 70%
-    // For other modes, use the topic's current bloom level (the level questions were generated for)
-    let quizBloomLevel: BloomLevel = (topic.currentBloomLevel || 1) as BloomLevel;
+    // For other modes, use the topic/module's current bloom level (the level questions were generated for)
+    const currentBloom = isModuleQuiz ? (module?.currentBloomLevel || 1) : (topic?.currentBloomLevel || 1);
+    let quizBloomLevel: BloomLevel = currentBloom as BloomLevel;
 
     if (mode === 'assessment') {
       // Assessment: find highest level with >= 70% using REAL scores
@@ -1087,25 +1140,40 @@ function QuizContent() {
 
     // Don't set currentBloomLevel directly - let context.tsx calculate it
     // based on quizHistory (requires 2+ successful quizzes at current level to advance)
-    // Note: quizHistory is now updated via addGrade(), only update wrongAnswers here
-    updateTopic(subjectId, topicId, {
-      wrongAnswers: mergedWrongAnswers
-    });
+    // Note: quizHistory is now updated via addGrade()/addModuleGrade(), only update wrongAnswers here
+    if (isModuleQuiz && projectId && moduleId) {
+      updateProjectModule(projectId, moduleId, {
+        wrongAnswers: mergedWrongAnswers
+      });
+    } else if (subjectId && topicId) {
+      updateTopic(subjectId, topicId, {
+        wrongAnswers: mergedWrongAnswers
+      });
+    }
     // Mark as saved and show feedback
     setGradeSaved(true);
     setIsSavingGrade(false);
   };
 
   const handleSaveFreeRecallGrade = () => {
-    if (!subjectId || !topicId || !topic || !freeRecallEvaluation) return;
+    if (!freeRecallEvaluation) return;
 
-    // Pass quiz metadata - addGrade now handles quizHistory
-    addGrade(subjectId, topicId, freeRecallEvaluation.grade, {
-      bloomLevel: freeRecallEvaluation.bloomLevel,
-      questionsCount: 1,
-      correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0,
-      weight: 1.0
-    });
+    // Support both topic and module quizzes
+    if (isModuleQuiz && projectId && moduleId && module) {
+      addModuleGrade(projectId, moduleId, freeRecallEvaluation.grade, {
+        bloomLevel: freeRecallEvaluation.bloomLevel,
+        questionsCount: 1,
+        correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0,
+        weight: 1.0
+      });
+    } else if (subjectId && topicId && topic) {
+      addGrade(subjectId, topicId, freeRecallEvaluation.grade, {
+        bloomLevel: freeRecallEvaluation.bloomLevel,
+        questionsCount: 1,
+        correctAnswers: freeRecallEvaluation.score >= 50 ? 1 : 0,
+        weight: 1.0
+      });
+    }
     // Note: Don't track as "read" here - free recall tests knowledge, not reading
   };
 

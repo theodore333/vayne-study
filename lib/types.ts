@@ -472,6 +472,8 @@ export interface DailyTask {
   projectId?: string;
   projectName?: string;
   projectModules?: ProjectModule[];
+  // Module FSRS review flag
+  isModuleReview?: boolean;
 }
 
 // Custom daily plan (edited by user)
@@ -691,7 +693,35 @@ export interface ProjectModule {
   order: number;
   status: ModuleStatus;
   completedAt?: string;
-  notes?: string;
+
+  // Learning Material
+  material: string;
+  materialImages: string[];
+
+  // FSRS Spaced Repetition (same as Topic)
+  fsrs?: FSRSState;
+
+  // Quiz Tracking
+  grades: number[];
+  avgGrade: number | null;
+  quizCount: number;
+  quizHistory: QuizResult[];
+  currentBloomLevel: BloomLevel;
+  lastReview: string | null;
+
+  // Gap Analysis
+  wrongAnswers: WrongAnswer[];
+
+  // Reading Progress
+  readCount: number;
+  lastRead: string | null;
+
+  // Size (time estimation)
+  size: TopicSize | null;
+  sizeSetBy: 'ai' | 'user' | null;
+
+  // Reader Mode
+  highlights: TextHighlight[];
 }
 
 export interface ProjectInsight {

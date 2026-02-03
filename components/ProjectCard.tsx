@@ -1,10 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Check, Circle, Clock, Lightbulb, MoreVertical, Trash2, Edit2, Pause, Play, CheckCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, Circle, Clock, Lightbulb, MoreVertical, Trash2, Edit2, Pause, Play, CheckCircle, Brain } from 'lucide-react';
 import { DevelopmentProject, ProjectModule, ProjectStatus } from '@/lib/types';
 import { PROJECT_TYPE_CONFIG, PROJECT_CATEGORY_CONFIG, PROJECT_PRIORITY_CONFIG } from '@/lib/constants';
 import { useApp } from '@/lib/context';
+import { calculateRetrievability } from '@/lib/algorithms';
+import ModuleDetailModal from './modals/ModuleDetailModal';
 
 interface ProjectCardProps {
   project: DevelopmentProject;
@@ -14,6 +16,7 @@ interface ProjectCardProps {
 export default function ProjectCard({ project, onEdit }: ProjectCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<ProjectModule | null>(null);
   const { updateProject, updateProjectModule, deleteProject, toggleInsightApplied, deleteProjectInsight } = useApp();
 
   const typeConfig = PROJECT_TYPE_CONFIG[project.type];
@@ -215,24 +218,53 @@ export default function ProjectCard({ project, onEdit }: ProjectCardProps) {
                 Модули
               </h4>
               <div className="space-y-1">
-                {project.modules.sort((a, b) => a.order - b.order).map(module => (
-                  <button
-                    key={module.id}
-                    onClick={() => handleModuleToggle(module)}
-                    className={`w-full flex items-center gap-2 p-2 rounded-lg text-left transition-all ${
-                      module.status === 'completed'
-                        ? 'bg-green-900/20 text-green-300'
-                        : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'
-                    }`}
-                  >
-                    {module.status === 'completed' ? (
-                      <Check size={16} className="text-green-400 shrink-0" />
-                    ) : (
-                      <Circle size={16} className="text-slate-500 shrink-0" />
-                    )}
-                    <span className="text-sm font-mono truncate">{module.title}</span>
-                  </button>
-                ))}
+                {project.modules.sort((a, b) => a.order - b.order).map(module => {
+                  const retrievability = module.fsrs ? calculateRetrievability(module.fsrs) : null;
+                  const needsReview = retrievability !== null && retrievability < 0.85;
+
+                  return (
+                    <div
+                      key={module.id}
+                      className={`flex items-center gap-2 p-2 rounded-lg transition-all ${
+                        module.status === 'completed'
+                          ? 'bg-green-900/20'
+                          : 'bg-slate-800/50 hover:bg-slate-700/50'
+                      }`}
+                    >
+                      {/* Toggle checkbox */}
+                      <button
+                        onClick={() => handleModuleToggle(module)}
+                        className="shrink-0"
+                      >
+                        {module.status === 'completed' ? (
+                          <Check size={16} className="text-green-400" />
+                        ) : (
+                          <Circle size={16} className="text-slate-500 hover:text-slate-400" />
+                        )}
+                      </button>
+
+                      {/* Module title - clickable to open modal */}
+                      <button
+                        onClick={() => setSelectedModule(module)}
+                        className={`flex-1 text-left text-sm font-mono truncate ${
+                          module.status === 'completed' ? 'text-green-300' : 'text-slate-300 hover:text-cyan-400'
+                        }`}
+                      >
+                        {module.title}
+                      </button>
+
+                      {/* FSRS indicator */}
+                      {retrievability !== null && (
+                        <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono ${
+                          needsReview ? 'bg-orange-500/20 text-orange-400' : 'bg-green-500/20 text-green-400'
+                        }`}>
+                          <Brain size={12} />
+                          {Math.round(retrievability * 100)}%
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -299,6 +331,15 @@ export default function ProjectCard({ project, onEdit }: ProjectCardProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Module Detail Modal */}
+      {selectedModule && (
+        <ModuleDetailModal
+          module={selectedModule}
+          project={project}
+          onClose={() => setSelectedModule(null)}
+        />
       )}
     </div>
   );

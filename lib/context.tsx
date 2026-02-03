@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
@@ -97,6 +97,14 @@ interface AppContextType {
   addProjectInsight: (projectId: string, insight: Omit<ProjectInsight, 'id' | 'date'>) => void;
   toggleInsightApplied: (projectId: string, insightId: string) => void;
   deleteProjectInsight: (projectId: string, insightId: string) => void;
+
+  // Module Learning Operations (Phase 2: Projects 2.0)
+  addModuleGrade: (projectId: string, moduleId: string, grade: number, quizMeta?: { bloomLevel?: number; questionsCount?: number; correctAnswers?: number; weight?: number }) => void;
+  updateModuleMaterial: (projectId: string, moduleId: string, material: string, images?: string[]) => void;
+  trackModuleRead: (projectId: string, moduleId: string) => void;
+  updateModuleSize: (projectId: string, moduleId: string, size: TopicSize | null, setBy: 'ai' | 'user') => void;
+  addModuleWrongAnswer: (projectId: string, moduleId: string, wrongAnswer: WrongAnswer) => void;
+  updateModuleHighlights: (projectId: string, moduleId: string, highlights: TextHighlight[]) => void;
 
   // Career Profile (Phase 1: Vayne Doctor)
   updateCareerProfile: (profile: Partial<CareerProfile>) => void;
@@ -1146,6 +1154,198 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // ================ Module Learning Operations (Phase 2: Projects 2.0) ================
+
+  const addModuleGrade = useCallback((
+    projectId: string,
+    moduleId: string,
+    grade: number,
+    quizMeta?: { bloomLevel?: number; questionsCount?: number; correctAnswers?: number; weight?: number }
+  ) => {
+    const validGrade = Math.max(2, Math.min(6, grade));
+
+    updateData(prev => {
+      const project = prev.developmentProjects.find(p => p.id === projectId);
+      const module = project?.modules.find(m => m.id === moduleId);
+      if (!project || !module) return prev;
+
+      // Convert grade (2-6) to score (0-100)
+      const score = Math.round(((validGrade - 2) / 4) * 100);
+
+      // Create quiz result
+      const quizResult: QuizResult = {
+        date: new Date().toISOString(),
+        bloomLevel: (quizMeta?.bloomLevel || module.currentBloomLevel || 1) as BloomLevel,
+        score,
+        questionsCount: quizMeta?.questionsCount || 5,
+        correctAnswers: quizMeta?.correctAnswers || Math.round(score / 20),
+        weight: quizMeta?.weight || 1.0
+      };
+
+      // Update FSRS state
+      const newFsrs = module.fsrs
+        ? updateFSRS(module.fsrs, score)
+        : initializeFSRS(score);
+
+      // Update grades
+      const newGrades = [...(module.grades || []), validGrade];
+      const avgGrade = newGrades.reduce((a, b) => a + b, 0) / newGrades.length;
+
+      // Bloom level advancement logic (same as topics)
+      let newBloomLevel = (module.currentBloomLevel || 1) as BloomLevel;
+      const currentLevelQuizzes = [...(module.quizHistory || []), quizResult]
+        .filter(q => q.bloomLevel === newBloomLevel);
+
+      if (currentLevelQuizzes.length >= 2) {
+        const currentLevelAvg = currentLevelQuizzes.reduce((sum, q) => sum + q.score, 0) / currentLevelQuizzes.length;
+        if (currentLevelAvg >= 75 && newBloomLevel < 6) {
+          newBloomLevel = (newBloomLevel + 1) as BloomLevel;
+        }
+      }
+
+      // Update module
+      const newModules = project.modules.map(m => {
+        if (m.id !== moduleId) return m;
+        return {
+          ...m,
+          grades: newGrades,
+          avgGrade: Math.round(avgGrade * 100) / 100,
+          quizCount: (m.quizCount || 0) + 1,
+          quizHistory: [...(m.quizHistory || []), quizResult],
+          currentBloomLevel: newBloomLevel,
+          fsrs: newFsrs,
+          lastReview: new Date().toISOString(),
+          // Update status based on grade
+          status: avgGrade >= 4.5 ? 'completed' as const : avgGrade >= 3.5 ? 'in_progress' as const : m.status,
+          completedAt: avgGrade >= 4.5 && m.status !== 'completed' ? new Date().toISOString() : m.completedAt
+        };
+      });
+
+      // Recalculate project progress
+      const completedCount = newModules.filter(m => m.status === 'completed').length;
+      const progressPercent = newModules.length > 0
+        ? Math.round((completedCount / newModules.length) * 100)
+        : 0;
+
+      // Calculate XP (same as quiz XP)
+      const comboMultiplier = getComboMultiplier(prev.userProgress.combo.count);
+      const xpEarned = calculateQuizXp(score, comboMultiplier);
+
+      return {
+        ...prev,
+        developmentProjects: prev.developmentProjects.map(p => {
+          if (p.id !== projectId) return p;
+          return { ...p, modules: newModules, progressPercent, updatedAt: new Date().toISOString() };
+        }),
+        userProgress: {
+          ...prev.userProgress,
+          xp: prev.userProgress.xp + xpEarned,
+          level: calculateLevel(prev.userProgress.xp + xpEarned),
+          stats: {
+            ...prev.userProgress.stats,
+            quizzesTaken: prev.userProgress.stats.quizzesTaken + 1
+          }
+        }
+      };
+    });
+  }, [updateData]);
+
+  const updateModuleMaterial = useCallback((projectId: string, moduleId: string, material: string, images?: string[]) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          modules: p.modules.map(m => {
+            if (m.id !== moduleId) return m;
+            return {
+              ...m,
+              material,
+              materialImages: images !== undefined ? images : m.materialImages,
+            };
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const trackModuleRead = useCallback((projectId: string, moduleId: string) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          modules: p.modules.map(m => {
+            if (m.id !== moduleId) return m;
+            return {
+              ...m,
+              readCount: (m.readCount || 0) + 1,
+              lastRead: new Date().toISOString()
+            };
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const updateModuleSize = useCallback((projectId: string, moduleId: string, size: TopicSize | null, setBy: 'ai' | 'user') => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          modules: p.modules.map(m => {
+            if (m.id !== moduleId) return m;
+            return { ...m, size, sizeSetBy: setBy };
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const addModuleWrongAnswer = useCallback((projectId: string, moduleId: string, wrongAnswer: WrongAnswer) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          modules: p.modules.map(m => {
+            if (m.id !== moduleId) return m;
+            return {
+              ...m,
+              wrongAnswers: [...(m.wrongAnswers || []), wrongAnswer]
+            };
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    }));
+  }, [updateData]);
+
+  const updateModuleHighlights = useCallback((projectId: string, moduleId: string, highlights: TextHighlight[]) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return {
+          ...p,
+          modules: p.modules.map(m => {
+            if (m.id !== moduleId) return m;
+            return { ...m, highlights };
+          }),
+          updatedAt: new Date().toISOString()
+        };
+      })
+    }));
+  }, [updateData]);
+
   // ================ Career Profile (Phase 1: Vayne Doctor) ================
 
   const updateCareerProfile = useCallback((profile: Partial<CareerProfile>) => {
@@ -1272,6 +1472,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addProjectInsight,
       toggleInsightApplied,
       deleteProjectInsight,
+      // Module Learning Operations
+      addModuleGrade,
+      updateModuleMaterial,
+      trackModuleRead,
+      updateModuleSize,
+      addModuleWrongAnswer,
+      updateModuleHighlights,
       // Career Profile
       updateCareerProfile
     }}>

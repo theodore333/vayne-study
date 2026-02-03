@@ -65,7 +65,22 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
           id: `temp-${i}`,
           title: m.title,
           order: i + 1,
-          status: 'available' as const
+          status: 'available' as const,
+          // Learning infrastructure defaults
+          material: '',
+          materialImages: [],
+          grades: [],
+          avgGrade: null,
+          quizCount: 0,
+          quizHistory: [],
+          currentBloomLevel: 1 as const,
+          lastReview: null,
+          wrongAnswers: [],
+          readCount: 0,
+          lastRead: null,
+          size: null,
+          sizeSetBy: null,
+          highlights: []
         }))
       });
     }
@@ -88,7 +103,22 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
     addProjectModule(editProject.id, {
       title: newModuleTitle.trim(),
       order: editProject.modules.length + 1,
-      status: 'available'
+      status: 'available',
+      // Learning infrastructure defaults
+      material: '',
+      materialImages: [],
+      grades: [],
+      avgGrade: null,
+      quizCount: 0,
+      quizHistory: [],
+      currentBloomLevel: 1,
+      lastReview: null,
+      wrongAnswers: [],
+      readCount: 0,
+      lastRead: null,
+      size: null,
+      sizeSetBy: null,
+      highlights: []
     });
     setNewModuleTitle('');
   };

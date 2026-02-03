@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS } from './constants';
 
 // ============================================================================
@@ -174,6 +174,54 @@ export function getTopicsNeedingFSRSReview(
   needsReview.sort((a, b) => b.urgency - a.urgency);
 
   // Anti-review-hell: cap daily reviews
+  return needsReview.slice(0, maxReviews);
+}
+
+/**
+ * Get project modules that need FSRS review
+ * Similar to getTopicsNeedingFSRSReview but for project modules
+ * Used in Tier 6b (lowest priority - after all university work)
+ */
+export function getModulesNeedingFSRSReview(
+  projects: DevelopmentProject[],
+  maxReviews: number = 4,
+  studyGoals?: StudyGoals
+): Array<{
+  project: DevelopmentProject;
+  module: ProjectModule;
+  urgency: number;
+  retrievability: number;
+}> {
+  const FSRS = getFSRSParams(studyGoals);
+  const needsReview: Array<{
+    project: DevelopmentProject;
+    module: ProjectModule;
+    urgency: number;
+    retrievability: number;
+  }> = [];
+
+  for (const project of projects) {
+    // Only active projects
+    if (project.status !== 'active') continue;
+
+    for (const module of project.modules) {
+      // Only modules with FSRS state (have had at least one quiz)
+      if (!module.fsrs) continue;
+
+      const R = calculateRetrievability(module.fsrs);
+
+      // Include if below threshold
+      if (R <= FSRS.targetR) {
+        const urgency = (FSRS.targetR - R) / FSRS.targetR;
+        needsReview.push({ project, module, urgency, retrievability: R });
+      }
+    }
+  }
+
+  // Sort by urgency (most urgent first)
+  needsReview.sort((a, b) => b.urgency - a.urgency);
+
+  // Cap at maxReviews (default 4 for modules)
   return needsReview.slice(0, maxReviews);
 }
 
@@ -1303,6 +1351,55 @@ export function generateDailyPlan(
         });
 
         capacityAfterNew -= 1; // Count as 1 task slot
+      }
+    }
+  }
+
+  // 6b. MODULE FSRS REVIEWS - Lowest priority (only after ALL university work)
+  // Reviews for project modules that have FSRS state and need review
+  if (developmentProjects && developmentProjects.length > 0 && capacityAfterNew > 0) {
+    const moduleReviews = getModulesNeedingFSRSReview(
+      developmentProjects,
+      Math.min(4, capacityAfterNew), // Max 4 module reviews per day
+      studyGoals
+    );
+
+    if (moduleReviews.length > 0) {
+      // Group by project for cleaner display
+      const byProject = new Map<string, typeof moduleReviews>();
+      for (const review of moduleReviews) {
+        const projectId = review.project.id;
+        if (!byProject.has(projectId)) {
+          byProject.set(projectId, []);
+        }
+        byProject.get(projectId)!.push(review);
+      }
+
+      for (const [projectId, reviews] of byProject) {
+        if (capacityAfterNew <= 0) break;
+
+        const project = reviews[0].project;
+        const modules = reviews.map(r => r.module);
+        const avgRetrievability = reviews.reduce((sum, r) => sum + r.retrievability, 0) / reviews.length;
+
+        tasks.push({
+          id: generateId(),
+          subjectId: '',
+          subjectName: project.name,
+          subjectColor: '#8b5cf6', // Purple for module reviews (different from project cyan)
+          type: 'project',
+          typeLabel: '🧠 Преговор',
+          description: `${modules.length} модул${modules.length > 1 ? 'а' : ''} за преговор (${Math.round(avgRetrievability * 100)}% памет)`,
+          topics: [],
+          estimatedMinutes: modules.length * 15, // ~15 min per module review
+          completed: false,
+          projectId: project.id,
+          projectName: project.name,
+          projectModules: modules,
+          isModuleReview: true
+        });
+
+        capacityAfterNew -= 1;
       }
     }
   }

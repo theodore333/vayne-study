@@ -1,0 +1,197 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: ⚡
+            - generic [ref=e8]: VAYNE
+          - button "Скрий меню" [ref=e9]:
+            - img [ref=e10]
+        - paragraph [ref=e13]: Study Command Center
+      - navigation [ref=e14]:
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "Табло" [ref=e17] [cursor=pointer]:
+              - /url: /
+              - img [ref=e18]
+              - text: Табло
+          - listitem [ref=e23]:
+            - link "Днешен план" [ref=e24] [cursor=pointer]:
+              - /url: /today
+              - img [ref=e25]
+              - text: Днешен план
+          - listitem [ref=e29]:
+            - link "Седмичен график" [ref=e30] [cursor=pointer]:
+              - /url: /schedule
+              - img [ref=e31]
+              - text: Седмичен график
+          - listitem [ref=e33]:
+            - link "Предмети" [ref=e34] [cursor=pointer]:
+              - /url: /subjects
+              - img [ref=e35]
+              - text: Предмети
+          - listitem [ref=e37]:
+            - link "Проекти" [ref=e38] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e39]
+              - text: Проекти
+          - listitem [ref=e44]:
+            - link "Question Bank" [ref=e45] [cursor=pointer]:
+              - /url: /question-bank
+              - img [ref=e46]
+              - text: Question Bank
+          - listitem [ref=e49]:
+            - link "Клинични Случаи" [ref=e50] [cursor=pointer]:
+              - /url: /cases
+              - img [ref=e51]
+              - text: Клинични Случаи
+          - listitem [ref=e55]:
+            - link "Таймер" [ref=e56] [cursor=pointer]:
+              - /url: /timer
+              - img [ref=e57]
+              - text: Таймер
+          - listitem [ref=e60]:
+            - link "Прогноза" [ref=e61] [cursor=pointer]:
+              - /url: /prediction
+              - img [ref=e62]
+              - text: Прогноза
+          - listitem [ref=e65]:
+            - link "GPA Калкулатор" [ref=e66] [cursor=pointer]:
+              - /url: /gpa
+              - img [ref=e67]
+              - text: GPA Калкулатор
+          - listitem [ref=e70]:
+            - link "Настройки" [ref=e71] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e72]
+              - text: Настройки
+      - generic [ref=e75]:
+        - heading "Предмети" [level=3] [ref=e76]
+        - paragraph [ref=e77]: Няма добавени предмети
+    - generic [ref=e78]:
+      - banner [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: 📚
+            - generic [ref=e84]:
+              - generic [ref=e85]: Студент
+              - generic [ref=e86]: Lv.1
+          - button "Нормален" [ref=e88]:
+            - img [ref=e89]
+            - generic [ref=e91]: Нормален
+          - button "0%" [ref=e92]:
+            - img [ref=e93]
+            - generic [ref=e95]: 0%
+          - generic [ref=e96]:
+            - img [ref=e97]
+            - generic [ref=e99]: $0.000 / $5$
+          - button "Offline" [ref=e100]:
+            - img [ref=e101]
+            - generic [ref=e105]: Offline
+          - generic [ref=e106]:
+            - generic [ref=e107]: "Статус:"
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - generic [ref=e110]: 🟢
+                - generic [ref=e111]: "0"
+              - generic [ref=e112]:
+                - generic [ref=e113]: 🟡
+                - generic [ref=e114]: "0"
+              - generic [ref=e115]:
+                - generic [ref=e116]: 🟠
+                - generic [ref=e117]: "0"
+              - generic [ref=e118]:
+                - generic [ref=e119]: ⚪
+                - generic [ref=e120]: "0"
+      - main [ref=e121]:
+        - generic [ref=e122]:
+          - generic [ref=e124]:
+            - generic [ref=e125]:
+              - heading "Проекти за развитие" [level=1] [ref=e126]:
+                - img [ref=e127]
+                - text: Проекти за развитие
+              - paragraph [ref=e132]: Курсове, книги, умения и други проекти извън изпитите
+            - button "Нов проект" [ref=e133]:
+              - img [ref=e134]
+              - text: Нов проект
+          - generic [ref=e135]:
+            - generic [ref=e136]:
+              - img [ref=e137]
+              - textbox "Търси проект..." [ref=e140]
+            - generic [ref=e141]:
+              - img [ref=e142]
+              - button "Всички" [ref=e144]
+              - button "Активни" [ref=e145]
+              - button "Завършени" [ref=e146]
+              - button "Паузирани" [ref=e147]
+          - generic [ref=e148]:
+            - img [ref=e149]
+            - heading "Няма проекти" [level=3] [ref=e154]
+            - paragraph [ref=e155]: Добави първия си проект за развитие - курс, книга, или умение което искаш да научиш
+            - button "Създай първия проект" [ref=e156]:
+              - img [ref=e157]
+              - text: Създай първия проект
+          - generic [ref=e160]:
+            - generic [ref=e161]:
+              - heading "Нов проект" [level=2] [ref=e162]:
+                - img [ref=e163]
+                - text: Нов проект
+              - button [ref=e168]:
+                - img [ref=e169]
+            - generic [ref=e172]:
+              - generic [ref=e173]:
+                - generic [ref=e174]: Име на проекта *
+                - textbox "напр. ICANSTUDY by Justin Sung" [active] [ref=e175]
+              - generic [ref=e176]:
+                - generic [ref=e177]: Описание
+                - textbox "Кратко описание..." [ref=e178]
+              - generic [ref=e179]:
+                - generic [ref=e180]:
+                  - generic [ref=e181]: Тип
+                  - combobox [ref=e182] [cursor=pointer]:
+                    - option "🎓 Курс" [selected]
+                    - option "📚 Книга"
+                    - option "⚡ Умение"
+                    - option "📜 Сертификат"
+                    - option "📦 Друго"
+                - generic [ref=e183]:
+                  - generic [ref=e184]: Категория
+                  - combobox [ref=e185] [cursor=pointer]:
+                    - option "Мета-учене" [selected]
+                    - option "Продуктивност"
+                    - option "Клинични умения"
+                    - option "Изследвания"
+                    - option "Език"
+                    - option "Кариера"
+                    - option "Здраве"
+                    - option "Друго"
+              - generic [ref=e186]:
+                - generic [ref=e187]: Приоритет
+                - generic [ref=e188]:
+                  - button "Висок" [ref=e189]
+                  - button "Среден" [ref=e190]
+                  - button "Нисък" [ref=e191]
+              - generic [ref=e192]:
+                - generic [ref=e193]:
+                  - generic [ref=e194]: Начална дата
+                  - textbox [ref=e195]
+                - generic [ref=e196]:
+                  - generic [ref=e197]: Целева дата
+                  - textbox [ref=e198]
+              - generic [ref=e199]:
+                - generic [ref=e200]: Модули / Раздели
+                - generic [ref=e201]:
+                  - textbox "Добави модул..." [ref=e202]
+                  - button [disabled] [ref=e203]:
+                    - img [ref=e204]
+                - paragraph [ref=e205]: Натисни Enter за бързо добавяне
+              - button "Създай проект" [disabled] [ref=e206]
+  - button "Open Next.js Dev Tools" [ref=e212] [cursor=pointer]:
+    - img [ref=e213]
+  - alert [ref=e216]
+```

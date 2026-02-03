@@ -1,0 +1,137 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
+            - /url: /
+            - generic [ref=e7]: ⚡
+            - generic [ref=e8]: VAYNE
+          - button "Скрий меню" [ref=e9]:
+            - img [ref=e10]
+        - paragraph [ref=e13]: Study Command Center
+      - navigation [ref=e14]:
+        - list [ref=e15]:
+          - listitem [ref=e16]:
+            - link "Табло" [ref=e17] [cursor=pointer]:
+              - /url: /
+              - img [ref=e18]
+              - text: Табло
+          - listitem [ref=e23]:
+            - link "Днешен план" [ref=e24] [cursor=pointer]:
+              - /url: /today
+              - img [ref=e25]
+              - text: Днешен план
+          - listitem [ref=e29]:
+            - link "Седмичен график" [ref=e30] [cursor=pointer]:
+              - /url: /schedule
+              - img [ref=e31]
+              - text: Седмичен график
+          - listitem [ref=e33]:
+            - link "Предмети" [ref=e34] [cursor=pointer]:
+              - /url: /subjects
+              - img [ref=e35]
+              - text: Предмети
+          - listitem [ref=e37]:
+            - link "Проекти" [ref=e38] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e39]
+              - text: Проекти
+          - listitem [ref=e44]:
+            - link "Question Bank" [ref=e45] [cursor=pointer]:
+              - /url: /question-bank
+              - img [ref=e46]
+              - text: Question Bank
+          - listitem [ref=e49]:
+            - link "Клинични Случаи" [ref=e50] [cursor=pointer]:
+              - /url: /cases
+              - img [ref=e51]
+              - text: Клинични Случаи
+          - listitem [ref=e55]:
+            - link "Таймер" [ref=e56] [cursor=pointer]:
+              - /url: /timer
+              - img [ref=e57]
+              - text: Таймер
+          - listitem [ref=e60]:
+            - link "Прогноза" [ref=e61] [cursor=pointer]:
+              - /url: /prediction
+              - img [ref=e62]
+              - text: Прогноза
+          - listitem [ref=e65]:
+            - link "GPA Калкулатор" [ref=e66] [cursor=pointer]:
+              - /url: /gpa
+              - img [ref=e67]
+              - text: GPA Калкулатор
+          - listitem [ref=e70]:
+            - link "Настройки" [ref=e71] [cursor=pointer]:
+              - /url: /settings
+              - img [ref=e72]
+              - text: Настройки
+      - generic [ref=e75]:
+        - heading "Предмети" [level=3] [ref=e76]
+        - paragraph [ref=e77]: Няма добавени предмети
+    - generic [ref=e78]:
+      - banner [ref=e79]:
+        - generic [ref=e80]:
+          - generic [ref=e81]:
+            - generic [ref=e82]: 📚
+            - generic [ref=e84]:
+              - generic [ref=e85]: Студент
+              - generic [ref=e86]: Lv.1
+          - button "Нормален" [ref=e88]:
+            - img [ref=e89]
+            - generic [ref=e91]: Нормален
+          - button "0%" [ref=e92]:
+            - img [ref=e93]
+            - generic [ref=e95]: 0%
+          - generic [ref=e96]:
+            - img [ref=e97]
+            - generic [ref=e99]: $0.000 / $5$
+          - button "Offline" [ref=e100]:
+            - img [ref=e101]
+            - generic [ref=e105]: Offline
+          - generic [ref=e106]:
+            - generic [ref=e107]: "Статус:"
+            - generic [ref=e108]:
+              - generic [ref=e109]:
+                - generic [ref=e110]: 🟢
+                - generic [ref=e111]: "0"
+              - generic [ref=e112]:
+                - generic [ref=e113]: 🟡
+                - generic [ref=e114]: "0"
+              - generic [ref=e115]:
+                - generic [ref=e116]: 🟠
+                - generic [ref=e117]: "0"
+              - generic [ref=e118]:
+                - generic [ref=e119]: ⚪
+                - generic [ref=e120]: "0"
+      - main [ref=e121]:
+        - generic [ref=e122]:
+          - generic [ref=e123]:
+            - heading "Предмети" [level=1] [ref=e124]
+            - paragraph [ref=e125]: Управлявай предмети и теми
+          - generic [ref=e126]:
+            - generic [ref=e128]:
+              - generic [ref=e129]:
+                - heading "Предмети" [level=3] [ref=e130]
+                - button "Скрий sidebar" [ref=e131]:
+                  - img [ref=e132]
+              - generic [ref=e136]:
+                - img [ref=e137]
+                - combobox [ref=e140] [cursor=pointer]:
+                  - option "Изпит (най-скоро)" [selected]
+                  - option "Име (А-Я)"
+                  - option "Прогрес (най-малко)"
+                  - option "Теми (най-много)"
+              - paragraph [ref=e141]: Няма предмети
+              - button "Нов предмет" [ref=e142]:
+                - img [ref=e143]
+                - text: Нов предмет
+            - paragraph [ref=e146]: Избери предмет от списъка
+  - button "Open Next.js Dev Tools" [ref=e152] [cursor=pointer]:
+    - img [ref=e153]
+  - alert [ref=e156]
+```

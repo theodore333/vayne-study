@@ -38,7 +38,10 @@
       "Bash(then echo \" OK: $page\" else echo \" MISSING: $page\" fi done)",
       "Bash(__NEW_LINE_e349d62d6deeb858__ echo \"1. Subject topic relations:\")",
       "Bash(__NEW_LINE_4977802e613e96a9__ echo \"2. Checking orphan data scenarios...\")",
-      "Bash(__NEW_LINE_4977802e613e96a9__ echo \"3. Cascade delete check \\(what happens when subject deleted\\):\")"
+      "Bash(__NEW_LINE_4977802e613e96a9__ echo \"3. Cascade delete check \\(what happens when subject deleted\\):\")",
+      "Bash(npm init:*)",
+      "Bash(npx playwright install:*)",
+      "Bash(npm test)"
     ]
   }
 }

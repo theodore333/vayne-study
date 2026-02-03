@@ -43,6 +43,8 @@ const NAV_GROUPS = [
       { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
       { href: '/projects', label: 'Проекти', icon: 'Rocket' },
       { href: '/question-bank', label: 'Сборници', icon: 'FileQuestion' },
+      { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
+      { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
     ]
   },
   {
@@ -59,7 +61,6 @@ const NAV_GROUPS = [
     label: 'Анализи',
     icon: 'BarChart3',
     children: [
-      { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
       { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
       { href: '/gpa', label: 'GPA', icon: 'GraduationCap' },
     ]
@@ -70,7 +71,6 @@ const NAV_GROUPS = [
     icon: 'Settings',
     children: [
       { href: '/timer', label: 'Таймер', icon: 'Clock' },
-      { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
       { href: '/settings', label: 'Настройки', icon: 'Settings' },
     ]
   }

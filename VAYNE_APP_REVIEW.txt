@@ -1,0 +1,694 @@
+================================================================================
+                    VAYNE STUDY - TECHNICAL REVIEW DOCUMENT
+                    For AI Evaluation & Assessment
+================================================================================
+
+DOCUMENT PURPOSE:
+This file provides a comprehensive technical overview of the VAYNE Study
+application for evaluation by an AI system. The goal is to assess whether
+this application deserves additional polish and continued development, or
+whether alternative solutions would be more effective.
+
+================================================================================
+                            EXECUTIVE SUMMARY
+================================================================================
+
+VAYNE Study is a self-contained medical education platform built with:
+- Next.js 16 + React 19 + TypeScript
+- Tailwind CSS v4
+- localStorage (5MB) + Redis cloud sync
+- Claude API (Opus/Sonnet/Haiku) for AI features
+
+TARGET USER: Medical students (Bulgarian language, adaptable)
+CORE VALUE PROPOSITION: AI-powered spaced repetition with clinical case simulation
+
+================================================================================
+                         ARCHITECTURE OVERVIEW
+================================================================================
+
+DATA LAYER
+-----------
+Primary Storage: localStorage with lz-string compression
+  - vayne-data: Main application state (~3-4MB typical)
+  - vayne-materials: Topic materials stored separately (always compressed)
+  - Automatic migration for schema changes
+
+Cloud Sync: Redis-based
+  - Debounced saves (1-2 second delay)
+  - Timestamp-based merge (newer wins)
+  - Manual "Sync Now" option
+
+State Management: Single React Context
+  - Full TypeScript coverage
+  - ~300 lines of type definitions
+  - Auto-save on every state change
+
+CODEBASE STRUCTURE
+------------------
+Total TypeScript/TSX: ~15,000+ lines
+Key files:
+  lib/algorithms.ts     (1100 lines) - Core logic, decay, planning
+  lib/gamification.ts   (350 lines)  - XP, achievements, levels
+  lib/storage.ts        (400 lines)  - Persistence layer
+  lib/types.ts          (300 lines)  - Type definitions
+  app/quiz/page.tsx     (3000 lines) - Quiz system (largest)
+  app/cases/page.tsx    (1500 lines) - Clinical cases
+  app/timer/page.tsx    (2000 lines) - Timer + Pomodoro
+  app/today/page.tsx    (800 lines)  - Daily AI planner
+
+================================================================================
+                           QUIZ SYSTEM (7 MODES)
+================================================================================
+
+MODE 1: ASSESSMENT
+------------------
+Purpose: Standard knowledge testing across Bloom's Taxonomy levels
+Flow:
+  1. User selects target Bloom level (1-6)
+  2. System generates mixed MCQ + open-ended questions
+  3. Claude evaluates responses
+  4. Results stored in topic.quizHistory with weight
+
+Bloom Levels Supported:
+  1 - Remember (recall facts)
+  2 - Understand (explain concepts)
+  3 - Apply (use in new situations)
+  4 - Analyze (break down information)
+  5 - Evaluate (justify decisions)
+  6 - Create (produce new work)
+
+MODE 2: FREE RECALL
+-------------------
+Purpose: Active retrieval without prompts (highest learning efficacy)
+Flow:
+  1. User writes everything they remember about topic
+  2. Claude evaluates against key concepts from material
+  3. Returns:
+     - Score (0-100%)
+     - Inferred Bloom level
+     - Covered concepts (with accuracy flags)
+     - Missing key points
+     - Contextual hints (non-spoiler)
+
+Technical Note: This is the most cognitively effective mode per learning
+science literature (Roediger & Karpicke, 2006)
+
+MODE 3: GAP ANALYSIS
+--------------------
+Purpose: Target specific knowledge gaps
+Flow:
+  1. System analyzes wrongAnswers from topic.quizHistory
+  2. Identifies patterns in mistakes
+  3. Generates focused questions on weak concepts
+  4. Tracks which gaps were addressed
+
+MODE 4: DRILL WEAKNESS
+----------------------
+Purpose: Rephrase previously wrong questions for mastery
+Flow:
+  1. Takes wrong answers from past quizzes
+  2. Creates new questions testing same concept differently
+  3. Tracks drillCount per wrong answer
+  4. Progressive difficulty variations
+
+MODE 5-7: BLOOM LEVEL TARGETING
+-------------------------------
+Purpose: Strategic preparation for specific question types
+  - Lower Order (1-2): Memory + Understanding
+  - Mid Order (3-4): Application + Analysis
+  - Higher Order (5-6): Evaluation + Creation
+
+Useful for: Exams known to favor certain question types
+
+CUSTOM MODE
+-----------
+Full control over:
+  - Question count
+  - Question type mix (MCQ/open ratio)
+  - Difficulty range
+  - Bloom level range
+
+MULTI-TOPIC MODE
+----------------
+Purpose: Test integration of knowledge across topics
+Flow:
+  1. Select multiple topics from same/different subjects
+  2. System generates questions requiring cross-topic synthesis
+  3. Particularly valuable for clinical integration
+
+QUIZ LENGTH PRESETS
+-------------------
+| Preset   | Questions | Weight | Use Case              |
+|----------|-----------|--------|-----------------------|
+| Quick    | 5         | 0.5x   | Fast daily review     |
+| Standard | 12        | 1.0x   | Regular practice      |
+| Deep     | 22        | 1.5x   | Comprehensive review  |
+| Marathon | 35        | 2.0x   | Exam simulation       |
+
+KEY INNOVATION: Longer quizzes carry more weight in mastery calculation,
+incentivizing deeper practice sessions.
+
+================================================================================
+                        CLINICAL CASES SYSTEM
+================================================================================
+
+PURPOSE: Simulate clinical reasoning workflow for medical students
+
+7-STEP CASE PROGRESSION
+-----------------------
+
+STEP 1: PRESENTATION
+- Patient demographics (age, sex)
+- Chief complaint
+- Brief history
+- Difficulty level selection (beginner/intermediate/advanced)
+
+STEP 2: HISTORY (ANAMNESIS)
+- Multi-turn chat with simulated "patient"
+- Claude role-plays realistic patient responses
+- Student must ask appropriate questions
+- Tracks which history elements were gathered
+
+STEP 3: PHYSICAL EXAMINATION
+- 9 body systems available:
+  * General appearance
+  * Cardiovascular
+  * Respiratory
+  * Abdominal
+  * Neurological
+  * Musculoskeletal
+  * Dermatological
+  * Head/Neck
+  * Genitourinary
+- Student selects which systems to examine
+- Claude reveals appropriate findings
+- Evaluates appropriateness of examination choices
+
+STEP 4: INVESTIGATIONS
+- Categories: Lab tests, Imaging, Procedures, Other
+- Student orders tests and justifies each choice
+- Claude evaluates:
+  * Appropriateness for suspected diagnosis
+  * Cost/benefit consideration
+  * Invasiveness consideration
+- Results revealed progressively
+
+STEP 5: DIFFERENTIAL DIAGNOSIS
+- Student creates ranked list of possible diagnoses
+- Drag-and-drop reordering
+- Claude evaluates:
+  * Completeness of differentials
+  * Ranking logic
+  * Evidence supporting each
+
+STEP 6: FINAL DIAGNOSIS
+- Student proposes working diagnosis
+- Claude evaluates:
+  * Correctness
+  * Supporting evidence cited
+  * Confidence calibration
+
+STEP 7: TREATMENT PLAN
+- Categorized by priority:
+  * Immediate (life-saving)
+  * Short-term (days to weeks)
+  * Long-term (chronic management)
+- Includes: Medications, procedures, monitoring, referrals
+- Claude evaluates against evidence-based guidelines
+
+DATA STRUCTURE
+--------------
+Each case stores:
+  - Hidden data (correct diagnosis, expected findings, optimal treatment)
+  - Student responses at each step
+  - Per-step evaluations
+  - Overall case score
+  - Learning points identified
+
+================================================================================
+                        SPACED REPETITION SYSTEM
+================================================================================
+
+TOPIC STATUS PROGRESSION
+------------------------
+Gray   -> Orange -> Yellow -> Green
+(new)    (partial) (good)   (mastered)
+
+STATUS DEFINITIONS
+------------------
+GRAY:   Never studied or fully decayed
+        No quizzes attempted or all knowledge lost
+
+ORANGE: Basic exposure
+        Some quiz attempts, low scores
+        Quick decay (18 days to gray)
+
+YELLOW: Good understanding
+        Quiz average 50-79%
+        Moderate decay (28 days to orange)
+
+GREEN:  Mastery achieved
+        Quiz average 80%+
+        Slow decay (28 days to yellow, then cascade)
+
+DECAY ALGORITHM
+---------------
+Applied once daily on app load.
+Thresholds in days since lastReviewDate:
+
+From GREEN:
+  - 28 days -> Orange
+  - 18 more days -> Yellow (46 total)
+  - 14 more days -> Gray (60 total)
+
+From YELLOW:
+  - 28 days -> Orange
+  - 18 more days -> Gray (46 total)
+
+From ORANGE:
+  - 18 days -> Gray
+
+KEY FEATURE: Cascade decay
+If 45 days pass without review, a Green topic can cascade:
+Green -> Orange -> Yellow (skips Gray for recent high mastery)
+
+ADAPTIVE THRESHOLDS
+-------------------
+Based on topic's average grade (avgGrade from quizzes):
+
+| Mastery Grade | Warning Threshold |
+|---------------|-------------------|
+| 95%+          | 21 days           |
+| 85-94%        | 16 days           |
+| 70-84%        | 12 days           |
+| 50-69%        | 8 days            |
+| <50%          | 5 days            |
+
+Purpose: Higher mastery = longer intervals (true spaced repetition)
+
+VACATION MODE
+-------------
+When enabled:
+  - All thresholds multiplied by 1.5x
+  - Daily workload reduced to 40%
+  - Prevents panic during breaks
+
+================================================================================
+                          AI DAILY PLANNER
+================================================================================
+
+AUTOMATIC PLAN GENERATION (generateDailyPlan function)
+------------------------------------------------------
+Produces 4-tier prioritized task list:
+
+TIER 1 - CRITICAL (Must do today)
+  - Exercises scheduled for tomorrow (need prep)
+  - Topics for exams within 3 days
+
+TIER 2 - HIGH (Should do today)
+  - All topics for exams within 7 days
+  - Overdue decaying topics (past threshold)
+
+TIER 3 - MEDIUM (Recommended)
+  - Topics at risk of decay (approaching threshold)
+  - Based on adaptive thresholds above
+
+TIER 4 - NORMAL (If time permits)
+  - New material quota (25% of daily capacity)
+  - Prioritized by exam urgency
+
+CRUNCH MODE
+-----------
+Automatically activates when:
+  - Daily workload > 5 topics/day
+  OR
+  - Exam < 7 days AND workload > 3 topics/day
+
+Effects:
+  - Prioritizes small (S) topics for quick coverage
+  - Shows crunch-specific tips:
+    * "Focus on small topics for rapid coverage"
+    * "Split large topics into 2-3 sessions"
+    * "Review key points only, skip details"
+  - Adjusts topic sizing display
+
+TOPIC SIZE CLASSIFICATION
+-------------------------
+| Size   | Estimated Time | Crunch Priority |
+|--------|----------------|-----------------|
+| Small  | 15 min         | 3x bonus        |
+| Medium | 30 min         | 1x bonus        |
+| Large  | 60 min         | 0x bonus        |
+
+Assigned by:
+  - AI during material import (analyzes complexity)
+  - Manual user override
+
+AI ADVICE FEATURE
+-----------------
+Optional "Get AI Advice" button calls Claude (Sonnet) to generate:
+  - Personalized study recommendations
+  - Weak topic analysis
+  - Bloom level gap identification
+  - Format gap analysis (MCQ vs cases vs open)
+  - Time pressure assessment
+
+WEEKLY REVIEW
+-------------
+Triggered every Monday:
+  - Modal popup with week summary
+  - Achievement highlights
+  - Topics reviewed vs decay risk
+  - Suggested focus areas
+
+================================================================================
+                         GAMIFICATION SYSTEM
+================================================================================
+
+LEVEL PROGRESSION (9 Levels)
+----------------------------
+| Level | XP Required | Title (Bulgarian)     | Icon |
+|-------|-------------|----------------------|------|
+| 1     | 0           | Студент (Student)    |  📚  |
+| 2     | 500         | Редовен (Regular)    |  📖  |
+| 3     | 1,500       | Старателен (Diligent)|  ✏️  |
+| 4     | 3,500       | Амбициозен (Ambitious)|  🎯  |
+| 5     | 6,500       | Специалист (Specialist)|  🔬  |
+| 6     | 11,000      | Експерт (Expert)     |  🧠  |
+| 7     | 17,500      | Майстор (Master)     |  🏆  |
+| 8     | 26,000      | Легенда (Legend)     |  👑  |
+| 9     | 40,000      | VAYNE MODE           |  ⚡  |
+
+XP REWARDS
+----------
+Topic Progression:
+  Gray -> Orange:   50 XP
+  Orange -> Yellow: 75 XP
+  Yellow -> Green:  100 XP
+  Gray -> Green:    150 XP (direct jump bonus)
+
+Quiz Performance:
+  Any completion:   20 XP
+  Score >= 70%:     30 XP
+  Score >= 85%:     50 XP
+  Perfect (100%):   100 XP
+
+Other Actions:
+  Bloom level up:   100 XP
+  Daily streak:     20 XP × streak_multiplier
+  Combo bonus:      10 XP × combo_level
+
+COMBO SYSTEM
+------------
+Purpose: Reward concentrated study sessions
+Mechanics:
+  - Actions within 30 minutes increase combo
+  - Combo levels: 1x, 1.2x, 1.4x, 1.6x, 1.8x, 2.0x (max)
+  - Resets if 30+ minutes between actions
+  - All XP gains multiplied by current combo
+
+ACHIEVEMENTS (25+)
+------------------
+FIRST STEPS:
+  - First Blood: Complete 1 topic
+  - Green Light: First green topic
+  - Quiz Time: First quiz completed
+
+STREAK ACHIEVEMENTS:
+  - Warming Up: 3-day streak
+  - On Fire: 7-day streak
+  - Unstoppable: 14-day streak
+  - Legendary: 30-day streak
+
+MILESTONE ACHIEVEMENTS:
+  - Getting Started: 10 topics studied
+  - Halfway There: 50 topics studied
+  - Century: 100 topics studied
+  - Scholar: 250 topics studied
+
+GREEN MASTERY:
+  - Green Machine: 10 green topics
+  - Forest: 25 green topics
+  - Jungle: 50 green topics
+
+QUIZ ACHIEVEMENTS:
+  - Quiz Enthusiast: 10 quizzes taken
+  - Quiz Master: 50 quizzes taken
+  - Perfectionist: 5 perfect scores
+  - Flawless: 20 perfect scores
+
+LEVEL ACHIEVEMENTS:
+  - Rising Star: Reach level 5
+  - Elite: Reach level 7
+  - VAYNE MODE: Reach level 9
+
+XP ACHIEVEMENTS:
+  - XP Hunter: 1,000 total XP
+  - XP Lord: 10,000 total XP
+
+COMBO ACHIEVEMENTS:
+  - Combo Starter: 5x combo
+  - Combo King: 10x combo
+
+SPECIAL:
+  - Subject Master: 100% green on any subject
+
+================================================================================
+                      GRADE PREDICTION SYSTEM
+================================================================================
+
+MONTE CARLO SIMULATION
+----------------------
+Process (1000 iterations):
+  1. Simulate random topic selection (mimics exam)
+  2. For each selected topic, sample from quiz performance distribution
+  3. Calculate simulated exam score
+  4. Aggregate across iterations
+
+Outputs:
+  - Expected Grade: Mean of simulations
+  - Best Case: 95th percentile
+  - Worst Case: 5th percentile
+  - Variance: Standard deviation
+  - Confidence Level: Based on spread
+
+IMPACT ANALYSIS
+---------------
+For each weak topic, calculates:
+  "If this topic improved from X to Y, predicted grade increases by Z"
+
+Helps prioritize which weak topics to focus on.
+
+PREDICTIVE GRADE FORMULA
+------------------------
+Components (normalized 0-1 or 0-6):
+
+1. COVERAGE (0-1)
+   Weighted by status:
+   - Green: 100%
+   - Yellow: 70%
+   - Orange: 30%
+   - Gray: 0%
+
+2. MASTERY (0-6)
+   Average quiz grade across all topics
+
+3. CONSISTENCY (0-1)
+   Proportion of topics reviewed in last 7 days
+
+4. TIME FACTOR (0.7-1.0)
+   Penalty for exam proximity:
+   - >30 days: 1.0
+   - 14-30 days: 0.9
+   - 7-14 days: 0.8
+   - <7 days: 0.7
+
+5. DECAY RISK (0-1)
+   Proportion of topics past safe review interval
+
+6. QUESTION BANK (optional, -1 to +1)
+   Performance on practice question collections
+
+FINAL CALCULATION:
+baseGrade = (coverage × 3 + mastery/6 × 3) × timeFactor
+consistency_bonus = consistency × 0.5
+decay_penalty = decay_risk × 0.5
+qb_bonus = (qb_accuracy - 0.5) × 2 × 0.5
+
+predicted = baseGrade + consistency_bonus - decay_penalty + qb_bonus + 2
+predicted = clamp(2, 6, predicted)  // Bulgarian grading: 2-6
+
+================================================================================
+                        ADDITIONAL FEATURES
+================================================================================
+
+TIMER SYSTEM
+------------
+Two modes:
+  1. Normal Timer: Simple stopwatch with session logging
+  2. Pomodoro: 25/5/15 intervals (customizable)
+
+Features:
+  - Floating widget persists across pages
+  - Auto-start options for breaks/work
+  - Session rating (1-5 stars)
+  - Distraction notes
+  - Links to subject/topic
+
+QUESTION BANK
+-------------
+Purpose: Practice from collected exam questions
+Features:
+  - Import from PDF (Format A: standard MCQ, Format B: assertions)
+  - Multiple correct answers support
+  - Keyboard shortcuts (A-D for answers, Enter to submit)
+  - Accuracy tracking per question
+  - Randomization options
+
+READER MODE
+-----------
+Purpose: Study uploaded materials
+Features:
+  - Text highlighting
+  - Note annotations
+  - Reading count tracking
+  - Material preview
+
+SCHEDULE INTEGRATION
+--------------------
+Weekly class schedule with:
+  - Lecture/exercise distinction
+  - Prep requirement flags
+  - Automatic "exercises tomorrow" alerts
+
+GPA TRACKER
+-----------
+Features:
+  - Semester-by-semester grade entry
+  - Target GPA setting
+  - Current vs target comparison
+  - ECTS weighted calculation
+
+STORAGE MANAGEMENT
+------------------
+Features:
+  - Usage indicator (bytes used)
+  - Compression status display
+  - Clear cache options
+  - Export/import data
+
+INTEGRATIONS
+------------
+1. Anki:
+   - Read AnkiConnect statistics
+   - Export subjects as nested decks
+   - Due card counts
+
+2. Cloud Sync (Redis):
+   - Automatic sync on changes
+   - Manual "Sync Now"
+   - Conflict resolution (newer wins)
+
+3. VAYNE OS (External):
+   - XP transfer to external game system
+   - Achievement sync
+   - Optional, requires configuration
+
+================================================================================
+                    CRITICAL EVALUATION QUESTIONS
+================================================================================
+
+FOR THE REVIEWING AI TO CONSIDER:
+
+1. MARKET POSITIONING
+   - Is this application competing with Anki, Quizlet, Osmosis, or Amboss?
+   - What is the unique value proposition vs these established tools?
+   - Is the Bulgarian language focus a strength or limitation?
+
+2. TECHNICAL DEBT ASSESSMENT
+   - quiz/page.tsx at 3000 lines suggests possible need for refactoring
+   - localStorage 5MB limit may be problematic at scale
+   - Is the single-context state management pattern scalable?
+
+3. AI COST ANALYSIS
+   - Every quiz generation = Claude API call
+   - Every case step = Claude API call
+   - Is the AI-heavy approach sustainable for students?
+   - Monthly API costs could be $20-100+ for active users
+
+4. LEARNING SCIENCE VALIDITY
+   - Does the decay algorithm match actual forgetting curves?
+   - Is the 4-status system (gray/orange/yellow/green) evidence-based?
+   - Are the Bloom level assessments accurate?
+
+5. CLINICAL CASE REALISM
+   - Can AI-generated cases match real clinical scenarios?
+   - Are the evaluations medically accurate?
+   - Risk of teaching incorrect information?
+
+6. USER EXPERIENCE GAPS
+   - Mobile responsiveness?
+   - Offline functionality?
+   - Multi-device sync reliability?
+
+7. POLISH OPPORTUNITIES
+   - UI/UX consistency across 15+ pages
+   - Error handling and edge cases
+   - Loading states and feedback
+   - Accessibility compliance
+
+8. ALTERNATIVE TOOLS COMPARISON
+   - Anki: Better for raw spaced repetition
+   - Amboss: Better medical content
+   - ChatGPT: More flexible AI interaction
+   - What does VAYNE do better than using these together?
+
+================================================================================
+                         HONEST ASSESSMENT
+================================================================================
+
+STRENGTHS:
+1. Integrated ecosystem - everything in one place
+2. Adaptive AI that knows student's weak points
+3. Clinical case simulation (unique for self-study tools)
+4. Gamification that drives consistent behavior
+5. Smart daily planning with exam awareness
+6. Free recall mode (evidence-based learning)
+
+WEAKNESSES:
+1. Heavy reliance on AI API (cost, latency, accuracy)
+2. localStorage limitations for power users
+3. Single developer codebase patterns
+4. Bulgarian-only content (limited market)
+5. No mobile app (web-only)
+6. No offline mode
+
+VERDICT CONSIDERATIONS:
+- For a personal project: Impressive scope and depth
+- For production use: Needs significant polish
+- For competition with Anki: Different use case, not replacement
+- For medical education: Unique AI features, but unvalidated accuracy
+
+================================================================================
+                         FILE INVENTORY
+================================================================================
+
+Total files analyzed: 40+
+Total lines of code: ~15,000+
+Components: 25+
+API routes: 12+
+Modals: 10+
+
+Key complexity hotspots:
+1. app/quiz/page.tsx (3000 lines) - needs component extraction
+2. lib/algorithms.ts (1100 lines) - well-organized but dense
+3. app/timer/page.tsx (2000 lines) - floating widget state is complex
+4. app/cases/page.tsx (1500 lines) - 7-step wizard is intricate
+
+================================================================================
+                              END OF DOCUMENT
+================================================================================
+
+Document generated: 2026-01-24
+For: AI Review & Evaluation
+By: Claude (analysis of VAYNE Study codebase)

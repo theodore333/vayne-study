@@ -419,6 +419,9 @@ export interface AppData {
   academicPeriod: AcademicPeriod;
   userProgress: UserProgress;
   clinicalCaseSessions: ClinicalCaseSession;
+  // Phase 1: Vayne Doctor
+  developmentProjects: DevelopmentProject[];
+  careerProfile: CareerProfile | null;
 }
 
 export interface PredictedGrade {
@@ -668,3 +671,65 @@ export const INVESTIGATION_CATEGORIES = {
     tests: ['Кожна биопсия', 'Костно-мозъчна биопсия', 'Спирометрия']
   }
 } as const;
+
+// ================ DEVELOPMENT PROJECTS (Phase 1: Vayne Doctor) ================
+
+export type ProjectType = 'course' | 'book' | 'skill' | 'certification' | 'other';
+export type ProjectCategory = 'meta-learning' | 'productivity' | 'clinical-skill' | 'research' | 'language' | 'career' | 'wellbeing' | 'other';
+export type ProjectStatus = 'active' | 'paused' | 'completed' | 'abandoned';
+export type ProjectPriority = 'high' | 'medium' | 'low';
+export type ModuleStatus = 'locked' | 'available' | 'in_progress' | 'completed';
+export type InsightType = 'principle' | 'technique' | 'mindset' | 'fact';
+
+export interface ProjectModule {
+  id: string;
+  title: string;
+  order: number;
+  status: ModuleStatus;
+  completedAt?: string;
+  notes?: string;
+}
+
+export interface ProjectInsight {
+  id: string;
+  date: string;
+  moduleId?: string;
+  insight: string;
+  type: InsightType;
+  applied: boolean;
+}
+
+export interface DevelopmentProject {
+  id: string;
+  name: string;
+  description?: string;
+  type: ProjectType;
+  category: ProjectCategory;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  startDate?: string;
+  targetDate?: string;
+  completedDate?: string;
+  modules: ProjectModule[];
+  progressPercent: number;
+  timeInvested: number;  // minutes
+  insights: ProjectInsight[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ================ CAREER PROFILE (Phase 1: Vayne Doctor) ================
+
+export type MedicalStage = 'preclinical' | 'clinical' | 'intern' | 'resident' | 'other';
+
+export interface CareerProfile {
+  currentYear: number;  // 1-6 for med school
+  stage: MedicalStage;
+  university?: string;
+  interestedSpecialties: string[];
+  academicInterests: string[];
+  shortTermGoals: string[];
+  longTermGoals: string[];
+  createdAt: string;
+  updatedAt: string;
+}

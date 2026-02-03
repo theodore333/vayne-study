@@ -224,7 +224,7 @@ function CasesContent() {
  subjectType: subject.subjectType || 'clinical',
  difficulty
  }),
- timeout: 60000, // 60s for case generation
+ // 60s for case generation
  signal: abortControllerRef.current?.signal
  });
 
@@ -341,7 +341,7 @@ function CasesContent() {
  studentQuestion: historyInput,
  presentation: activeCase.presentation
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
 
@@ -401,7 +401,7 @@ function CasesContent() {
  hiddenFindings: activeCase.hiddenData.keyExamFindings,
  presentation: activeCase.presentation
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -469,7 +469,7 @@ function CasesContent() {
  presentation: activeCase.presentation,
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -576,7 +576,7 @@ function CasesContent() {
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
  caseContext: JSON.stringify(activeCase.presentation)
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -645,7 +645,7 @@ function CasesContent() {
  studentDdx: activeCase.studentDdx,
  caseContext: JSON.stringify(activeCase.presentation)
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -744,7 +744,7 @@ function CasesContent() {
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
  caseContext: JSON.stringify(activeCase.presentation)
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -802,7 +802,7 @@ function CasesContent() {
  evaluations: [...activeCase.evaluations, evaluation],
  timeSpentMinutes: Math.floor(elapsedTime / 60)
  }),
- timeout: 30000,
+ 
  signal: abortControllerRef.current?.signal
  });
  const summaryResult = await summaryResponse.json();

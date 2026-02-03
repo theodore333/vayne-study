@@ -1,4 +1,4 @@
-import { ClassType, TopicStatus, TopicSize } from './types';
+import { ClassType, TopicStatus, TopicSize, ProjectType, ProjectCategory, ProjectPriority } from './types';
 
 export const STATUS_CONFIG: Record<TopicStatus, {
   bg: string;
@@ -104,7 +104,54 @@ export const STORAGE_KEY = 'vayne-command-center';
 export const NAV_ITEMS = [
   { href: '/', label: 'Табло', icon: 'LayoutDashboard' },
   { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
+  { href: '/projects', label: 'Проекти', icon: 'Rocket' },
   { href: '/schedule', label: 'Седмичен график', icon: 'Calendar' },
   { href: '/today', label: 'Днешен план', icon: 'Target' },
   { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' }
+];
+
+// ================ DEVELOPMENT PROJECTS (Phase 1: Vayne Doctor) ================
+
+export const PROJECT_TYPE_CONFIG: Record<ProjectType, {
+  label: string;
+  icon: string;
+  color: string;
+}> = {
+  course: { label: 'Курс', icon: '🎓', color: '#3b82f6' },
+  book: { label: 'Книга', icon: '📚', color: '#8b5cf6' },
+  skill: { label: 'Умение', icon: '⚡', color: '#f59e0b' },
+  certification: { label: 'Сертификат', icon: '📜', color: '#22c55e' },
+  other: { label: 'Друго', icon: '📦', color: '#64748b' }
+};
+
+export const PROJECT_CATEGORY_CONFIG: Record<ProjectCategory, {
+  label: string;
+  color: string;
+}> = {
+  'meta-learning': { label: 'Мета-учене', color: '#ec4899' },
+  'productivity': { label: 'Продуктивност', color: '#06b6d4' },
+  'clinical-skill': { label: 'Клинични умения', color: '#ef4444' },
+  'research': { label: 'Изследвания', color: '#8b5cf6' },
+  'language': { label: 'Език', color: '#22c55e' },
+  'career': { label: 'Кариера', color: '#f59e0b' },
+  'wellbeing': { label: 'Здраве', color: '#14b8a6' },
+  'other': { label: 'Друго', color: '#64748b' }
+};
+
+export const PROJECT_PRIORITY_CONFIG: Record<ProjectPriority, {
+  label: string;
+  color: string;
+  bgColor: string;
+}> = {
+  high: { label: 'Висок', color: '#ef4444', bgColor: '#450a0a' },
+  medium: { label: 'Среден', color: '#f59e0b', bgColor: '#451a03' },
+  low: { label: 'Нисък', color: '#64748b', bgColor: '#1e293b' }
+};
+
+export const MEDICAL_SPECIALTIES = [
+  'Вътрешни болести', 'Хирургия', 'Педиатрия', 'Акушерство и гинекология',
+  'Психиатрия', 'Неврология', 'Кардиология', 'Ортопедия', 'Дерматология',
+  'Офталмология', 'УНГ', 'Анестезиология', 'Спешна медицина', 'Обща медицина',
+  'Радиология', 'Патология', 'Онкология', 'Урология', 'Ендокринология',
+  'Гастроентерология', 'Пулмология', 'Нефрология', 'Ревматология', 'Инфекциозни болести'
 ];

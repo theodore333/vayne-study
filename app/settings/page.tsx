@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain, GraduationCap, Plus } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { TopicStatus } from '@/lib/types';
+import { TopicStatus, MedicalStage } from '@/lib/types';
+import { MEDICAL_SPECIALTIES } from '@/lib/constants';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getDeckNames, getSelectedDecks, saveSelectedDecks } from '@/lib/anki';
 import { fetchWithTimeout } from '@/lib/fetch-utils';
 
@@ -14,7 +15,7 @@ interface ImportResult {
 }
 
 export default function SettingsPage() {
-  const { data, updateUsageBudget, setTopicStatus, updateStudyGoals } = useApp();
+  const { data, updateUsageBudget, setTopicStatus, updateStudyGoals, updateCareerProfile } = useApp();
   const { usageData, studyGoals } = data;
   const activeSubjects = data.subjects.filter(s => !s.archived);
 
@@ -572,6 +573,187 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Career Profile */}
+      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2 mb-4">
+          <GraduationCap size={20} className="text-emerald-400" />
+          Кариерен профил
+        </h2>
+
+        <p className="text-sm text-slate-400 font-mono mb-4">
+          Информация за твоя образователен етап и кариерни интереси.
+        </p>
+
+        <div className="space-y-4">
+          {/* Year and Stage */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">Курс</label>
+              <select
+                value={data.careerProfile?.currentYear || 1}
+                onChange={(e) => updateCareerProfile({ currentYear: parseInt(e.target.value) })}
+                className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-emerald-500"
+              >
+                {[1, 2, 3, 4, 5, 6].map(year => (
+                  <option key={year} value={year}>{year} курс</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-slate-400 mb-2 font-mono">Етап</label>
+              <select
+                value={data.careerProfile?.stage || 'preclinical'}
+                onChange={(e) => updateCareerProfile({ stage: e.target.value as MedicalStage })}
+                className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-emerald-500"
+              >
+                <option value="preclinical">Предклиничен (1-3)</option>
+                <option value="clinical">Клиничен (4-6)</option>
+                <option value="intern">Интерн</option>
+                <option value="resident">Специализант</option>
+                <option value="other">Друго</option>
+              </select>
+            </div>
+          </div>
+
+          {/* University */}
+          <div>
+            <label className="block text-sm text-slate-400 mb-2 font-mono">Университет</label>
+            <input
+              type="text"
+              value={data.careerProfile?.university || ''}
+              onChange={(e) => updateCareerProfile({ university: e.target.value })}
+              placeholder="напр. МУ София"
+              className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 font-mono text-sm focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          {/* Interested Specialties */}
+          <div>
+            <label className="block text-sm text-slate-400 mb-2 font-mono">
+              Интересни специалности
+            </label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {(data.careerProfile?.interestedSpecialties || []).map(specialty => (
+                <span
+                  key={specialty}
+                  className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-600/20 text-emerald-300 rounded text-xs font-mono"
+                >
+                  {specialty}
+                  <button
+                    onClick={() => updateCareerProfile({
+                      interestedSpecialties: (data.careerProfile?.interestedSpecialties || []).filter(s => s !== specialty)
+                    })}
+                    className="hover:text-red-400"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+            <select
+              value=""
+              onChange={(e) => {
+                if (e.target.value && !(data.careerProfile?.interestedSpecialties || []).includes(e.target.value)) {
+                  updateCareerProfile({
+                    interestedSpecialties: [...(data.careerProfile?.interestedSpecialties || []), e.target.value]
+                  });
+                }
+              }}
+              className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="">+ Добави специалност...</option>
+              {MEDICAL_SPECIALTIES.filter(s => !(data.careerProfile?.interestedSpecialties || []).includes(s)).map(specialty => (
+                <option key={specialty} value={specialty}>{specialty}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Short Term Goals */}
+          <div>
+            <label className="block text-sm text-slate-400 mb-2 font-mono">
+              Краткосрочни цели (този семестър)
+            </label>
+            <div className="space-y-2">
+              {(data.careerProfile?.shortTermGoals || []).map((goal, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="flex-1 px-3 py-2 bg-slate-800/50 rounded-lg text-sm text-slate-300 font-mono">
+                    {goal}
+                  </span>
+                  <button
+                    onClick={() => updateCareerProfile({
+                      shortTermGoals: (data.careerProfile?.shortTermGoals || []).filter((_, i) => i !== index)
+                    })}
+                    className="p-1.5 text-slate-500 hover:text-red-400"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Добави цел..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                      updateCareerProfile({
+                        shortTermGoals: [...(data.careerProfile?.shortTermGoals || []), e.currentTarget.value.trim()]
+                      });
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 font-mono text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Long Term Goals */}
+          <div>
+            <label className="block text-sm text-slate-400 mb-2 font-mono">
+              Дългосрочни цели (кариерни)
+            </label>
+            <div className="space-y-2">
+              {(data.careerProfile?.longTermGoals || []).map((goal, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="flex-1 px-3 py-2 bg-slate-800/50 rounded-lg text-sm text-slate-300 font-mono">
+                    {goal}
+                  </span>
+                  <button
+                    onClick={() => updateCareerProfile({
+                      longTermGoals: (data.careerProfile?.longTermGoals || []).filter((_, i) => i !== index)
+                    })}
+                    className="p-1.5 text-slate-500 hover:text-red-400"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Добави цел..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                      updateCareerProfile({
+                        longTermGoals: [...(data.careerProfile?.longTermGoals || []), e.currentTarget.value.trim()]
+                      });
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 font-mono text-sm focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 bg-emerald-900/20 border border-emerald-800/30 rounded-lg">
+            <p className="text-xs text-emerald-300 font-mono">
+              Тази информация ще се използва от AI Career Coach (идва скоро) за персонализирани съвети.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Notion Import */}

@@ -162,7 +162,10 @@ const defaultData: AppData = {
   studyGoals: defaultStudyGoals,
   academicPeriod: defaultAcademicPeriod,
   userProgress: defaultUserProgress,
-  clinicalCaseSessions: defaultClinicalCaseSessions
+  clinicalCaseSessions: defaultClinicalCaseSessions,
+  // Phase 1: Vayne Doctor
+  developmentProjects: [],
+  careerProfile: null
 };
 
 // Materials storage helpers - now using IndexedDB with in-memory cache
@@ -309,6 +312,10 @@ export function loadData(): AppData {
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     if (!data.userProgress) data.userProgress = defaultUserProgress;
     if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
+
+    // Phase 1: Vayne Doctor migrations
+    if (!data.developmentProjects) data.developmentProjects = [];
+    if (data.careerProfile === undefined) data.careerProfile = null;
 
     // Migrate: Calculate stats from existing data
     if (data.userProgress && data.subjects) {

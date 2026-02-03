@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
@@ -86,6 +86,20 @@ interface AppContextType {
   storageError: { error: StorageError; message?: string } | null;
   clearStorageError: () => void;
   getStorageUsage: () => { used: number; total: number; percentage: number };
+
+  // Development Projects (Phase 1: Vayne Doctor)
+  addProject: (project: Omit<DevelopmentProject, 'id' | 'createdAt' | 'updatedAt' | 'progressPercent' | 'timeInvested' | 'insights'>) => void;
+  updateProject: (id: string, updates: Partial<DevelopmentProject>) => void;
+  deleteProject: (id: string) => void;
+  addProjectModule: (projectId: string, module: Omit<ProjectModule, 'id'>) => void;
+  updateProjectModule: (projectId: string, moduleId: string, updates: Partial<ProjectModule>) => void;
+  deleteProjectModule: (projectId: string, moduleId: string) => void;
+  addProjectInsight: (projectId: string, insight: Omit<ProjectInsight, 'id' | 'date'>) => void;
+  toggleInsightApplied: (projectId: string, insightId: string) => void;
+  deleteProjectInsight: (projectId: string, insightId: string) => void;
+
+  // Career Profile (Phase 1: Vayne Doctor)
+  updateCareerProfile: (profile: Partial<CareerProfile>) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -178,7 +192,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cases: [],
       totalCasesCompleted: 0,
       averageScore: 0
-    }
+    },
+    // Phase 1: Vayne Doctor
+    developmentProjects: [],
+    careerProfile: null
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1008,6 +1025,148 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // ================ Development Projects (Phase 1: Vayne Doctor) ================
+
+  const addProject = useCallback((project: Omit<DevelopmentProject, 'id' | 'createdAt' | 'updatedAt' | 'progressPercent' | 'timeInvested' | 'insights'>) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: [...prev.developmentProjects, {
+        ...project,
+        id: generateId(),
+        progressPercent: 0,
+        timeInvested: 0,
+        insights: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }]
+    }));
+  }, [updateData]);
+
+  const updateProject = useCallback((id: string, updates: Partial<DevelopmentProject>) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p =>
+        p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p
+      )
+    }));
+  }, [updateData]);
+
+  const deleteProject = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.filter(p => p.id !== id)
+    }));
+  }, [updateData]);
+
+  const addProjectModule = useCallback((projectId: string, module: Omit<ProjectModule, 'id'>) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        const newModules = [...p.modules, { ...module, id: generateId() }];
+        return { ...p, modules: newModules, updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  const updateProjectModule = useCallback((projectId: string, moduleId: string, updates: Partial<ProjectModule>) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        const newModules = p.modules.map(m => {
+          if (m.id !== moduleId) return m;
+          // If marking as completed, set completedAt
+          if (updates.status === 'completed' && m.status !== 'completed') {
+            return { ...m, ...updates, completedAt: new Date().toISOString() };
+          }
+          return { ...m, ...updates };
+        });
+        // Auto-calculate progress
+        const completedCount = newModules.filter(m => m.status === 'completed').length;
+        const progressPercent = newModules.length > 0
+          ? Math.round((completedCount / newModules.length) * 100)
+          : 0;
+        return { ...p, modules: newModules, progressPercent, updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  const deleteProjectModule = useCallback((projectId: string, moduleId: string) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        const newModules = p.modules.filter(m => m.id !== moduleId)
+          .map((m, i) => ({ ...m, order: i + 1 }));
+        const completedCount = newModules.filter(m => m.status === 'completed').length;
+        const progressPercent = newModules.length > 0
+          ? Math.round((completedCount / newModules.length) * 100)
+          : 0;
+        return { ...p, modules: newModules, progressPercent, updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  const addProjectInsight = useCallback((projectId: string, insight: Omit<ProjectInsight, 'id' | 'date'>) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        const newInsight: ProjectInsight = {
+          ...insight,
+          id: generateId(),
+          date: new Date().toISOString()
+        };
+        return { ...p, insights: [...p.insights, newInsight], updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  const toggleInsightApplied = useCallback((projectId: string, insightId: string) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        const newInsights = p.insights.map(i =>
+          i.id === insightId ? { ...i, applied: !i.applied } : i
+        );
+        return { ...p, insights: newInsights, updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  const deleteProjectInsight = useCallback((projectId: string, insightId: string) => {
+    updateData(prev => ({
+      ...prev,
+      developmentProjects: prev.developmentProjects.map(p => {
+        if (p.id !== projectId) return p;
+        return { ...p, insights: p.insights.filter(i => i.id !== insightId), updatedAt: new Date().toISOString() };
+      })
+    }));
+  }, [updateData]);
+
+  // ================ Career Profile (Phase 1: Vayne Doctor) ================
+
+  const updateCareerProfile = useCallback((profile: Partial<CareerProfile>) => {
+    updateData(prev => ({
+      ...prev,
+      careerProfile: prev.careerProfile
+        ? { ...prev.careerProfile, ...profile, updatedAt: new Date().toISOString() }
+        : {
+            currentYear: 1,
+            stage: 'preclinical' as const,
+            interestedSpecialties: [],
+            academicInterests: [],
+            shortTermGoals: [],
+            longTermGoals: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            ...profile
+          }
+    }));
+  }, [updateData]);
+
   // Calculate streak for achievement checking (uses helper function)
   const calculateStreak = useCallback((sessions: TimerSession[]) => {
     return calculateStudyStreak(sessions);
@@ -1102,7 +1261,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSidebarCollapsed,
       storageError,
       clearStorageError,
-      getStorageUsage
+      getStorageUsage,
+      // Development Projects
+      addProject,
+      updateProject,
+      deleteProject,
+      addProjectModule,
+      updateProjectModule,
+      deleteProjectModule,
+      addProjectInsight,
+      toggleInsightApplied,
+      deleteProjectInsight,
+      // Career Profile
+      updateCareerProfile
     }}>
       {children}
     </AppContext.Provider>

@@ -665,8 +665,10 @@ export function calculateDailyTopics(
 
     const daysLeft = rawDaysLeft;
 
-    // Count non-green topics
-    const remainingTopics = subject.topics.filter(t => t.status !== 'green').length;
+    // Count remaining workload (gray = full, orange = half since partially learned)
+    const grayTopics = subject.topics.filter(t => t.status === 'gray').length;
+    const orangeTopics = subject.topics.filter(t => t.status === 'orange').length;
+    const remainingTopics = grayTopics + Math.ceil(orangeTopics * 0.5); // Orange counts as half
     if (remainingTopics === 0) continue;
 
     // Calculate exact topics per day needed (no cap - show reality)
@@ -1262,7 +1264,41 @@ export function generateDailyPlan(
     }
   }
 
-  // 3. FSRS Reviews - Spaced repetition maintains long-term memory
+  // 3. ORANGE REINFORCEMENT - Topics known but weak (3-3.5 grade level)
+  // High priority because they're partially learned but need strengthening
+  let capacityForOrange = Math.ceil(capacityForPriority * 0.3); // 30% for orange reinforcement
+
+  for (const subject of subjects) {
+    if (capacityForOrange <= 0) break;
+
+    // Skip subjects already covered
+    if (tasks.some(t => t.subjectId === subject.id)) continue;
+
+    const orangeTopics = subject.topics.filter(t => t.status === 'orange');
+    if (orangeTopics.length === 0) continue;
+
+    const topicsToTake = Math.min(orangeTopics.length, capacityForOrange, 3);
+    const selectedTopics = selectTopicsWithRelations(orangeTopics, topicsToTake, inCrunchMode);
+
+    if (selectedTopics.length > 0) {
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'high',
+        typeLabel: '🟠 Укрепване',
+        description: `Теми за ~3.5 - нужен е преговор`,
+        topics: selectedTopics,
+        estimatedMinutes: selectedTopics.length * 20,
+        completed: false
+      });
+      capacityForOrange -= selectedTopics.length;
+      capacityForPriority -= selectedTopics.length;
+    }
+  }
+
+  // 4. FSRS Reviews - Spaced repetition maintains long-term memory
   // Forgetting curve is real - delayed review = more relearning time
   const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
   const fsrsParams = getFSRSParams(studyGoals);

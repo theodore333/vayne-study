@@ -1391,6 +1391,34 @@ function markdownToHtml(markdown: string): string {
   return html || '<p></p>';
 }
 
+// Clean up empty list items from HTML before loading into editor
+function cleanupEmptyListItems(html: string): string {
+  if (typeof window === 'undefined') return html;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Remove empty <li> elements
+  const listItems = doc.querySelectorAll('li');
+  listItems.forEach(li => {
+    const text = li.textContent?.trim() || '';
+    // Remove if empty or only whitespace/special chars
+    if (text.length === 0 || /^[\s\u200B\u00A0]*$/.test(text)) {
+      li.remove();
+    }
+  });
+
+  // Remove empty <ul> and <ol> that have no children
+  const lists = doc.querySelectorAll('ul, ol');
+  lists.forEach(list => {
+    if (list.children.length === 0) {
+      list.remove();
+    }
+  });
+
+  return doc.body.innerHTML;
+}
+
 // Convert HTML back to markdown for saving
 function htmlToMarkdown(html: string): string {
   if (!html) return '';
@@ -1612,7 +1640,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         },
       }),
     ],
-    content: markdownToHtml(topic.material),
+    content: cleanupEmptyListItems(markdownToHtml(topic.material)),
     editorProps: {
       attributes: {
         class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',

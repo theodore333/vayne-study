@@ -25,7 +25,8 @@ import {
   Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote, Wand2,
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
-  MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight
+  MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
+  Calculator, GitBranch, Pencil, Check
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -176,6 +177,362 @@ function TableGridPicker({ onSelect, onClose }: { onSelect: (rows: number, cols:
             />
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// Formula Modal Component
+function FormulaModal({ isOpen, onClose, onInsert }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onInsert: (formula: string) => void;
+}) {
+  const [formula, setFormula] = useState('');
+  const [preview, setPreview] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!formula) {
+      setPreview('');
+      setError('');
+      return;
+    }
+    try {
+      const html = katex.renderToString(formula, { throwOnError: true, displayMode: true });
+      setPreview(html);
+      setError('');
+    } catch (e) {
+      setError((e as Error).message);
+      setPreview('');
+    }
+  }, [formula]);
+
+  const handleInsert = () => {
+    if (formula && !error) {
+      onInsert(formula);
+      setFormula('');
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const examples = [
+    { label: 'pH формула', code: 'pH = -\\log[H^+]' },
+    { label: 'Henderson-Hasselbalch', code: 'pH = pK_a + \\log\\frac{[A^-]}{[HA]}' },
+    { label: 'Michaelis-Menten', code: 'v = \\frac{V_{max}[S]}{K_m + [S]}' },
+    { label: 'Химична реакция', code: 'CO_2 + H_2O \\rightleftharpoons H_2CO_3' },
+    { label: 'ATP хидролиза', code: 'ATP + H_2O \\rightarrow ADP + P_i + \\Delta G' },
+    { label: 'Fraction', code: '\\frac{a}{b}' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-white border border-stone-300 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-stone-200">
+          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+            <Calculator size={20} className="text-amber-600" />
+            Вмъкни формула (LaTeX)
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
+            <X size={20} className="text-stone-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="text-xs text-stone-500 font-medium mb-2 block">Примери:</label>
+            <div className="flex flex-wrap gap-2">
+              {examples.map(ex => (
+                <button
+                  key={ex.label}
+                  onClick={() => setFormula(ex.code)}
+                  className="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded"
+                >
+                  {ex.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-stone-500 font-medium mb-1 block">LaTeX код:</label>
+            <textarea
+              value={formula}
+              onChange={e => setFormula(e.target.value)}
+              placeholder="Напиши LaTeX формула... напр. H_2O или \frac{1}{2}"
+              className="w-full h-24 bg-stone-50 border border-stone-300 rounded-lg p-3 text-stone-800 font-mono text-sm focus:outline-none focus:border-amber-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-stone-500 font-medium mb-1 block">Преглед:</label>
+            <div className="min-h-[60px] bg-stone-50 border border-stone-200 rounded-lg p-4 flex items-center justify-center">
+              {error ? (
+                <span className="text-red-500 text-sm">{error}</span>
+              ) : preview ? (
+                <div dangerouslySetInnerHTML={{ __html: preview }} />
+              ) : (
+                <span className="text-stone-400 text-sm">Въведи формула...</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
+            >
+              Отказ
+            </button>
+            <button
+              onClick={handleInsert}
+              disabled={!formula || !!error}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <Check size={16} />
+              Вмъкни
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mermaid Diagram Modal
+function MermaidModal({ isOpen, onClose, onInsert }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onInsert: (code: string) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [preview, setPreview] = useState<string>('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!code || !isOpen) return;
+
+    const renderMermaid = async () => {
+      try {
+        const mermaid = (await import('mermaid')).default;
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: 'default',
+          securityLevel: 'loose'
+        });
+
+        const { svg } = await mermaid.render('mermaid-preview-reader', code);
+        setPreview(svg);
+        setError('');
+      } catch (e) {
+        setError((e as Error).message || 'Грешка в диаграмата');
+        setPreview('');
+      }
+    };
+
+    const timer = setTimeout(renderMermaid, 500);
+    return () => clearTimeout(timer);
+  }, [code, isOpen]);
+
+  const handleInsert = () => {
+    if (code && !error) {
+      onInsert(code);
+      setCode('');
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const examples = [
+    {
+      label: 'Flowchart',
+      code: `flowchart TD
+    A[Глюкоза] --> B[Гликолиза]
+    B --> C[Пируват]
+    C --> D{Аеробно?}
+    D -->|Да| E[Цикъл на Кребс]
+    D -->|Не| F[Лактат]`
+    },
+    {
+      label: 'Sequence',
+      code: `sequenceDiagram
+    participant R as Рецептор
+    participant G as G-protein
+    participant E as Ефектор
+    R->>G: Активиране
+    G->>E: Сигнал
+    E->>E: Отговор`
+    },
+    {
+      label: 'Krebs Cycle',
+      code: `flowchart LR
+    A[Acetyl-CoA] --> B[Цитрат]
+    B --> C[Изоцитрат]
+    C --> D[α-кетоглутарат]
+    D --> E[Сукцинил-CoA]
+    E --> F[Сукцинат]
+    F --> G[Фумарат]
+    G --> H[Малат]
+    H --> I[Оксалоацетат]
+    I --> A`
+    }
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-white border border-stone-300 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-stone-200">
+          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+            <GitBranch size={20} className="text-green-600" />
+            Вмъкни диаграма (Mermaid)
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
+            <X size={20} className="text-stone-500" />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="text-xs text-stone-500 font-medium mb-2 block">Шаблони:</label>
+            <div className="flex flex-wrap gap-2">
+              {examples.map(ex => (
+                <button
+                  key={ex.label}
+                  onClick={() => setCode(ex.code)}
+                  className="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded"
+                >
+                  {ex.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-stone-500 font-medium mb-1 block">Mermaid код:</label>
+              <textarea
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                placeholder="flowchart TD&#10;    A[Start] --> B[End]"
+                className="w-full h-64 bg-stone-50 border border-stone-300 rounded-lg p-3 text-stone-800 font-mono text-sm focus:outline-none focus:border-green-500"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-stone-500 font-medium mb-1 block">Преглед:</label>
+              <div className="h-64 bg-stone-50 border border-stone-200 rounded-lg p-4 overflow-auto flex items-center justify-center">
+                {error ? (
+                  <span className="text-red-500 text-sm">{error}</span>
+                ) : preview ? (
+                  <div dangerouslySetInnerHTML={{ __html: preview }} />
+                ) : (
+                  <span className="text-stone-400 text-sm">Въведи код...</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
+            >
+              Отказ
+            </button>
+            <button
+              onClick={handleInsert}
+              disabled={!code || !!error}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
+            >
+              <Check size={16} />
+              Вмъкни
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Drawing Modal with Excalidraw
+function DrawingModal({ isOpen, onClose, onSave }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (imageData: string) => void;
+}) {
+  const [Excalidraw, setExcalidraw] = useState<any>(null);
+  const excalidrawRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      import('@excalidraw/excalidraw').then(module => {
+        setExcalidraw(() => module.Excalidraw);
+      });
+    }
+  }, [isOpen]);
+
+  const handleSave = async () => {
+    if (excalidrawRef.current) {
+      const elements = excalidrawRef.current.getSceneElements();
+      const appState = excalidrawRef.current.getAppState();
+
+      const { exportToBlob } = await import('@excalidraw/excalidraw');
+      const blob = await exportToBlob({
+        elements,
+        appState: { ...appState, exportBackground: true },
+        files: excalidrawRef.current.getFiles(),
+      });
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        onSave(base64);
+        onClose();
+      };
+      reader.readAsDataURL(blob);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+      <div className="flex items-center justify-between p-3 bg-stone-100 border-b">
+        <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+          <Pencil size={20} className="text-purple-600" />
+          Рисуване / Скица
+        </h3>
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
+          >
+            Отказ
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm flex items-center gap-2"
+          >
+            <Check size={16} />
+            Запази като изображение
+          </button>
+        </div>
+      </div>
+      <div className="flex-1">
+        {Excalidraw ? (
+          <Excalidraw
+            ref={excalidrawRef}
+            theme="light"
+            langCode="en"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full">
+            <span className="text-stone-500">Зареждане...</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -451,6 +808,9 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showTableMenu, setShowTableMenu] = useState(false);
   const [showTableGridPicker, setShowTableGridPicker] = useState(false);
+  const [showFormulaModal, setShowFormulaModal] = useState(false);
+  const [showMermaidModal, setShowMermaidModal] = useState(false);
+  const [showDrawingModal, setShowDrawingModal] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -684,6 +1044,52 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       setHasUnsavedChanges(false);
     }
   }, [editor, onSaveMaterial]);
+
+  // Insert formula into editor
+  const handleInsertFormula = (formula: string) => {
+    if (!editor) return;
+    const encodedFormula = encodeURIComponent(formula);
+    try {
+      const html = katex.renderToString(formula, {
+        throwOnError: false,
+        displayMode: false,
+        output: 'html'
+      });
+      const formulaHtml = `<span class="katex-formula" data-formula="${encodedFormula}">${html}</span>&nbsp;`;
+      editor.chain().focus().insertContent(formulaHtml).run();
+    } catch {
+      // Fallback - insert as marker
+      editor.chain().focus().insertContent(`[FORMULA:${encodedFormula}]`).run();
+    }
+  };
+
+  // Insert mermaid diagram into editor
+  const handleInsertMermaid = async (code: string) => {
+    if (!editor) return;
+    try {
+      const mermaid = (await import('mermaid')).default;
+      mermaid.initialize({
+        startOnLoad: false,
+        theme: 'default',
+        securityLevel: 'loose'
+      });
+      const uniqueId = `mermaid-${Date.now()}`;
+      const { svg } = await mermaid.render(uniqueId, code);
+      // Convert SVG to data URL for embedding
+      const svgBase64 = btoa(unescape(encodeURIComponent(svg)));
+      const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
+      editor.chain().focus().setImage({ src: dataUrl, alt: 'Mermaid Diagram' }).run();
+    } catch (error) {
+      console.error('Mermaid error:', error);
+      alert('Грешка при създаване на диаграмата');
+    }
+  };
+
+  // Insert drawing into editor
+  const handleInsertDrawing = (imageData: string) => {
+    if (!editor) return;
+    editor.chain().focus().setImage({ src: imageData, alt: 'Drawing' }).run();
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1134,6 +1540,28 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
+          {/* Rich content tools */}
+          <ToolbarButton
+            onClick={() => setShowFormulaModal(true)}
+            title="Вмъкни формула (LaTeX)"
+          >
+            <Calculator size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => setShowMermaidModal(true)}
+            title="Вмъкни диаграма (Mermaid)"
+          >
+            <GitBranch size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => setShowDrawingModal(true)}
+            title="Рисуване / Скица"
+          >
+            <Pencil size={18} />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-stone-300 mx-1" />
+
           {/* Font size */}
           <div className="flex items-center gap-1">
             <Type size={16} className="text-stone-400" />
@@ -1496,6 +1924,27 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           <ChevronUp size={24} />
         </button>
       )}
+
+      {/* Formula Modal */}
+      <FormulaModal
+        isOpen={showFormulaModal}
+        onClose={() => setShowFormulaModal(false)}
+        onInsert={handleInsertFormula}
+      />
+
+      {/* Mermaid Modal */}
+      <MermaidModal
+        isOpen={showMermaidModal}
+        onClose={() => setShowMermaidModal(false)}
+        onInsert={handleInsertMermaid}
+      />
+
+      {/* Drawing Modal */}
+      <DrawingModal
+        isOpen={showDrawingModal}
+        onClose={() => setShowDrawingModal(false)}
+        onSave={handleInsertDrawing}
+      />
 
     </div>
   );

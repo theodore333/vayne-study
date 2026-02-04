@@ -1983,7 +1983,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       return;
     }
     try {
-      editor.chain().focus().setImage({ src: url, alt }).run();
+      // Fix Wikimedia URLs to avoid 429 errors
+      let fixedUrl = url;
+      if (url.includes('wikimedia.org')) {
+        fixedUrl = fixWikimediaUrl(url);
+      }
+      editor.chain().focus().setImage({ src: fixedUrl, alt }).run();
     } catch (error) {
       console.error('Error inserting image:', error);
     }

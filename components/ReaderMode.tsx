@@ -30,6 +30,8 @@ import {
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 const lowlight = createLowlight(common);
 
@@ -187,11 +189,37 @@ interface ReaderModeProps {
   onSaveMaterial: (material: string) => void;
 }
 
+// Parse formula and image markers
+function parseMarkers(text: string): string {
+  // Parse images
+  let result = text.replace(/\[IMG:([^:]*):([^\]]+)\]/g, (_, alt, src) => {
+    return `<img src="${src}" alt="${alt}" />`;
+  });
+
+  // Parse formulas
+  result = result.replace(/\[FORMULA:([^\]]+)\]/g, (_, encodedFormula) => {
+    try {
+      const formula = decodeURIComponent(encodedFormula);
+      const html = katex.renderToString(formula, {
+        throwOnError: false,
+        displayMode: false,
+        output: 'html'
+      });
+      return `<span class="katex-formula" data-formula="${encodedFormula}">${html}</span>`;
+    } catch {
+      return `[FORMULA:${encodedFormula}]`;
+    }
+  });
+
+  return result;
+}
+
 // Convert markdown to HTML for initial load
 function markdownToHtml(markdown: string): string {
   if (!markdown) return '<p></p>';
 
-  let html = markdown;
+  // First parse any formula/image markers
+  let html = parseMarkers(markdown);
 
   // Code blocks first (before escaping)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
@@ -1387,6 +1415,18 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
                 border: none;
                 border-top: 2px solid #d6d3d1;
                 margin: 1.5em 0;
+              }
+
+              /* KaTeX formulas */
+              .ProseMirror .katex-formula {
+                display: inline-block;
+                background: rgba(245, 158, 11, 0.1);
+                padding: 0.25em 0.5em;
+                border-radius: 0.25em;
+                border: 1px solid rgba(245, 158, 11, 0.3);
+              }
+              .ProseMirror .katex {
+                font-size: 1.1em;
               }
             `}</style>
             <EditorContent editor={editor} />

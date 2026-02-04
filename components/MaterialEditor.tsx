@@ -144,6 +144,14 @@ function htmlToText(html: string): string {
     img.outerHTML = `[IMG:${alt}:${src}]\n`;
   });
 
+  // Convert KaTeX formulas to special markers
+  div.querySelectorAll('.katex-formula').forEach(span => {
+    const formula = span.getAttribute('data-formula');
+    if (formula) {
+      span.outerHTML = `[FORMULA:${formula}]`;
+    }
+  });
+
   // Convert tables to tab-separated
   div.querySelectorAll('table').forEach(table => {
     const rows: string[] = [];
@@ -172,11 +180,29 @@ function htmlToText(html: string): string {
   return text;
 }
 
-// Parse image markers back to HTML
-function parseImageMarkers(text: string): string {
-  return text.replace(/\[IMG:([^:]*):([^\]]+)\]/g, (_, alt, src) => {
+// Parse image and formula markers back to HTML
+function parseMarkers(text: string): string {
+  // Parse images
+  let result = text.replace(/\[IMG:([^:]*):([^\]]+)\]/g, (_, alt, src) => {
     return `<img src="${src}" alt="${alt}" />`;
   });
+
+  // Parse formulas
+  result = result.replace(/\[FORMULA:([^\]]+)\]/g, (_, encodedFormula) => {
+    try {
+      const formula = decodeURIComponent(encodedFormula);
+      const html = katex.renderToString(formula, {
+        throwOnError: false,
+        displayMode: false,
+        output: 'html'
+      });
+      return `<span class="katex-formula" data-formula="${encodedFormula}">${html}</span>`;
+    } catch {
+      return `[FORMULA:${encodedFormula}]`;
+    }
+  });
+
+  return result;
 }
 
 // Formula Modal Component
@@ -575,7 +601,7 @@ export default function MaterialEditor({ value, onChange, placeholder, className
       TableCell,
       TableHeader,
     ],
-    content: value ? parseImageMarkers(markdownToHtml(value)) : '',
+    content: value ? parseMarkers(markdownToHtml(value)) : '',
     editorProps: {
       attributes: {
         class: 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px] p-4 ' + (className || ''),
@@ -656,7 +682,7 @@ export default function MaterialEditor({ value, onChange, placeholder, className
   useEffect(() => {
     if (editor && value !== htmlToText(editor.getHTML())) {
       const currentPos = editor.state.selection.from;
-      editor.commands.setContent(value ? parseImageMarkers(markdownToHtml(value)) : '');
+      editor.commands.setContent(value ? parseMarkers(markdownToHtml(value)) : '');
       // Try to restore cursor position
       try {
         const maxPos = editor.state.doc.content.size;

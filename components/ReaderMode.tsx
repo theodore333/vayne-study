@@ -1336,32 +1336,57 @@ function markdownToHtml(markdown: string): string {
   // Blockquotes
   html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
-  // Task lists (before regular lists)
-  html = html.replace(/^- \[x\] (.+)$/gm, '<li data-type="taskItem" data-checked="true">$1</li>');
-  html = html.replace(/^- \[ \] (.+)$/gm, '<li data-type="taskItem" data-checked="false">$1</li>');
+  // Process lists line-by-line (prevents empty bullet points)
+  const lines = html.split('\n');
+  const processedLines: string[] = [];
+  let inList: 'none' | 'bullet' | 'task' = 'none';
 
-  // Unordered lists (only if there's actual content after the dash)
-  html = html.replace(/^[-*] +(.+)$/gm, (_, content) => {
-    const trimmed = content.trim();
-    if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li>${trimmed}</li>`;
-  });
+  for (const line of lines) {
+    // Check for task list items first
+    const taskCheckedMatch = line.match(/^- \[x\] (.+)$/);
+    const taskUncheckedMatch = line.match(/^- \[ \] (.+)$/);
+    const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    const numberedMatch = line.match(/^\s*\d+\.\s+(.+)$/);
 
-  // Ordered lists (only if there's actual content after the number)
-  html = html.replace(/^\d+\. +(.+)$/gm, (_, content) => {
-    const trimmed = content.trim();
-    if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li>${trimmed}</li>`;
-  });
+    if (taskCheckedMatch || taskUncheckedMatch) {
+      // Task list item
+      const content = taskCheckedMatch ? taskCheckedMatch[1] : taskUncheckedMatch![1];
+      const checked = !!taskCheckedMatch;
+      if (inList !== 'task') {
+        if (inList === 'bullet') processedLines.push('</ul>');
+        processedLines.push('<ul data-type="taskList">');
+        inList = 'task';
+      }
+      processedLines.push(`<li data-type="taskItem" data-checked="${checked}">${content}</li>`);
+    } else if (bulletMatch || numberedMatch) {
+      // Regular list item - only if content is not empty
+      const content = bulletMatch ? bulletMatch[1] : numberedMatch![1];
+      if (content.trim()) {
+        if (inList !== 'bullet') {
+          if (inList === 'task') processedLines.push('</ul>');
+          processedLines.push('<ul>');
+          inList = 'bullet';
+        }
+        processedLines.push(`<li>${content}</li>`);
+      }
+    } else {
+      // Non-list line
+      if (inList !== 'none') {
+        processedLines.push('</ul>');
+        inList = 'none';
+      }
+      // Only add non-empty lines
+      if (line.trim()) {
+        processedLines.push(line);
+      }
+    }
+  }
+  // Close any open list
+  if (inList !== 'none') {
+    processedLines.push('</ul>');
+  }
 
-  // Remove any remaining empty lines that might become empty paragraphs
-  html = html.replace(/^\s*$/gm, '');
-
-  // Wrap consecutive task items in taskList
-  html = html.replace(/(<li data-type="taskItem"[^>]*>.*?<\/li>\n?)+/g, (match) => `<ul data-type="taskList">${match}</ul>`);
-
-  // Wrap consecutive regular <li> in <ul>
-  html = html.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  html = processedLines.join('\n');
 
   // Tables
   html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
@@ -1391,7 +1416,7 @@ function markdownToHtml(markdown: string): string {
   return html || '<p></p>';
 }
 
-// Clean up empty list items from HTML before loading into editor
+// Clean up empty elements from HTML before loading into editor
 function cleanupEmptyListItems(html: string): string {
   if (typeof window === 'undefined') return html;
 
@@ -1402,7 +1427,6 @@ function cleanupEmptyListItems(html: string): string {
   const listItems = doc.querySelectorAll('li');
   listItems.forEach(li => {
     const text = li.textContent?.trim() || '';
-    // Remove if empty or only whitespace/special chars
     if (text.length === 0 || /^[\s\u200B\u00A0]*$/.test(text)) {
       li.remove();
     }
@@ -1413,6 +1437,16 @@ function cleanupEmptyListItems(html: string): string {
   lists.forEach(list => {
     if (list.children.length === 0) {
       list.remove();
+    }
+  });
+
+  // Remove empty <p> elements (including those with only <br> or whitespace)
+  const paragraphs = doc.querySelectorAll('p');
+  paragraphs.forEach(p => {
+    const text = p.textContent?.trim() || '';
+    const hasOnlyBr = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '';
+    if (text.length === 0 || hasOnlyBr) {
+      p.remove();
     }
   });
 
@@ -1555,9 +1589,9 @@ function htmlToMarkdown(html: string): string {
   md = md.replace(/^- \s*$/gm, ''); // Remove bullet points with only whitespace
   md = md.replace(/^\d+\. \s*$/gm, ''); // Remove numbered items with only whitespace
 
-  // Clean up extra whitespace and empty lines
-  md = md.replace(/\n{3,}/g, '\n\n');
-  md = md.replace(/^\s+$/gm, ''); // Remove lines that are only whitespace
+  // Aggressively clean up whitespace
+  md = md.replace(/^\s*$/gm, ''); // Remove lines that are only whitespace
+  md = md.replace(/\n{2,}/g, '\n\n'); // Max 2 newlines (one blank line)
   md = md.trim();
 
   return md;

@@ -1672,10 +1672,15 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       }
 
       saveTimeoutRef.current = setTimeout(() => {
-        const markdown = htmlToMarkdown(editor.getHTML());
-        onSaveMaterial(markdown);
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false);
+        try {
+          const markdown = htmlToMarkdown(editor.getHTML());
+          onSaveMaterial(markdown);
+          setLastSaved(new Date());
+        } catch (error) {
+          console.error('Save error:', error);
+        } finally {
+          setHasUnsavedChanges(false);
+        }
       }, 1000);
     },
   });
@@ -1740,10 +1745,15 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      const markdown = htmlToMarkdown(editor.getHTML());
-      onSaveMaterial(markdown);
-      setLastSaved(new Date());
-      setHasUnsavedChanges(false);
+      try {
+        const markdown = htmlToMarkdown(editor.getHTML());
+        onSaveMaterial(markdown);
+        setLastSaved(new Date());
+      } catch (error) {
+        console.error('Force save error:', error);
+      } finally {
+        setHasUnsavedChanges(false);
+      }
     }
   }, [editor, onSaveMaterial]);
 

@@ -147,7 +147,18 @@ export default function TopicDetailPage() {
 
   useEffect(() => {
     if (topic) {
-      setMaterial(topic.material || '');
+      // Try direct localStorage first (most reliable), then context
+      let loadedMaterial = topic.material || '';
+      try {
+        const key = `material-${topic.id}`;
+        const directSaved = localStorage.getItem(key);
+        if (directSaved && directSaved.length > 0) {
+          loadedMaterial = directSaved;
+        }
+      } catch (e) {
+        // ignore
+      }
+      setMaterial(loadedMaterial);
       setMaterialSaved(true);
     }
   }, [topic?.id, topic?.material]);
@@ -302,6 +313,14 @@ export default function TopicDetailPage() {
   const handleSaveMaterialFromReader = (newMaterial: string) => {
     setMaterial(newMaterial);
     updateTopicMaterial(subjectId, topicId, newMaterial);
+
+    // DIRECT localStorage backup - simple and reliable
+    try {
+      const key = `material-${topicId}`;
+      localStorage.setItem(key, newMaterial);
+    } catch (e) {
+      // ignore
+    }
   };
 
   // ReaderMode needs the full topic with current material

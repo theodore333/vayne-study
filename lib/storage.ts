@@ -97,6 +97,13 @@ let materialsCache: Record<string, string> = {};
 let materialsCacheLoaded = false;
 let materialsCachePromise: Promise<void> | null = null;
 
+/**
+ * Get the current materials cache (for merging with cloud data)
+ */
+export function getMaterialsCache(): Record<string, string> {
+  return materialsCache;
+}
+
 const defaultDailyStatus: DailyStatus = {
   date: getTodayString(),
   sick: false,
@@ -173,36 +180,65 @@ const defaultData: AppData = {
 // Materials storage helpers - now using IndexedDB with in-memory cache
 
 /**
- * Initialize materials cache from IndexedDB (or localStorage as fallback)
+ * Initialize materials cache from IndexedDB AND localStorage (merge both)
  * Call this once at app startup
  */
 export async function initMaterialsCache(): Promise<void> {
-  if (materialsCacheLoaded) return;
-  if (materialsCachePromise) return materialsCachePromise;
+  if (materialsCacheLoaded) {
+    console.log('[LOAD] Materials cache already loaded, skipping');
+    return;
+  }
+  if (materialsCachePromise) {
+    console.log('[LOAD] Materials cache loading in progress, waiting');
+    return materialsCachePromise;
+  }
+
+  console.log('[LOAD] Starting materials cache initialization...');
 
   materialsCachePromise = (async () => {
     if (typeof window === 'undefined') return;
 
     try {
-      // Check if we need to migrate from localStorage to IndexedDB
-      const migrated = localStorage.getItem(IDB_MIGRATED_KEY);
-      if (!migrated && isIndexedDBAvailable()) {
-        await migrateFromLocalStorage();
-        localStorage.setItem(IDB_MIGRATED_KEY, 'true');
+      // Load from localStorage first (always available, synchronous)
+      console.log('[LOAD] Loading materials from localStorage...');
+      const lsMaterials = loadMaterialsFromLocalStorage();
+      console.log('[LOAD] Loaded', Object.keys(lsMaterials).length, 'materials from localStorage');
+
+      // Also try IndexedDB
+      let idbMaterials: Record<string, string> = {};
+      if (isIndexedDBAvailable()) {
+        console.log('[LOAD] Loading materials from IndexedDB...');
+        try {
+          idbMaterials = await getAllMaterialsFromIDB();
+          console.log('[LOAD] Loaded', Object.keys(idbMaterials).length, 'materials from IndexedDB');
+        } catch (error) {
+          console.error('[LOAD] IndexedDB load failed:', error);
+        }
       }
 
-      // Load all materials from IndexedDB into cache
-      if (isIndexedDBAvailable()) {
-        materialsCache = await getAllMaterialsFromIDB();
-      } else {
-        // Fallback to localStorage
-        materialsCache = loadMaterialsFromLocalStorage();
+      // Merge: prefer IndexedDB (newer), fallback to localStorage
+      materialsCache = { ...lsMaterials };
+      for (const [topicId, content] of Object.entries(idbMaterials)) {
+        // Use IndexedDB version if it exists and is not empty
+        if (content && content.length > 0) {
+          materialsCache[topicId] = content;
+        }
       }
+      // Also add any localStorage-only materials
+      for (const [topicId, content] of Object.entries(lsMaterials)) {
+        if (!materialsCache[topicId] && content && content.length > 0) {
+          materialsCache[topicId] = content;
+        }
+      }
+
+      console.log('[LOAD] Final merged cache has', Object.keys(materialsCache).length, 'materials');
+      console.log('[LOAD] Topic IDs:', Object.keys(materialsCache));
 
       materialsCacheLoaded = true;
+      console.log('[LOAD] Materials cache initialization complete');
     } catch (error) {
-      console.error('Error initializing materials cache:', error);
-      // Fallback to localStorage
+      console.error('[LOAD] Error initializing materials cache:', error);
+      // Fallback to localStorage only
       materialsCache = loadMaterialsFromLocalStorage();
       materialsCacheLoaded = true;
     }
@@ -216,10 +252,15 @@ function loadMaterialsFromLocalStorage(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
     const stored = localStorage.getItem(MATERIALS_KEY);
+    console.log('[LS] loadMaterialsFromLocalStorage - stored exists:', !!stored, 'length:', stored?.length || 0);
     if (!stored) return {};
     const decompressed = LZString.decompress(stored);
-    return decompressed ? JSON.parse(decompressed) : {};
-  } catch {
+    console.log('[LS] Decompressed length:', decompressed?.length || 0);
+    const parsed = decompressed ? JSON.parse(decompressed) : {};
+    console.log('[LS] Parsed materials count:', Object.keys(parsed).length);
+    return parsed;
+  } catch (error) {
+    console.error('[LS] Error loading materials from localStorage:', error);
     return {};
   }
 }
@@ -250,9 +291,11 @@ export function getMaterial(topicId: string): string {
 }
 
 /**
- * Set material - updates cache and persists to IndexedDB asynchronously
+ * Set material - updates cache and persists to BOTH IndexedDB AND localStorage
  */
 export function setMaterial(topicId: string, material: string): void {
+  console.log('[SAVE] setMaterial called for topic:', topicId, 'length:', material?.length || 0);
+
   // Update cache immediately
   if (material) {
     materialsCache[topicId] = material;
@@ -260,15 +303,23 @@ export function setMaterial(topicId: string, material: string): void {
     delete materialsCache[topicId];
   }
 
-  // Persist to IndexedDB asynchronously (or localStorage as fallback)
-  if (isIndexedDBAvailable()) {
-    setMaterialInIDB(topicId, material).catch(error => {
-      console.error('Error saving material to IndexedDB:', error);
-      // Fallback to localStorage
-      saveMaterialsToLocalStorage(materialsCache);
-    });
+  // ALWAYS save to localStorage as backup (synchronous, reliable)
+  console.log('[SAVE] Saving to localStorage backup...');
+  const lsError = saveMaterialsToLocalStorage(materialsCache);
+  if (lsError) {
+    console.error('[SAVE] localStorage save failed:', lsError);
   } else {
-    saveMaterialsToLocalStorage(materialsCache);
+    console.log('[SAVE] localStorage backup saved successfully');
+  }
+
+  // Also save to IndexedDB (async, larger capacity)
+  if (isIndexedDBAvailable()) {
+    console.log('[SAVE] Also saving to IndexedDB...');
+    setMaterialInIDB(topicId, material).then(success => {
+      console.log('[SAVE] IndexedDB save result:', success ? 'SUCCESS' : 'FAILED');
+    }).catch(error => {
+      console.error('[SAVE] Error saving material to IndexedDB:', error);
+    });
   }
 }
 

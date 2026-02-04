@@ -184,6 +184,7 @@ const defaultAcademicPeriod: AcademicPeriod = {
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  console.log('=== VAYNE STUDY APP LOADED (v2) ===');
   const [data, setData] = useState<AppData>({
     subjects: [],
     schedule: [],
@@ -246,11 +247,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initData = async () => {
+      console.log('[CONTEXT] Starting data initialization...');
+
       // Initialize materials cache from IndexedDB (handles migration from localStorage)
       await initMaterialsCache();
 
       // First load from localStorage for instant display
       const localData = loadData();
+
+      // Log what we loaded
+      const topicsWithMaterial = localData.subjects.flatMap(s => s.topics.filter(t => t.material && t.material.length > 0));
+      console.log('[CONTEXT] Loaded localData with', topicsWithMaterial.length, 'topics that have material');
+      if (topicsWithMaterial.length > 0) {
+        console.log('[CONTEXT] Topics with material:', topicsWithMaterial.map(t => ({ id: t.id, name: t.name, materialLength: t.material?.length })));
+      }
+
       setData(localData);
 
       // Then try to load from cloud
@@ -262,8 +273,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const cloudTime = new Date(cloudData.dailyStatus.date).getTime();
 
           if (cloudTime >= localTime) {
-            setData(cloudData);
-            saveData(cloudData); // Update localStorage
+            // CRITICAL: Merge materials from local IndexedDB cache into cloud data
+            // Cloud data has empty materials since they're stored separately
+            const { getMaterialsCache } = await import('./storage');
+            const materialsCache = getMaterialsCache();
+            const cloudDataWithMaterials = {
+              ...cloudData,
+              subjects: cloudData.subjects.map(subject => ({
+                ...subject,
+                topics: subject.topics.map(topic => ({
+                  ...topic,
+                  // Prefer local material from IndexedDB, fallback to cloud material, then empty
+                  material: materialsCache[topic.id] || topic.material || ''
+                }))
+              }))
+            };
+            setData(cloudDataWithMaterials);
+            saveData(cloudDataWithMaterials); // Update localStorage
           }
           setLastSynced(new Date());
         }
@@ -664,6 +690,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const updateTopicMaterial = useCallback((subjectId: string, topicId: string, material: string) => {
+    console.log('[CONTEXT] updateTopicMaterial called for topic:', topicId, 'material length:', material?.length || 0);
     updateData(prev => ({
       ...prev,
       subjects: prev.subjects.map(s => {

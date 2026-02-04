@@ -77,17 +77,29 @@ export async function getMaterialFromIDB(topicId: string): Promise<string> {
  * Set material in IndexedDB
  */
 export async function setMaterialInIDB(topicId: string, content: string): Promise<boolean> {
+  console.log('[IDB] setMaterialInIDB called for:', topicId, 'content length:', content?.length || 0);
   try {
     const db = await initDB();
     return new Promise((resolve) => {
       const transaction = db.transaction(MATERIALS_STORE, 'readwrite');
       const store = transaction.objectStore(MATERIALS_STORE);
 
+      // Add transaction complete handler
+      transaction.oncomplete = () => {
+        console.log('[IDB] Transaction completed successfully for:', topicId);
+      };
+      transaction.onerror = () => {
+        console.error('[IDB] Transaction error for:', topicId, transaction.error);
+      };
+
       if (content) {
         const request = store.put({ topicId, content, updatedAt: new Date().toISOString() });
-        request.onsuccess = () => resolve(true);
+        request.onsuccess = () => {
+          console.log('[IDB] Put request succeeded for:', topicId);
+          resolve(true);
+        };
         request.onerror = () => {
-          console.error('Error saving material to IndexedDB:', request.error);
+          console.error('[IDB] Put request failed for:', topicId, request.error);
           resolve(false);
         };
       } else {
@@ -97,7 +109,8 @@ export async function setMaterialInIDB(topicId: string, content: string): Promis
         request.onerror = () => resolve(false);
       }
     });
-  } catch {
+  } catch (error) {
+    console.error('[IDB] setMaterialInIDB exception:', error);
     return false;
   }
 }
@@ -106,6 +119,7 @@ export async function setMaterialInIDB(topicId: string, content: string): Promis
  * Get all materials from IndexedDB
  */
 export async function getAllMaterialsFromIDB(): Promise<Record<string, string>> {
+  console.log('[IDB] getAllMaterialsFromIDB called');
   try {
     const db = await initDB();
     return new Promise((resolve) => {
@@ -118,15 +132,18 @@ export async function getAllMaterialsFromIDB(): Promise<Record<string, string>> 
         for (const item of request.result) {
           materials[item.topicId] = item.content;
         }
+        console.log('[IDB] getAllMaterialsFromIDB loaded', Object.keys(materials).length, 'materials');
+        console.log('[IDB] Topic IDs in DB:', Object.keys(materials));
         resolve(materials);
       };
 
       request.onerror = () => {
-        console.error('Error getting all materials from IndexedDB:', request.error);
+        console.error('[IDB] getAllMaterialsFromIDB error:', request.error);
         resolve({});
       };
     });
-  } catch {
+  } catch (error) {
+    console.error('[IDB] getAllMaterialsFromIDB exception:', error);
     return {};
   }
 }

@@ -457,6 +457,18 @@ function MermaidModal({ isOpen, onClose, onInsert }: {
   );
 }
 
+// Helper to fix Wikimedia thumbnail URLs that return 429 errors
+// Converts: /thumb/X/XX/File.svg/800px-File.svg.png → /X/XX/File.svg
+function fixWikimediaUrl(url: string): string {
+  // Check if it's a Wikimedia thumbnail URL
+  const match = url.match(/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\/([^/]+\/[^/]+\/[^/]+)\//);
+  if (match) {
+    // Return the original file URL without thumbnail transformation
+    return `https://upload.wikimedia.org/wikipedia/commons/${match[1]}`;
+  }
+  return url;
+}
+
 // Medical Image Library
 const MEDICAL_IMAGE_LIBRARY: Record<string, Array<{ name: string; description: string; url: string; tags: string[] }>> = {
   'Биохимия': [
@@ -928,14 +940,22 @@ function ImageLibraryModal({ isOpen, onClose, onInsert }: {
                     <div
                       key={idx}
                       className="group bg-stone-50 rounded-lg overflow-hidden border border-stone-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
-                      onClick={() => onInsert(img.url, img.name)}
+                      onClick={() => {
+                        if (img.url) {
+                          onInsert(fixWikimediaUrl(img.url), img.name);
+                        }
+                      }}
                     >
                       <div className="aspect-square bg-white flex items-center justify-center p-2">
                         <img
-                          src={img.url}
+                          src={fixWikimediaUrl(img.url)}
                           alt={img.name}
                           className="max-w-full max-h-full object-contain"
                           loading="lazy"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5Y2EzYWYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cmVjdCB4PSIzIiB5PSIzIiB3aWR0aD0iMTgiIGhlaWdodD0iMTgiIHJ4PSIyIiByeT0iMiIvPjxjaXJjbGUgY3g9IjguNSIgY3k9IjguNSIgcj0iMS41Ii8+PHBvbHlsaW5lIHBvaW50cz0iMjEgMTUgMTYgMTAgNSAyMSIvPjwvc3ZnPg==';
+                            (e.target as HTMLImageElement).className = 'w-12 h-12 opacity-50';
+                          }}
                         />
                       </div>
                       <div className="p-2 border-t border-stone-200">
@@ -1260,7 +1280,7 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
 
-  // Helper to sanitize URLs (prevent javascript: and data: XSS)
+  // Helper to sanitize URLs (prevent javascript: and other XSS vectors)
   const sanitizeUrl = (url: string): string => {
     // Decode URL-encoded characters to catch obfuscation attempts
     let decoded = url;
@@ -1270,6 +1290,10 @@ function markdownToHtml(markdown: string): string {
       // If decoding fails, use original (it might not be encoded)
     }
     const trimmed = decoded.trim().toLowerCase().replace(/\s/g, '');
+    // Allow data:image URLs (base64 images from paste/drawing)
+    if (trimmed.startsWith('data:image/')) {
+      return url;
+    }
     // Block dangerous protocols
     if (trimmed.startsWith('javascript:') ||
         trimmed.startsWith('data:') ||
@@ -1307,17 +1331,28 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^- \[x\] (.+)$/gm, '<li data-type="taskItem" data-checked="true">$1</li>');
   html = html.replace(/^- \[ \] (.+)$/gm, '<li data-type="taskItem" data-checked="false">$1</li>');
 
-  // Unordered lists (only if there's content after the dash)
-  html = html.replace(/^[-*] +(.+)$/gm, '<li>$1</li>');
+  // Unordered lists (only if there's actual content after the dash)
+  html = html.replace(/^[-*] +(.+)$/gm, (_, content) => {
+    const trimmed = content.trim();
+    if (trimmed.length === 0) return ''; // Skip empty items
+    return `<li>${trimmed}</li>`;
+  });
 
-  // Ordered lists (only if there's content after the number)
-  html = html.replace(/^\d+\. +(.+)$/gm, '<li>$1</li>');
+  // Ordered lists (only if there's actual content after the number)
+  html = html.replace(/^\d+\. +(.+)$/gm, (_, content) => {
+    const trimmed = content.trim();
+    if (trimmed.length === 0) return ''; // Skip empty items
+    return `<li>${trimmed}</li>`;
+  });
+
+  // Remove any remaining empty lines that might become empty paragraphs
+  html = html.replace(/^\s*$/gm, '');
 
   // Wrap consecutive task items in taskList
   html = html.replace(/(<li data-type="taskItem"[^>]*>.*?<\/li>\n?)+/g, (match) => `<ul data-type="taskList">${match}</ul>`);
 
   // Wrap consecutive regular <li> in <ul>
-  html = html.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  html = html.replace(/(<li>[^<]*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
 
   // Tables
   html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
@@ -1426,13 +1461,29 @@ function htmlToMarkdown(html: string): string {
     return '\n' + result + '\n';
   });
 
-  // Regular lists
+  // Regular lists - skip empty items
   md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, content) => {
-    return content.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n') + '\n';
+    const items: string[] = [];
+    content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_: string, itemContent: string) => {
+      const cleaned = itemContent.replace(/<[^>]+>/g, '').trim();
+      if (cleaned.length > 0) {
+        items.push('- ' + cleaned);
+      }
+      return '';
+    });
+    return items.join('\n') + '\n\n';
   });
   md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, content) => {
+    const items: string[] = [];
     let i = 1;
-    return content.replace(/<li[^>]*>(.*?)<\/li>/gi, () => `${i++}. $1\n`) + '\n';
+    content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_: string, itemContent: string) => {
+      const cleaned = itemContent.replace(/<[^>]+>/g, '').trim();
+      if (cleaned.length > 0) {
+        items.push(`${i++}. ` + cleaned);
+      }
+      return '';
+    });
+    return items.join('\n') + '\n\n';
   });
 
   // Paragraphs and line breaks
@@ -1452,9 +1503,12 @@ function htmlToMarkdown(html: string): string {
   // Clean up empty list items and standalone dashes
   md = md.replace(/^- *$/gm, ''); // Remove empty bullet points
   md = md.replace(/^\d+\. *$/gm, ''); // Remove empty numbered items
+  md = md.replace(/^- \s*$/gm, ''); // Remove bullet points with only whitespace
+  md = md.replace(/^\d+\. \s*$/gm, ''); // Remove numbered items with only whitespace
 
-  // Clean up extra whitespace
+  // Clean up extra whitespace and empty lines
   md = md.replace(/\n{3,}/g, '\n\n');
+  md = md.replace(/^\s+$/gm, ''); // Remove lines that are only whitespace
   md = md.trim();
 
   return md;
@@ -1708,7 +1762,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           setHasUnsavedChanges(false);
         } catch (error) {
           console.error('Save error:', error);
-          setHasUnsavedChanges(false);
+          // Don't clear hasUnsavedChanges on error - keep showing "unsaved" state
         } finally {
           // Small delay before allowing new saves
           setTimeout(() => setIsSaving(false), 100);
@@ -1840,8 +1894,16 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
   // Insert image from library
   const handleInsertLibraryImage = (url: string, alt: string) => {
-    if (!editor) return;
-    editor.chain().focus().setImage({ src: url, alt }).run();
+    if (!editor) {
+      console.error('Editor not available for image insert');
+      setShowImageLibrary(false);
+      return;
+    }
+    try {
+      editor.chain().focus().setImage({ src: url, alt }).run();
+    } catch (error) {
+      console.error('Error inserting image:', error);
+    }
     setShowImageLibrary(false);
   };
 
@@ -1861,6 +1923,25 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, forceSave]);
+
+  // Warn about unsaved changes before page unload
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        // Force save before unload
+        if (editor) {
+          const markdown = htmlToMarkdown(editor.getHTML());
+          onSaveMaterial(markdown);
+        }
+        // Show browser warning
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges, editor, onSaveMaterial]);
 
   // Format text with AI
   const formatTextWithAI = async () => {

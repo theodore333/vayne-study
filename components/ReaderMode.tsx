@@ -1226,9 +1226,13 @@ interface ReaderModeProps {
 
 // Parse formula and image markers
 function parseMarkers(text: string): string {
-  // Parse images
+  // Parse images - also fix Wikimedia URLs
   let result = text.replace(/\[IMG:([^:]*):([^\]]+)\]/g, (_, alt, src) => {
-    return `<img src="${src}" alt="${alt}" />`;
+    let fixedSrc = src;
+    if (src.includes('wikimedia.org')) {
+      fixedSrc = fixWikimediaUrl(src);
+    }
+    return `<img src="${fixedSrc}" alt="${alt}" />`;
   });
 
   // Parse formulas
@@ -1304,10 +1308,15 @@ function markdownToHtml(markdown: string): string {
     return url;
   };
 
-  // Images (before links)
-  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) =>
-    `<img src="${sanitizeUrl(src)}" alt="${alt}">`
-  );
+  // Images (before links) - also fix Wikimedia URLs
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, src) => {
+    let fixedSrc = sanitizeUrl(src);
+    // Fix broken Wikimedia thumbnail URLs
+    if (fixedSrc.includes('wikimedia.org')) {
+      fixedSrc = fixWikimediaUrl(fixedSrc);
+    }
+    return `<img src="${fixedSrc}" alt="${alt}">`;
+  });
 
   // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, href) =>
@@ -1335,14 +1344,14 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^[-*] +(.+)$/gm, (_, content) => {
     const trimmed = content.trim();
     if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li>${trimmed}</li>`;
+    return `<li><p>${trimmed}</p></li>`;
   });
 
   // Ordered lists (only if there's actual content after the number)
   html = html.replace(/^\d+\. +(.+)$/gm, (_, content) => {
     const trimmed = content.trim();
     if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li>${trimmed}</li>`;
+    return `<li><p>${trimmed}</p></li>`;
   });
 
   // Remove any remaining empty lines that might become empty paragraphs
@@ -1352,7 +1361,7 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/(<li data-type="taskItem"[^>]*>.*?<\/li>\n?)+/g, (match) => `<ul data-type="taskList">${match}</ul>`);
 
   // Wrap consecutive regular <li> in <ul>
-  html = html.replace(/(<li>[^<]*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  html = html.replace(/(<li><p>[\s\S]*?<\/p><\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
 
   // Tables
   html = html.replace(/^\|(.+)\|$/gm, (match, content) => {

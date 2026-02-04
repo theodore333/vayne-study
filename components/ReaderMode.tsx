@@ -1344,14 +1344,14 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^[-*] +(.+)$/gm, (_, content) => {
     const trimmed = content.trim();
     if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li><p>${trimmed}</p></li>`;
+    return `<li>${trimmed}</li>`;
   });
 
   // Ordered lists (only if there's actual content after the number)
   html = html.replace(/^\d+\. +(.+)$/gm, (_, content) => {
     const trimmed = content.trim();
     if (trimmed.length === 0) return ''; // Skip empty items
-    return `<li><p>${trimmed}</p></li>`;
+    return `<li>${trimmed}</li>`;
   });
 
   // Remove any remaining empty lines that might become empty paragraphs
@@ -1361,7 +1361,7 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/(<li data-type="taskItem"[^>]*>.*?<\/li>\n?)+/g, (match) => `<ul data-type="taskList">${match}</ul>`);
 
   // Wrap consecutive regular <li> in <ul>
-  html = html.replace(/(<li><p>[\s\S]*?<\/p><\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
+  html = html.replace(/(<li>[\s\S]*?<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`);
 
   // Tables
   html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
@@ -1474,25 +1474,37 @@ function htmlToMarkdown(html: string): string {
   md = md.replace(/<ul[^>]*>([\s\S]*?)<\/ul>/gi, (_, content) => {
     const items: string[] = [];
     content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_: string, itemContent: string) => {
-      const cleaned = itemContent.replace(/<[^>]+>/g, '').trim();
+      // Remove all HTML tags, decode entities, and clean whitespace
+      let cleaned = itemContent
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       if (cleaned.length > 0) {
         items.push('- ' + cleaned);
       }
       return '';
     });
-    return items.join('\n') + '\n\n';
+    return items.length > 0 ? items.join('\n') + '\n\n' : '';
   });
   md = md.replace(/<ol[^>]*>([\s\S]*?)<\/ol>/gi, (_, content) => {
     const items: string[] = [];
     let i = 1;
     content.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_: string, itemContent: string) => {
-      const cleaned = itemContent.replace(/<[^>]+>/g, '').trim();
+      // Remove all HTML tags, decode entities, and clean whitespace
+      let cleaned = itemContent
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
       if (cleaned.length > 0) {
         items.push(`${i++}. ` + cleaned);
       }
       return '';
     });
-    return items.join('\n') + '\n\n';
+    return items.length > 0 ? items.join('\n') + '\n\n' : '';
   });
 
   // Paragraphs and line breaks

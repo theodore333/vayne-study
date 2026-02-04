@@ -1172,6 +1172,30 @@ function DrawingModal({ isOpen, onClose, onSave }: {
   );
 }
 
+// Toolbar button component - defined outside to prevent re-renders
+function ToolbarButton({ onClick, active, disabled, children, title }: {
+  onClick: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`p-2 rounded transition-colors ${
+        active
+          ? 'bg-amber-100 text-amber-700'
+          : 'bg-white text-stone-600 hover:bg-stone-200 hover:text-stone-900'
+      } disabled:opacity-30 disabled:cursor-not-allowed`}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+}
+
 interface ReaderModeProps {
   topic: Topic;
   subjectName?: string;
@@ -1883,28 +1907,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       setIsFormatting(false);
     }
   };
-
-  // Toolbar button component
-  const ToolbarButton = ({ onClick, active, disabled, children, title }: {
-    onClick: () => void;
-    active?: boolean;
-    disabled?: boolean;
-    children: React.ReactNode;
-    title: string;
-  }) => (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`p-2 rounded bg-transparent transition-all duration-150 ${
-        active
-          ? 'bg-amber-100 text-amber-700'
-          : 'text-stone-600 hover:bg-stone-200 hover:text-stone-900'
-      } disabled:opacity-30 disabled:cursor-not-allowed`}
-      title={title}
-    >
-      {children}
-    </button>
-  );
 
   if (!editor) {
     return (

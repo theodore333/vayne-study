@@ -26,7 +26,7 @@ import {
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
-  Calculator, GitBranch, Pencil, Check
+  Calculator, GitBranch, Pencil, Check, Library
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -457,42 +457,661 @@ function MermaidModal({ isOpen, onClose, onInsert }: {
   );
 }
 
+// Medical Image Library
+const MEDICAL_IMAGE_LIBRARY: Record<string, Array<{ name: string; description: string; url: string; tags: string[] }>> = {
+  'Биохимия': [
+    {
+      name: 'Цикъл на Кребс',
+      description: 'Цитратен цикъл - основен метаболитен път',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/Citric_acid_cycle_with_aconitate_2.svg/800px-Citric_acid_cycle_with_aconitate_2.svg.png',
+      tags: ['krebs', 'цитратен', 'метаболизъм', 'митохондрии']
+    },
+    {
+      name: 'Гликолиза',
+      description: 'Разграждане на глюкоза до пируват',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Glycolysis_metabolic_pathway_3_annotated.svg/800px-Glycolysis_metabolic_pathway_3_annotated.svg.png',
+      tags: ['гликолиза', 'глюкоза', 'пируват', 'ATP']
+    },
+    {
+      name: 'Електрон-транспортна верига',
+      description: 'Окислително фосфорилиране в митохондриите',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Mitochondrial_electron_transport_chain%E2%80%94Etc4.svg/800px-Mitochondrial_electron_transport_chain%E2%80%94Etc4.svg.png',
+      tags: ['ETC', 'митохондрии', 'ATP', 'NADH', 'окислително']
+    },
+    {
+      name: 'β-окисление',
+      description: 'Разграждане на мастни киселини',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Beta-Oxidation.svg/800px-Beta-Oxidation.svg.png',
+      tags: ['бета', 'мастни киселини', 'ацетил-CoA']
+    },
+    {
+      name: 'Уреен цикъл',
+      description: 'Обезвреждане на амоняк в черния дроб',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/64/Urea_cycle.svg/800px-Urea_cycle.svg.png',
+      tags: ['урея', 'амоняк', 'черен дроб', 'азот']
+    },
+    {
+      name: 'Глюконеогенеза',
+      description: 'Синтез на глюкоза от не-въглехидратни източници',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/63/Gluconeogenesis_pathway.svg/800px-Gluconeogenesis_pathway.svg.png',
+      tags: ['глюконеогенеза', 'глюкоза', 'пируват', 'черен дроб']
+    },
+    {
+      name: 'Пентозофосфатен път',
+      description: 'Производство на NADPH и рибоза-5-фосфат',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Pentose_phosphate_pathway.svg/800px-Pentose_phosphate_pathway.svg.png',
+      tags: ['пентозофосфатен', 'NADPH', 'рибоза', 'G6PD']
+    },
+    {
+      name: 'Синтез на мастни киселини',
+      description: 'De novo липогенеза',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8d/Fatty_acid_synthesis.svg/800px-Fatty_acid_synthesis.svg.png',
+      tags: ['мастни киселини', 'липогенеза', 'ацетил-CoA', 'малонил-CoA']
+    }
+  ],
+  'Анатомия': [
+    {
+      name: 'Сърце - анатомия',
+      description: 'Структура на сърцето с камери и клапи',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Diagram_of_the_human_heart_%28cropped%29.svg/800px-Diagram_of_the_human_heart_%28cropped%29.svg.png',
+      tags: ['сърце', 'камери', 'клапи', 'кардиология']
+    },
+    {
+      name: 'Нефрон',
+      description: 'Структурна единица на бъбрека',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Kidney_Nephron.png/800px-Kidney_Nephron.png',
+      tags: ['нефрон', 'бъбрек', 'гломерул', 'тубули']
+    },
+    {
+      name: 'Неврон',
+      description: 'Структура на нервна клетка',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/10/Blausen_0657_MultipolarNeuron.png/800px-Blausen_0657_MultipolarNeuron.png',
+      tags: ['неврон', 'аксон', 'дендрит', 'синапс']
+    },
+    {
+      name: 'Бели дробове',
+      description: 'Анатомия на дихателната система',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Illu_bronchi_lungs.jpg/800px-Illu_bronchi_lungs.jpg',
+      tags: ['бели дробове', 'бронхи', 'алвеоли', 'дихателна']
+    },
+    {
+      name: 'Черен дроб',
+      description: 'Анатомия и сегменти на черния дроб',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Liver_04_Couinaud_classification_animation.gif/800px-Liver_04_Couinaud_classification_animation.gif',
+      tags: ['черен дроб', 'хепатоцити', 'сегменти']
+    },
+    {
+      name: 'Мозък - сагитален разрез',
+      description: 'Структури на мозъка',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1a/Gray720.png/800px-Gray720.png',
+      tags: ['мозък', 'кора', 'малък мозък', 'мозъчен ствол']
+    }
+  ],
+  'Физиология': [
+    {
+      name: 'Акционен потенциал',
+      description: 'Фази на акционния потенциал',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Action_potential.svg/800px-Action_potential.svg.png',
+      tags: ['акционен потенциал', 'деполяризация', 'реполяризация', 'Na+', 'K+']
+    },
+    {
+      name: 'Сърдечен цикъл',
+      description: 'Фази на сърдечния цикъл с налягания',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Wiggers_Diagram.svg/800px-Wiggers_Diagram.svg.png',
+      tags: ['сърдечен цикъл', 'систола', 'диастола', 'wiggers']
+    },
+    {
+      name: 'ЕКГ',
+      description: 'Нормална електрокардиограма',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/SinusRhythmLabels.svg/800px-SinusRhythmLabels.svg.png',
+      tags: ['ЕКГ', 'ECG', 'P вълна', 'QRS', 'T вълна']
+    },
+    {
+      name: 'Хемоглобин-кислородна дисоциация',
+      description: 'Крива на дисоциация на хемоглобина',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Hemoglobin_saturation_curve.svg/800px-Hemoglobin_saturation_curve.svg.png',
+      tags: ['хемоглобин', 'кислород', 'сатурация', 'Bohr ефект']
+    },
+    {
+      name: 'Рефлексна дъга',
+      description: 'Компоненти на рефлексната дъга',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d7/Afferent_%28PSF%29.svg/800px-Afferent_%28PSF%29.svg.png',
+      tags: ['рефлекс', 'аферентен', 'еферентен', 'синапс']
+    }
+  ],
+  'Хистология': [
+    {
+      name: 'Типове епител',
+      description: 'Класификация на епителните тъкани',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Blausen_0283_EpithelialTissue.png/800px-Blausen_0283_EpithelialTissue.png',
+      tags: ['епител', 'плосък', 'цилиндричен', 'кубичен']
+    },
+    {
+      name: 'Мускулни типове',
+      description: 'Скелетна, сърдечна и гладка мускулатура',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0f/Blausen_0801_SkeletalMuscle.png/800px-Blausen_0801_SkeletalMuscle.png',
+      tags: ['мускул', 'скелетен', 'сърдечен', 'гладък']
+    },
+    {
+      name: 'Кръвни клетки',
+      description: 'Еритроцити, левкоцити, тромбоцити',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Blausen_0761_RedBloodCells.png/800px-Blausen_0761_RedBloodCells.png',
+      tags: ['еритроцити', 'левкоцити', 'тромбоцити', 'кръв']
+    }
+  ],
+  'Фармакология': [
+    {
+      name: 'G-протеин рецептори',
+      description: 'Сигнална трансдукция чрез G-протеини',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/70/GPCR-Zyklus.png/800px-GPCR-Zyklus.png',
+      tags: ['GPCR', 'G-протеин', 'рецептор', 'сигнализация']
+    },
+    {
+      name: 'Синапс',
+      description: 'Невротрансмитерно освобождаване',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Synapse_diag1.svg/800px-Synapse_diag1.svg.png',
+      tags: ['синапс', 'невротрансмитер', 'везикули', 'рецептор']
+    },
+    {
+      name: 'Холинергичен синапс',
+      description: 'Ацетилхолинова невротрансмисия',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/69/Synapse_acetridge.jpg/800px-Synapse_acetridge.jpg',
+      tags: ['ацетилхолин', 'холинергичен', 'мускаринов', 'никотинов']
+    },
+    {
+      name: 'Адренергични рецептори',
+      description: 'Алфа и бета адренорецептори',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0a/Adrenergic_receptor_signaling.png/800px-Adrenergic_receptor_signaling.png',
+      tags: ['адренергичен', 'алфа', 'бета', 'катехоламини']
+    },
+    {
+      name: 'COX инхибиране',
+      description: 'Механизъм на НСПВС',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Arachidonic_acid_metabolism.svg/800px-Arachidonic_acid_metabolism.svg.png',
+      tags: ['COX', 'НСПВС', 'простагландини', 'арахидонова']
+    }
+  ],
+  'Патофизиология': [
+    {
+      name: 'Възпалителен отговор',
+      description: 'Каскада на възпалението',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/75/Inflammation.svg/800px-Inflammation.svg.png',
+      tags: ['възпаление', 'цитокини', 'левкоцити', 'отток']
+    },
+    {
+      name: 'Атеросклероза',
+      description: 'Формиране на атеросклеротична плака',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Endo_dysfunction_Athero.PNG/800px-Endo_dysfunction_Athero.PNG',
+      tags: ['атеросклероза', 'плака', 'холестерол', 'ендотел']
+    },
+    {
+      name: 'Тромбоза',
+      description: 'Коагулационна каскада и тромбообразуване',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Coagulation_full.svg/800px-Coagulation_full.svg.png',
+      tags: ['тромбоза', 'коагулация', 'фибрин', 'тромбоцити']
+    },
+    {
+      name: 'Апоптоза',
+      description: 'Програмирана клетъчна смърт',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Apoptosis_-_signals.svg/800px-Apoptosis_-_signals.svg.png',
+      tags: ['апоптоза', 'каспази', 'Bcl-2', 'митохондрии']
+    },
+    {
+      name: 'Исхемия-реперфузия',
+      description: 'Увреждане при исхемия и реперфузия',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/Myocardial_infarction_diagram.svg/800px-Myocardial_infarction_diagram.svg.png',
+      tags: ['исхемия', 'реперфузия', 'некроза', 'ROS']
+    },
+    {
+      name: 'Шок - патофизиология',
+      description: 'Типове шок и компенсаторни механизми',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/Symptoms_of_shock.png/800px-Symptoms_of_shock.png',
+      tags: ['шок', 'хиповолемичен', 'кардиогенен', 'септичен']
+    },
+    {
+      name: 'Оток - механизъм',
+      description: 'Старлингови сили и формиране на оток',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Illu_capillary_microcirculation.jpg/800px-Illu_capillary_microcirculation.jpg',
+      tags: ['оток', 'Старлинг', 'онкотично', 'хидростатично']
+    }
+  ],
+  'Патоанатомия': [
+    {
+      name: 'Некроза - типове',
+      description: 'Коагулативна, ликвефактивна, казеозна некроза',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Necrosis_types.svg/800px-Necrosis_types.svg.png',
+      tags: ['некроза', 'коагулативна', 'ликвефактивна', 'казеозна']
+    },
+    {
+      name: 'Грануломатозно възпаление',
+      description: 'Структура на гранулом',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/Granuloma_mac.jpg/800px-Granuloma_mac.jpg',
+      tags: ['гранулом', 'гигантски клетки', 'туберкулоза', 'саркоидоза']
+    },
+    {
+      name: 'Хипертрофия vs Хиперплазия',
+      description: 'Адаптивни клетъчни промени',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e9/Hypertrophy.png/800px-Hypertrophy.png',
+      tags: ['хипертрофия', 'хиперплазия', 'атрофия', 'метаплазия']
+    },
+    {
+      name: 'Инфаркт на миокарда',
+      description: 'Морфологични промени при MI',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Heart_attack_diagram.svg/800px-Heart_attack_diagram.svg.png',
+      tags: ['инфаркт', 'миокард', 'тропонин', 'некроза']
+    },
+    {
+      name: 'Цироза на черния дроб',
+      description: 'Нодуларна регенерация и фиброза',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Cirrhosis_of_the_liver_%28trichrome_stain%29.jpg/800px-Cirrhosis_of_the_liver_%28trichrome_stain%29.jpg',
+      tags: ['цироза', 'фиброза', 'регенерация', 'портална хипертензия']
+    },
+    {
+      name: 'Гломерулонефрит',
+      description: 'Патология на гломерула',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/Crescentic_glomerulonephritis_PAS_stain.jpg/800px-Crescentic_glomerulonephritis_PAS_stain.jpg',
+      tags: ['гломерулонефрит', 'протеинурия', 'хематурия', 'нефрит']
+    }
+  ],
+  'Микробиология': [
+    {
+      name: 'Gram оцветяване',
+      description: 'Gram-положителни и Gram-отрицателни бактерии',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Gram_stain_01.jpg/800px-Gram_stain_01.jpg',
+      tags: ['gram', 'бактерии', 'оцветяване', 'стена']
+    },
+    {
+      name: 'Бактериална клетка',
+      description: 'Структура на бактериална клетка',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Average_prokaryote_cell-_en.svg/800px-Average_prokaryote_cell-_en.svg.png',
+      tags: ['бактерия', 'клетъчна стена', 'рибозоми', 'плазмид']
+    },
+    {
+      name: 'Вирусна репликация',
+      description: 'Цикъл на вирусна репликация',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ea/HepC_replication.png/800px-HepC_replication.png',
+      tags: ['вирус', 'репликация', 'транскрипция', 'капсид']
+    }
+  ],
+  'Имунология': [
+    {
+      name: 'Имунен отговор',
+      description: 'Вроден и адаптивен имунитет',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Immune_response.svg/800px-Immune_response.svg.png',
+      tags: ['имунитет', 'вроден', 'адаптивен', 'антитела']
+    },
+    {
+      name: 'T-клетъчна активация',
+      description: 'MHC представяне и T-клетъчен отговор',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8f/T_cell_activation.svg/800px-T_cell_activation.svg.png',
+      tags: ['T-клетки', 'MHC', 'антиген', 'CD4', 'CD8']
+    },
+    {
+      name: 'Антитела - структура',
+      description: 'Имуноглобулинова структура',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2d/Antibody.svg/800px-Antibody.svg.png',
+      tags: ['антитела', 'IgG', 'имуноглобулин', 'Fab', 'Fc']
+    },
+    {
+      name: 'Комплемент система',
+      description: 'Каскада на комплемента',
+      url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/57/Complement_system.svg/800px-Complement_system.svg.png',
+      tags: ['комплемент', 'C3', 'MAC', 'опсонизация']
+    }
+  ]
+};
+
+// Image Library Modal Component
+function ImageLibraryModal({ isOpen, onClose, onInsert }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onInsert: (url: string, alt: string) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<'collection' | 'personal'>('collection');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Биохимия');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [personalImages, setPersonalImages] = useState<Array<{ name: string; url: string; tags: string[] }>>([]);
+  const [showUpload, setShowUpload] = useState(false);
+  const [newImageName, setNewImageName] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [newImageTags, setNewImageTags] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load personal images from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('vayne-personal-images');
+    if (saved) {
+      try {
+        setPersonalImages(JSON.parse(saved));
+      } catch {}
+    }
+  }, [isOpen]);
+
+  // Save personal images to localStorage
+  const savePersonalImages = (images: typeof personalImages) => {
+    localStorage.setItem('vayne-personal-images', JSON.stringify(images));
+    setPersonalImages(images);
+  };
+
+  // Handle file upload
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Файлът е твърде голям (макс 5MB)');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setNewImageUrl(reader.result as string);
+      setNewImageName(file.name.replace(/\.[^/.]+$/, ''));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Add new personal image
+  const handleAddPersonalImage = () => {
+    if (!newImageName || !newImageUrl) return;
+
+    const newImage = {
+      name: newImageName,
+      url: newImageUrl,
+      tags: newImageTags.split(',').map(t => t.trim().toLowerCase()).filter(Boolean)
+    };
+
+    savePersonalImages([...personalImages, newImage]);
+    setNewImageName('');
+    setNewImageUrl('');
+    setNewImageTags('');
+    setShowUpload(false);
+  };
+
+  // Delete personal image
+  const handleDeletePersonalImage = (index: number) => {
+    const updated = personalImages.filter((_, i) => i !== index);
+    savePersonalImages(updated);
+  };
+
+  // Filter images by search
+  const filterImages = (images: Array<{ name: string; tags: string[]; url: string; description?: string }>) => {
+    if (!searchQuery) return images;
+    const query = searchQuery.toLowerCase();
+    return images.filter(img =>
+      img.name.toLowerCase().includes(query) ||
+      img.tags.some(tag => tag.toLowerCase().includes(query)) ||
+      img.description?.toLowerCase().includes(query)
+    );
+  };
+
+  if (!isOpen) return null;
+
+  const categories = Object.keys(MEDICAL_IMAGE_LIBRARY);
+  const collectionImages = filterImages(MEDICAL_IMAGE_LIBRARY[selectedCategory] || []);
+  const filteredPersonalImages = filterImages(personalImages);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
+      <div className="bg-white border border-stone-300 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-stone-200">
+          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+            <ImagePlus size={20} className="text-blue-600" />
+            Медицинска библиотека
+          </h3>
+          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
+            <X size={20} className="text-stone-500" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-stone-200">
+          <button
+            onClick={() => setActiveTab('collection')}
+            className={`px-6 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'collection'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            📚 Колекция
+          </button>
+          <button
+            onClick={() => setActiveTab('personal')}
+            className={`px-6 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'personal'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50'
+                : 'text-stone-500 hover:text-stone-700'
+            }`}
+          >
+            🖼️ Моя библиотека ({personalImages.length})
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="p-4 border-b border-stone-100">
+          <input
+            type="text"
+            placeholder="Търси по име или таг..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:border-blue-400"
+          />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden flex">
+          {activeTab === 'collection' ? (
+            <>
+              {/* Categories sidebar */}
+              <div className="w-48 border-r border-stone-200 p-2 overflow-y-auto">
+                {categories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      selectedCategory === cat
+                        ? 'bg-blue-100 text-blue-700 font-medium'
+                        : 'text-stone-600 hover:bg-stone-100'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Images grid */}
+              <div className="flex-1 p-4 overflow-y-auto">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {collectionImages.map((img, idx) => (
+                    <div
+                      key={idx}
+                      className="group bg-stone-50 rounded-lg overflow-hidden border border-stone-200 hover:border-blue-400 hover:shadow-md transition-all cursor-pointer"
+                      onClick={() => onInsert(img.url, img.name)}
+                    >
+                      <div className="aspect-square bg-white flex items-center justify-center p-2">
+                        <img
+                          src={img.url}
+                          alt={img.name}
+                          className="max-w-full max-h-full object-contain"
+                          loading="lazy"
+                        />
+                      </div>
+                      <div className="p-2 border-t border-stone-200">
+                        <p className="text-sm font-medium text-stone-800 truncate">{img.name}</p>
+                        <p className="text-xs text-stone-500 truncate">{img.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {collectionImages.length === 0 && (
+                  <p className="text-center text-stone-400 py-8">Няма резултати</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex-1 p-4 overflow-y-auto">
+              {/* Upload button */}
+              {!showUpload ? (
+                <button
+                  onClick={() => setShowUpload(true)}
+                  className="mb-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  Добави изображение
+                </button>
+              ) : (
+                <div className="mb-4 p-4 bg-stone-50 rounded-lg border border-stone-200">
+                  <h4 className="font-medium text-stone-700 mb-3">Ново изображение</h4>
+                  <div className="space-y-3">
+                    <div>
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-3 py-1.5 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded text-sm"
+                      >
+                        Избери файл
+                      </button>
+                      <span className="ml-2 text-xs text-stone-500">или</span>
+                      <input
+                        type="text"
+                        placeholder="URL на изображение"
+                        value={newImageUrl}
+                        onChange={e => setNewImageUrl(e.target.value)}
+                        className="ml-2 px-2 py-1 border border-stone-300 rounded text-sm w-64"
+                      />
+                    </div>
+                    {newImageUrl && (
+                      <div className="w-32 h-32 bg-white border rounded overflow-hidden">
+                        <img src={newImageUrl} alt="Preview" className="w-full h-full object-contain" />
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      placeholder="Име на изображението"
+                      value={newImageName}
+                      onChange={e => setNewImageName(e.target.value)}
+                      className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Тагове (разделени със запетая)"
+                      value={newImageTags}
+                      onChange={e => setNewImageTags(e.target.value)}
+                      className="w-full px-3 py-2 border border-stone-300 rounded text-sm"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddPersonalImage}
+                        disabled={!newImageName || !newImageUrl}
+                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm disabled:opacity-50"
+                      >
+                        Запази
+                      </button>
+                      <button
+                        onClick={() => { setShowUpload(false); setNewImageName(''); setNewImageUrl(''); setNewImageTags(''); }}
+                        className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded text-sm"
+                      >
+                        Отказ
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Personal images grid */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {filteredPersonalImages.map((img, idx) => (
+                  <div
+                    key={idx}
+                    className="group bg-stone-50 rounded-lg overflow-hidden border border-stone-200 hover:border-blue-400 hover:shadow-md transition-all relative"
+                  >
+                    <div
+                      className="aspect-square bg-white flex items-center justify-center p-2 cursor-pointer"
+                      onClick={() => onInsert(img.url, img.name)}
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.name}
+                        className="max-w-full max-h-full object-contain"
+                      />
+                    </div>
+                    <div className="p-2 border-t border-stone-200">
+                      <p className="text-sm font-medium text-stone-800 truncate">{img.name}</p>
+                      <p className="text-xs text-stone-400 truncate">{img.tags.join(', ')}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeletePersonalImage(idx); }}
+                      className="absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Изтрий"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {filteredPersonalImages.length === 0 && !showUpload && (
+                <p className="text-center text-stone-400 py-8">
+                  Нямаш запазени изображения. Добави първото!
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Drawing Modal with Excalidraw
 function DrawingModal({ isOpen, onClose, onSave }: {
   isOpen: boolean;
   onClose: () => void;
   onSave: (imageData: string) => void;
 }) {
-  const [Excalidraw, setExcalidraw] = useState<any>(null);
-  const excalidrawRef = useRef<any>(null);
+  const [ExcalidrawComponent, setExcalidrawComponent] = useState<any>(null);
+  const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !ExcalidrawComponent) {
       import('@excalidraw/excalidraw').then(module => {
-        setExcalidraw(() => module.Excalidraw);
+        setExcalidrawComponent(() => module.Excalidraw);
       });
     }
-  }, [isOpen]);
+  }, [isOpen, ExcalidrawComponent]);
 
   const handleSave = async () => {
-    if (excalidrawRef.current) {
-      const elements = excalidrawRef.current.getSceneElements();
-      const appState = excalidrawRef.current.getAppState();
+    if (excalidrawAPI) {
+      try {
+        const elements = excalidrawAPI.getSceneElements();
+        const appState = excalidrawAPI.getAppState();
+        const files = excalidrawAPI.getFiles();
 
-      const { exportToBlob } = await import('@excalidraw/excalidraw');
-      const blob = await exportToBlob({
-        elements,
-        appState: { ...appState, exportBackground: true },
-        files: excalidrawRef.current.getFiles(),
-      });
+        const { exportToBlob } = await import('@excalidraw/excalidraw');
+        const blob = await exportToBlob({
+          elements,
+          appState: { ...appState, exportBackground: true },
+          files,
+        });
 
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        onSave(base64);
-        onClose();
-      };
-      reader.readAsDataURL(blob);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64 = reader.result as string;
+          onSave(base64);
+          onClose();
+        };
+        reader.readAsDataURL(blob);
+      } catch (error) {
+        console.error('Error saving drawing:', error);
+        alert('Грешка при запазване на скицата');
+      }
     }
   };
 
@@ -521,16 +1140,31 @@ function DrawingModal({ isOpen, onClose, onSave }: {
           </button>
         </div>
       </div>
-      <div className="flex-1">
-        {Excalidraw ? (
-          <Excalidraw
-            ref={excalidrawRef}
+      <div className="flex-1" style={{ height: 'calc(100vh - 60px)' }}>
+        {ExcalidrawComponent ? (
+          <ExcalidrawComponent
+            excalidrawAPI={(api: any) => setExcalidrawAPI(api)}
             theme="light"
             langCode="en"
+            initialData={{
+              elements: [],
+              appState: {
+                viewBackgroundColor: '#ffffff',
+                currentItemFontFamily: 1,
+              },
+            }}
+            UIOptions={{
+              canvasActions: {
+                loadScene: false,
+                export: false,
+                saveAsImage: false,
+              },
+            }}
           />
         ) : (
           <div className="flex items-center justify-center h-full">
-            <span className="text-stone-500">Зареждане...</span>
+            <Loader2 className="animate-spin text-purple-500" size={32} />
+            <span className="ml-2 text-stone-500">Зареждане на Excalidraw...</span>
           </div>
         )}
       </div>
@@ -649,11 +1283,11 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^- \[x\] (.+)$/gm, '<li data-type="taskItem" data-checked="true">$1</li>');
   html = html.replace(/^- \[ \] (.+)$/gm, '<li data-type="taskItem" data-checked="false">$1</li>');
 
-  // Unordered lists
-  html = html.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  // Unordered lists (only if there's content after the dash)
+  html = html.replace(/^[-*] +(.+)$/gm, '<li>$1</li>');
 
-  // Ordered lists
-  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  // Ordered lists (only if there's content after the number)
+  html = html.replace(/^\d+\. +(.+)$/gm, '<li>$1</li>');
 
   // Wrap consecutive task items in taskList
   html = html.replace(/(<li data-type="taskItem"[^>]*>.*?<\/li>\n?)+/g, (match) => `<ul data-type="taskList">${match}</ul>`);
@@ -791,6 +1425,10 @@ function htmlToMarkdown(html: string): string {
   md = md.replace(/&gt;/g, '>');
   md = md.replace(/&nbsp;/g, ' ');
 
+  // Clean up empty list items and standalone dashes
+  md = md.replace(/^- *$/gm, ''); // Remove empty bullet points
+  md = md.replace(/^\d+\. *$/gm, ''); // Remove empty numbered items
+
   // Clean up extra whitespace
   md = md.replace(/\n{3,}/g, '\n\n');
   md = md.trim();
@@ -811,6 +1449,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [showMermaidModal, setShowMermaidModal] = useState(false);
   const [showDrawingModal, setShowDrawingModal] = useState(false);
+  const [showImageLibrary, setShowImageLibrary] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -885,7 +1524,52 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         // Check for HTML content first (Notion pastes HTML)
         const html = clipboardData.getData('text/html');
         if (html) {
-          // Notion HTML is usually well-formatted, let TipTap handle it
+          // Check if Notion HTML contains a table
+          if (html.includes('<table') || html.includes('<tr')) {
+            // Let TipTap handle HTML tables directly
+            return false;
+          }
+
+          // Check for Notion's specific table format (divs with data attributes)
+          if (html.includes('notion-table') || html.includes('data-block-id')) {
+            // Extract text and try to parse as table
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const text = tempDiv.textContent || '';
+            const lines = text.trim().split('\n').filter(l => l.trim());
+
+            if (lines.length > 1) {
+              // Try to detect columns by consistent spacing
+              const firstLine = lines[0];
+              // Notion often uses multiple spaces between columns
+              const hasMultipleSpaces = /\s{2,}/.test(firstLine);
+
+              if (hasMultipleSpaces) {
+                // Split by multiple spaces
+                const rows = lines.map(line => {
+                  const cells = line.split(/\s{2,}/).filter(c => c.trim());
+                  return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
+                });
+                const headerRow = rows[0].replace(/<td>/g, '<th>').replace(/<\/td>/g, '</th>');
+                const bodyRows = rows.slice(1).join('');
+                const tableHtml = `<table><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+
+                event.preventDefault();
+                const tempDiv2 = document.createElement('div');
+                tempDiv2.innerHTML = tableHtml;
+                const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv2, {
+                  preserveWhitespace: false,
+                  context: view.state.selection.$from,
+                });
+                if (slice) {
+                  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+                  return true;
+                }
+              }
+            }
+          }
+
+          // Let TipTap handle other HTML
           return false;
         }
 
@@ -893,16 +1577,24 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         const text = clipboardData.getData('text/plain');
         if (!text) return false;
 
+        // Clean up the text - remove empty lines at start/end
+        const cleanText = text.trim();
+        const lines = cleanText.split('\n');
+
         // Check if it looks like a table (tab-separated from Notion/Excel)
-        const lines = text.trim().split('\n');
-        const isTabSeparatedTable = lines.length > 1 && lines.every(line => line.includes('\t'));
+        const isTabSeparatedTable = lines.length > 1 && lines.some(line => line.includes('\t'));
+
+        // Check for space-separated table (Notion sometimes does this)
+        const isSpaceSeparatedTable = lines.length > 1 &&
+          lines.every(line => line.trim()) &&
+          lines.some(line => /\s{2,}/.test(line));
 
         // Check if it contains markdown formatting
-        const hasMarkdown = /(\*\*|__|\*|_|~~|^#|^>|^-\s|^\d+\.\s|```|\|.+\|)/.test(text);
+        const hasMarkdown = /(\*\*|__|\*|_|~~|^#|^>|^-\s+\S|^\d+\.\s+\S|```|\|.+\|)/.test(cleanText);
 
         if (isTabSeparatedTable) {
           // Convert tab-separated to HTML table
-          const rows = lines.map(line => {
+          const rows = lines.filter(l => l.trim()).map(line => {
             const cells = line.split('\t');
             return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
           });
@@ -912,38 +1604,48 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           const tableHtml = `<table><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table>`;
 
           event.preventDefault();
-          view.dispatch(view.state.tr.replaceSelectionWith(
-            view.state.schema.nodeFromJSON({
-              type: 'doc',
-              content: [{ type: 'table', content: [] }]
-            })
-          ).scrollIntoView());
-
-          // Use insertContent for better table handling
-          const { state, dispatch } = view;
-          const { tr } = state;
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(tableHtml, 'text/html');
-          const tableEl = doc.querySelector('table');
-          if (tableEl) {
-            // Let TipTap parse the HTML table
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = tableHtml;
-            const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv, {
-              preserveWhitespace: true,
-              context: state.selection.$from,
-            });
-            if (slice) {
-              dispatch(tr.replaceSelection(slice).scrollIntoView());
-              return true;
-            }
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = tableHtml;
+          const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv, {
+            preserveWhitespace: false,
+            context: view.state.selection.$from,
+          });
+          if (slice) {
+            view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+            return true;
           }
           return false;
         }
 
+        if (isSpaceSeparatedTable && !hasMarkdown) {
+          // Try to parse space-separated table
+          const rows = lines.filter(l => l.trim()).map(line => {
+            const cells = line.split(/\s{2,}/).filter(c => c.trim());
+            return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
+          });
+
+          if (rows.length > 1 && rows[0].includes('<td>')) {
+            const headerRow = rows[0].replace(/<td>/g, '<th>').replace(/<\/td>/g, '</th>');
+            const bodyRows = rows.slice(1).join('');
+            const tableHtml = `<table><thead>${headerRow}</thead><tbody>${bodyRows}</tbody></table>`;
+
+            event.preventDefault();
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = tableHtml;
+            const slice = view.someProp('clipboardParser')?.parseSlice(tempDiv, {
+              preserveWhitespace: false,
+              context: view.state.selection.$from,
+            });
+            if (slice) {
+              view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+              return true;
+            }
+          }
+        }
+
         if (hasMarkdown) {
           // Convert markdown to HTML
-          const convertedHtml = markdownToHtml(text);
+          const convertedHtml = markdownToHtml(cleanText);
           event.preventDefault();
 
           // Parse and insert the HTML
@@ -1089,6 +1791,13 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const handleInsertDrawing = (imageData: string) => {
     if (!editor) return;
     editor.chain().focus().setImage({ src: imageData, alt: 'Drawing' }).run();
+  };
+
+  // Insert image from library
+  const handleInsertLibraryImage = (url: string, alt: string) => {
+    if (!editor) return;
+    editor.chain().focus().setImage({ src: url, alt }).run();
+    setShowImageLibrary(false);
   };
 
   // Keyboard shortcuts
@@ -1542,6 +2251,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
           {/* Rich content tools */}
           <ToolbarButton
+            onClick={() => setShowImageLibrary(true)}
+            title="Медицинска библиотека"
+          >
+            <Library size={18} />
+          </ToolbarButton>
+          <ToolbarButton
             onClick={() => setShowFormulaModal(true)}
             title="Вмъкни формула (LaTeX)"
           >
@@ -1944,6 +2659,13 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         isOpen={showDrawingModal}
         onClose={() => setShowDrawingModal(false)}
         onSave={handleInsertDrawing}
+      />
+
+      {/* Image Library Modal */}
+      <ImageLibraryModal
+        isOpen={showImageLibrary}
+        onClose={() => setShowImageLibrary(false)}
+        onInsert={handleInsertLibraryImage}
       />
 
     </div>

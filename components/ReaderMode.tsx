@@ -26,7 +26,7 @@ import {
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
-  Calculator, GitBranch, Pencil, Check, Library
+  Calculator, GitBranch, Pencil, Check, Library, Network
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -457,15 +457,30 @@ function MermaidModal({ isOpen, onClose, onInsert }: {
   );
 }
 
-// Helper to fix Wikimedia thumbnail URLs that return 429 errors
-// Converts: /thumb/X/XX/File.svg/800px-File.svg.png → /X/XX/File.svg
+// Helper to fix Wikimedia URLs - use Special:FilePath for reliable loading
 function fixWikimediaUrl(url: string): string {
-  // Check if it's a Wikimedia thumbnail URL
-  const match = url.match(/^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/thumb\/([^/]+\/[^/]+\/[^/]+)\//);
-  if (match) {
-    // Return the original file URL without thumbnail transformation
-    return `https://upload.wikimedia.org/wikipedia/commons/${match[1]}`;
+  // Extract filename from various Wikimedia URL formats
+  // Format 1: /thumb/X/XX/Filename.ext/800px-Filename.ext.png
+  // Format 2: /X/XX/Filename.ext
+  let filename = '';
+
+  // Try thumbnail format first
+  const thumbMatch = url.match(/\/wikipedia\/commons\/thumb\/[^/]+\/[^/]+\/([^/]+)\//);
+  if (thumbMatch) {
+    filename = thumbMatch[1];
+  } else {
+    // Try direct format
+    const directMatch = url.match(/\/wikipedia\/commons\/[^/]+\/[^/]+\/([^/]+)$/);
+    if (directMatch) {
+      filename = directMatch[1];
+    }
   }
+
+  if (filename) {
+    // Use Special:FilePath which is reliable and handles redirects
+    return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(filename)}?width=800`;
+  }
+
   return url;
 }
 
@@ -1192,6 +1207,157 @@ function DrawingModal({ isOpen, onClose, onSave }: {
   );
 }
 
+// Markmap Modal Component
+function MarkmapModal({ isOpen, onClose, onSave }: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (imageData: string) => void;
+}) {
+  const [markdown, setMarkdown] = useState(`# Тема
+## Подтема 1
+### Детайл A
+### Детайл B
+## Подтема 2
+### Детайл C
+### Детайл D`);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [markmapInstance, setMarkmapInstance] = useState<any>(null);
+
+  useEffect(() => {
+    if (!isOpen || !svgRef.current) return;
+
+    const loadMarkmap = async () => {
+      try {
+        const { Transformer } = await import('markmap-lib');
+        const { Markmap } = await import('markmap-view');
+
+        const transformer = new Transformer();
+        const { root } = transformer.transform(markdown);
+
+        // Clear previous content
+        svgRef.current!.innerHTML = '';
+
+        // Create markmap
+        const mm = Markmap.create(svgRef.current!, {
+          autoFit: true,
+          color: (node: any) => {
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+            return colors[node.state?.depth % colors.length] || colors[0];
+          },
+          paddingX: 20,
+          duration: 300,
+        }, root);
+
+        setMarkmapInstance(mm);
+      } catch (error) {
+        console.error('Error loading markmap:', error);
+      }
+    };
+
+    loadMarkmap();
+  }, [isOpen, markdown]);
+
+  const handleSave = async () => {
+    if (!svgRef.current) return;
+
+    try {
+      // Clone SVG and prepare for export
+      const svgElement = svgRef.current.cloneNode(true) as SVGSVGElement;
+      const bbox = svgRef.current.getBBox();
+
+      // Set proper dimensions
+      svgElement.setAttribute('width', String(bbox.width + 40));
+      svgElement.setAttribute('height', String(bbox.height + 40));
+      svgElement.setAttribute('viewBox', `${bbox.x - 20} ${bbox.y - 20} ${bbox.width + 40} ${bbox.height + 40}`);
+
+      // Add white background
+      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      bg.setAttribute('x', String(bbox.x - 20));
+      bg.setAttribute('y', String(bbox.y - 20));
+      bg.setAttribute('width', String(bbox.width + 40));
+      bg.setAttribute('height', String(bbox.height + 40));
+      bg.setAttribute('fill', 'white');
+      svgElement.insertBefore(bg, svgElement.firstChild);
+
+      // Convert to data URL
+      const svgData = new XMLSerializer().serializeToString(svgElement);
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+
+      // Convert SVG to PNG using canvas
+      const img = new window.Image();
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = 2; // Higher resolution
+        canvas.width = (bbox.width + 40) * scale;
+        canvas.height = (bbox.height + 40) * scale;
+        const ctx = canvas.getContext('2d')!;
+        ctx.scale(scale, scale);
+        ctx.fillStyle = 'white';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+
+        const pngData = canvas.toDataURL('image/png');
+        onSave(pngData);
+        onClose();
+        URL.revokeObjectURL(url);
+      };
+
+      img.src = url;
+    } catch (error) {
+      console.error('Error saving markmap:', error);
+      alert('Грешка при запазване на mind map');
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
+      <div className="flex items-center justify-between p-3 bg-stone-100 border-b">
+        <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+          <GitBranch size={20} className="text-blue-600" />
+          Mind Map (Markmap)
+        </h3>
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
+          >
+            Отказ
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
+          >
+            <Check size={16} />
+            Запази като изображение
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 flex" style={{ height: 'calc(100vh - 60px)' }}>
+        {/* Markdown Editor */}
+        <div className="w-1/3 border-r border-stone-200 flex flex-col">
+          <div className="p-2 bg-stone-50 border-b text-sm text-stone-600 font-medium">
+            Markdown (йерархия с #)
+          </div>
+          <textarea
+            value={markdown}
+            onChange={(e) => setMarkdown(e.target.value)}
+            className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none"
+            placeholder="# Главна тема&#10;## Подтема 1&#10;### Детайл&#10;## Подтема 2"
+          />
+        </div>
+        {/* Markmap Preview */}
+        <div className="flex-1 bg-stone-50 overflow-hidden">
+          <svg ref={svgRef} className="w-full h-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Toolbar button component - defined outside to prevent re-renders
 function ToolbarButton({ onClick, active, disabled, children, title }: {
   onClick: () => void;
@@ -1610,6 +1776,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [showMermaidModal, setShowMermaidModal] = useState(false);
   const [showDrawingModal, setShowDrawingModal] = useState(false);
+  const [showMarkmapModal, setShowMarkmapModal] = useState(false);
   const [showImageLibrary, setShowImageLibrary] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -1973,6 +2140,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const handleInsertDrawing = (imageData: string) => {
     if (!editor) return;
     editor.chain().focus().setImage({ src: imageData, alt: 'Drawing' }).run();
+  };
+
+  // Insert markmap mind map into editor
+  const handleInsertMarkmap = (imageData: string) => {
+    if (!editor) return;
+    editor.chain().focus().setImage({ src: imageData, alt: 'Mind Map' }).run();
   };
 
   // Insert image from library
@@ -2468,6 +2641,12 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           >
             <Pencil size={18} />
           </ToolbarButton>
+          <ToolbarButton
+            onClick={() => setShowMarkmapModal(true)}
+            title="Mind Map (Markmap)"
+          >
+            <Network size={18} />
+          </ToolbarButton>
 
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
@@ -2853,6 +3032,13 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         isOpen={showDrawingModal}
         onClose={() => setShowDrawingModal(false)}
         onSave={handleInsertDrawing}
+      />
+
+      {/* Markmap Modal */}
+      <MarkmapModal
+        isOpen={showMarkmapModal}
+        onClose={() => setShowMarkmapModal(false)}
+        onSave={handleInsertMarkmap}
       />
 
       {/* Image Library Modal */}

@@ -44,7 +44,8 @@
       "Bash(npm test)",
       "Bash(npx playwright test --reporter=line)",
       "Bash(npx playwright test:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

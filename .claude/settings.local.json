@@ -41,7 +41,10 @@
       "Bash(__NEW_LINE_4977802e613e96a9__ echo \"3. Cascade delete check \\(what happens when subject deleted\\):\")",
       "Bash(npm init:*)",
       "Bash(npx playwright install:*)",
-      "Bash(npm test)"
+      "Bash(npm test)",
+      "Bash(npx playwright test --reporter=line)",
+      "Bash(npx playwright test:*)",
+      "Bash(npm ls:*)"
     ]
   }
 }

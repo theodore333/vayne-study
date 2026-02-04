@@ -4,180 +4,191 @@
 - generic [active] [ref=e1]:
   - generic [ref=e2]:
     - complementary [ref=e3]:
-      - generic [ref=e4]:
-        - generic [ref=e5]:
-          - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
-            - /url: /
-            - generic [ref=e7]: ⚡
-            - generic [ref=e8]: VAYNE
-          - button "Скрий меню" [ref=e9]:
-            - img [ref=e10]
-        - paragraph [ref=e13]: Study Command Center
-      - navigation [ref=e14]:
-        - list [ref=e15]:
-          - listitem [ref=e16]:
-            - link "Табло" [ref=e17] [cursor=pointer]:
+      - generic [ref=e5]:
+        - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: ⚡
+          - generic [ref=e8]: VAYNE
+        - button "Скрий меню" [ref=e9]:
+          - img [ref=e10]
+      - navigation [ref=e13]:
+        - list [ref=e14]:
+          - listitem [ref=e15]:
+            - link "Табло" [ref=e16] [cursor=pointer]:
               - /url: /
-              - img [ref=e18]
+              - img [ref=e17]
               - text: Табло
-          - listitem [ref=e23]:
-            - link "Днешен план" [ref=e24] [cursor=pointer]:
-              - /url: /today
-              - img [ref=e25]
-              - text: Днешен план
-          - listitem [ref=e29]:
-            - link "Седмичен график" [ref=e30] [cursor=pointer]:
-              - /url: /schedule
-              - img [ref=e31]
-              - text: Седмичен график
-          - listitem [ref=e33]:
-            - link "Предмети" [ref=e34] [cursor=pointer]:
-              - /url: /subjects
-              - img [ref=e35]
-              - text: Предмети
-          - listitem [ref=e37]:
-            - link "Проекти" [ref=e38] [cursor=pointer]:
-              - /url: /projects
-              - img [ref=e39]
-              - text: Проекти
-          - listitem [ref=e44]:
-            - link "Question Bank" [ref=e45] [cursor=pointer]:
-              - /url: /question-bank
-              - img [ref=e46]
-              - text: Question Bank
-          - listitem [ref=e49]:
-            - link "Клинични Случаи" [ref=e50] [cursor=pointer]:
-              - /url: /cases
+          - listitem [ref=e22]:
+            - button "Учене" [ref=e23]:
+              - img [ref=e24]
+              - generic [ref=e26]: Учене
+              - img [ref=e27]
+            - list [ref=e29]:
+              - listitem [ref=e30]:
+                - link "Предмети" [ref=e31] [cursor=pointer]:
+                  - /url: /subjects
+                  - img [ref=e32]
+                  - text: Предмети
+              - listitem [ref=e34]:
+                - link "Проекти" [ref=e35] [cursor=pointer]:
+                  - /url: /projects
+                  - img [ref=e36]
+                  - text: Проекти
+              - listitem [ref=e41]:
+                - link "Сборници" [ref=e42] [cursor=pointer]:
+                  - /url: /question-bank
+                  - img [ref=e43]
+                  - text: Сборници
+          - listitem [ref=e46]:
+            - button "Планиране" [ref=e47]:
+              - img [ref=e48]
+              - generic [ref=e50]: Планиране
               - img [ref=e51]
-              - text: Клинични Случаи
-          - listitem [ref=e55]:
-            - link "Таймер" [ref=e56] [cursor=pointer]:
-              - /url: /timer
-              - img [ref=e57]
-              - text: Таймер
-          - listitem [ref=e60]:
-            - link "Прогноза" [ref=e61] [cursor=pointer]:
-              - /url: /prediction
-              - img [ref=e62]
-              - text: Прогноза
-          - listitem [ref=e65]:
-            - link "GPA Калкулатор" [ref=e66] [cursor=pointer]:
-              - /url: /gpa
-              - img [ref=e67]
-              - text: GPA Калкулатор
-          - listitem [ref=e70]:
-            - link "Настройки" [ref=e71] [cursor=pointer]:
-              - /url: /settings
-              - img [ref=e72]
-              - text: Настройки
-      - generic [ref=e75]:
-        - heading "Предмети" [level=3] [ref=e76]
-        - paragraph [ref=e77]: Няма добавени предмети
-    - generic [ref=e78]:
-      - banner [ref=e79]:
-        - generic [ref=e80]:
-          - generic [ref=e81]:
-            - generic [ref=e82]: 📚
-            - generic [ref=e84]:
-              - generic [ref=e85]: Студент
-              - generic [ref=e86]: Lv.1
-          - button "Нормален" [ref=e88]:
-            - img [ref=e89]
-            - generic [ref=e91]: Нормален
-          - button "0%" [ref=e92]:
-            - img [ref=e93]
-            - generic [ref=e95]: 0%
-          - generic [ref=e96]:
-            - img [ref=e97]
-            - generic [ref=e99]: $0.000 / $5$
-          - button "Offline" [ref=e100]:
-            - img [ref=e101]
-            - generic [ref=e105]: Offline
-          - generic [ref=e106]:
-            - generic [ref=e107]: "Статус:"
-            - generic [ref=e108]:
-              - generic [ref=e109]:
-                - generic [ref=e110]: 🟢
-                - generic [ref=e111]: "0"
-              - generic [ref=e112]:
-                - generic [ref=e113]: 🟡
-                - generic [ref=e114]: "0"
-              - generic [ref=e115]:
-                - generic [ref=e116]: 🟠
-                - generic [ref=e117]: "0"
-              - generic [ref=e118]:
-                - generic [ref=e119]: ⚪
-                - generic [ref=e120]: "0"
-      - main [ref=e121]:
-        - generic [ref=e122]:
-          - generic [ref=e123]:
-            - generic [ref=e124]:
-              - heading "Таймер" [level=1] [ref=e125]:
-                - img [ref=e126]
-                - text: Таймер
-              - generic [ref=e129]:
-                - button "Таймер" [ref=e130]:
-                  - img [ref=e131]
+            - list [ref=e53]:
+              - listitem [ref=e54]:
+                - link "Днешен план" [ref=e55] [cursor=pointer]:
+                  - /url: /today
+                  - img [ref=e56]
+                  - text: Днешен план
+              - listitem [ref=e60]:
+                - link "График" [ref=e61] [cursor=pointer]:
+                  - /url: /schedule
+                  - img [ref=e62]
+                  - text: График
+          - listitem [ref=e64]:
+            - button "Анализи" [ref=e65]:
+              - img [ref=e66]
+              - generic [ref=e68]: Анализи
+              - img [ref=e69]
+          - listitem [ref=e71]:
+            - button "Инструменти" [ref=e72]:
+              - img [ref=e73]
+              - generic [ref=e76]: Инструменти
+              - img [ref=e77]
+            - list [ref=e79]:
+              - listitem [ref=e80]:
+                - link "Таймер" [ref=e81] [cursor=pointer]:
+                  - /url: /timer
+                  - img [ref=e82]
                   - text: Таймер
-                - button "Статистики" [ref=e134]:
-                  - img [ref=e135]
+              - listitem [ref=e85]:
+                - link "Клинични случаи" [ref=e86] [cursor=pointer]:
+                  - /url: /cases
+                  - img [ref=e87]
+                  - text: Клинични случаи
+              - listitem [ref=e91]:
+                - link "Настройки" [ref=e92] [cursor=pointer]:
+                  - /url: /settings
+                  - img [ref=e93]
+                  - text: Настройки
+      - generic [ref=e96]:
+        - heading "Предмети (0)" [level=3] [ref=e97]
+        - paragraph [ref=e98]: Няма добавени
+    - generic [ref=e99]:
+      - banner [ref=e100]:
+        - generic [ref=e101]:
+          - generic [ref=e102]:
+            - generic [ref=e103]: 📚
+            - generic [ref=e105]:
+              - generic [ref=e106]: Студент
+              - generic [ref=e107]: Lv.1
+          - button "Нормален" [ref=e109]:
+            - img [ref=e110]
+            - generic [ref=e112]: Нормален
+          - button "0%" [ref=e113]:
+            - img [ref=e114]
+            - generic [ref=e116]: 0%
+          - generic [ref=e117]:
+            - img [ref=e118]
+            - generic [ref=e120]: $0.000 / $5$
+          - button "Offline" [ref=e121]:
+            - img [ref=e122]
+            - generic [ref=e126]: Offline
+          - generic [ref=e127]:
+            - generic [ref=e128]: "Статус:"
+            - generic [ref=e129]:
+              - generic [ref=e130]:
+                - generic [ref=e131]: 🟢
+                - generic [ref=e132]: "0"
+              - generic [ref=e133]:
+                - generic [ref=e134]: 🟡
+                - generic [ref=e135]: "0"
+              - generic [ref=e136]:
+                - generic [ref=e137]: 🟠
+                - generic [ref=e138]: "0"
+              - generic [ref=e139]:
+                - generic [ref=e140]: ⚪
+                - generic [ref=e141]: "0"
+      - main [ref=e142]:
+        - generic [ref=e143]:
+          - generic [ref=e144]:
+            - generic [ref=e145]:
+              - heading "Таймер" [level=1] [ref=e146]:
+                - img [ref=e147]
+                - text: Таймер
+              - generic [ref=e150]:
+                - button "Таймер" [ref=e151]:
+                  - img [ref=e152]
+                  - text: Таймер
+                - button "Статистики" [ref=e155]:
+                  - img [ref=e156]
                   - text: Статистики
-            - generic [ref=e137]:
-              - button "Ръчно" [ref=e138]:
-                - img [ref=e139]
+            - generic [ref=e158]:
+              - button "Ръчно" [ref=e159]:
+                - img [ref=e160]
                 - text: Ръчно
-              - button [ref=e140]:
-                - img [ref=e141]
-              - button [ref=e145]:
-                - img [ref=e146]
-          - generic [ref=e149]:
-            - button "Pomodoro" [ref=e150]:
-              - img [ref=e151]
+              - button [ref=e161]:
+                - img [ref=e162]
+              - button [ref=e166]:
+                - img [ref=e167]
+          - generic [ref=e170]:
+            - button "Pomodoro" [ref=e171]:
+              - img [ref=e172]
               - text: Pomodoro
-            - button "Свободен" [ref=e159]:
-              - img [ref=e160]
+            - button "Свободен" [ref=e180]:
+              - img [ref=e181]
               - text: Свободен
-          - generic [ref=e164]:
-            - generic [ref=e166]:
-              - img [ref=e167]
+          - generic [ref=e185]:
+            - generic [ref=e187]:
+              - img [ref=e188]
               - text: Работа
-              - generic [ref=e175]: "#1"
-            - generic [ref=e181]: 25:00
-            - generic [ref=e183]:
-              - generic [ref=e184]:
-                - img [ref=e185]
+              - generic [ref=e196]: "#1"
+            - generic [ref=e202]: 25:00
+            - generic [ref=e204]:
+              - generic [ref=e205]:
+                - img [ref=e206]
                 - text: Предмет
-              - combobox [ref=e187]:
+              - combobox [ref=e208]:
                 - option "Избери предмет (незадължително)" [selected]
                 - option "📚 Anki"
-            - button "Започни" [ref=e189]:
-              - img [ref=e190]
+            - button "Започни" [ref=e210]:
+              - img [ref=e211]
               - text: Започни
-            - paragraph [ref=e192]: "Space: старт/пауза • R: нулирай • Esc: затвори"
-          - generic [ref=e193]:
-            - generic [ref=e194]:
-              - generic [ref=e195]:
-                - img [ref=e196]
-                - generic [ref=e198]: Днес
-              - generic [ref=e199]: 0м
-              - generic [ref=e201]: 0%
-            - generic [ref=e202]:
-              - generic [ref=e203]:
-                - img [ref=e204]
-                - generic [ref=e207]: Седмица
-              - generic [ref=e208]: 0м
-              - generic [ref=e210]: 0%
-            - generic [ref=e211]:
-              - generic [ref=e212]:
-                - generic [ref=e213]: 🔥
-                - generic [ref=e214]: Streak
-              - generic [ref=e215]: 0 дни
-            - generic [ref=e216]:
-              - generic [ref=e217]:
-                - img [ref=e218]
-                - generic [ref=e226]: Pomodoros
-              - generic [ref=e227]: "0"
-  - button "Open Next.js Dev Tools" [ref=e233] [cursor=pointer]:
-    - img [ref=e234]
-  - alert [ref=e237]
+            - paragraph [ref=e213]: "Space: старт/пауза • R: нулирай • Esc: затвори"
+          - generic [ref=e214]:
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - img [ref=e217]
+                - generic [ref=e219]: Днес
+              - generic [ref=e220]: 0м
+              - generic [ref=e222]: 0%
+            - generic [ref=e223]:
+              - generic [ref=e224]:
+                - img [ref=e225]
+                - generic [ref=e228]: Седмица
+              - generic [ref=e229]: 0м
+              - generic [ref=e231]: 0%
+            - generic [ref=e232]:
+              - generic [ref=e233]:
+                - generic [ref=e234]: 🔥
+                - generic [ref=e235]: Streak
+              - generic [ref=e236]: 0 дни
+            - generic [ref=e237]:
+              - generic [ref=e238]:
+                - img [ref=e239]
+                - generic [ref=e247]: Pomodoros
+              - generic [ref=e248]: "0"
+  - button "Open Next.js Dev Tools" [ref=e254] [cursor=pointer]:
+    - img [ref=e255]
+  - alert [ref=e258]
 ```

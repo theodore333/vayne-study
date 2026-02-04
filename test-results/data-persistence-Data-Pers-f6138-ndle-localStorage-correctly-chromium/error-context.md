@@ -2,163 +2,31 @@
 
 ```yaml
 - generic [active] [ref=e1]:
-  - generic [ref=e2]:
-    - complementary [ref=e3]:
-      - generic [ref=e4]:
-        - generic [ref=e5]:
-          - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
-            - /url: /
-            - generic [ref=e7]: ⚡
-            - generic [ref=e8]: VAYNE
-          - button "Скрий меню" [ref=e9]:
-            - img [ref=e10]
-        - paragraph [ref=e13]: Study Command Center
-      - navigation [ref=e14]:
-        - list [ref=e15]:
-          - listitem [ref=e16]:
-            - link "Табло" [ref=e17] [cursor=pointer]:
-              - /url: /
-              - img [ref=e18]
-              - text: Табло
-          - listitem [ref=e23]:
-            - link "Днешен план" [ref=e24] [cursor=pointer]:
-              - /url: /today
-              - img [ref=e25]
-              - text: Днешен план
-          - listitem [ref=e29]:
-            - link "Седмичен график" [ref=e30] [cursor=pointer]:
-              - /url: /schedule
-              - img [ref=e31]
-              - text: Седмичен график
-          - listitem [ref=e33]:
-            - link "Предмети" [ref=e34] [cursor=pointer]:
-              - /url: /subjects
-              - img [ref=e35]
-              - text: Предмети
-          - listitem [ref=e37]:
-            - link "Проекти" [ref=e38] [cursor=pointer]:
-              - /url: /projects
-              - img [ref=e39]
-              - text: Проекти
-          - listitem [ref=e44]:
-            - link "Question Bank" [ref=e45] [cursor=pointer]:
-              - /url: /question-bank
-              - img [ref=e46]
-              - text: Question Bank
-          - listitem [ref=e49]:
-            - link "Клинични Случаи" [ref=e50] [cursor=pointer]:
-              - /url: /cases
-              - img [ref=e51]
-              - text: Клинични Случаи
-          - listitem [ref=e55]:
-            - link "Таймер" [ref=e56] [cursor=pointer]:
-              - /url: /timer
-              - img [ref=e57]
-              - text: Таймер
-          - listitem [ref=e60]:
-            - link "Прогноза" [ref=e61] [cursor=pointer]:
-              - /url: /prediction
-              - img [ref=e62]
-              - text: Прогноза
-          - listitem [ref=e65]:
-            - link "GPA Калкулатор" [ref=e66] [cursor=pointer]:
-              - /url: /gpa
-              - img [ref=e67]
-              - text: GPA Калкулатор
-          - listitem [ref=e70]:
-            - link "Настройки" [ref=e71] [cursor=pointer]:
-              - /url: /settings
-              - img [ref=e72]
-              - text: Настройки
-      - generic [ref=e75]:
-        - heading "Предмети" [level=3] [ref=e76]
-        - paragraph [ref=e77]: Няма добавени предмети
-    - generic [ref=e78]:
-      - banner [ref=e79]:
-        - generic [ref=e80]:
-          - generic [ref=e81]:
-            - generic [ref=e82]: 📚
-            - generic [ref=e84]:
-              - generic [ref=e85]: Студент
-              - generic [ref=e86]: Lv.1
-          - button "Нормален" [ref=e88]:
-            - img [ref=e89]
-            - generic [ref=e91]: Нормален
-          - button "0%" [ref=e92]:
-            - img [ref=e93]
-            - generic [ref=e95]: 0%
-          - generic [ref=e96]:
-            - img [ref=e97]
-            - generic [ref=e99]: $0.000 / $5$
-          - button "Offline" [ref=e100]:
-            - img [ref=e101]
-            - generic [ref=e105]: Offline
-          - generic [ref=e106]:
-            - generic [ref=e107]: "Статус:"
-            - generic [ref=e108]:
-              - generic [ref=e109]:
-                - generic [ref=e110]: 🟢
-                - generic [ref=e111]: "0"
-              - generic [ref=e112]:
-                - generic [ref=e113]: 🟡
-                - generic [ref=e114]: "0"
-              - generic [ref=e115]:
-                - generic [ref=e116]: 🟠
-                - generic [ref=e117]: "0"
-              - generic [ref=e118]:
-                - generic [ref=e119]: ⚪
-                - generic [ref=e120]: "0"
-      - main [ref=e121]:
-        - generic [ref=e122]:
-          - generic [ref=e123]:
-            - generic [ref=e124]:
-              - heading "Табло" [level=1] [ref=e125]
-              - paragraph [ref=e126]: Общ преглед на прогреса
-            - button "Нов предмет" [ref=e127]:
-              - img [ref=e128]
-              - text: Нов предмет
-          - generic [ref=e129]:
-            - generic [ref=e130]:
-              - generic [ref=e131]:
-                - img [ref=e133]
-                - generic [ref=e135]: Предмети
-              - generic [ref=e136]: "0"
-            - generic [ref=e137]:
-              - generic [ref=e138]:
-                - img [ref=e140]
-                - generic [ref=e144]: Теми
-              - generic [ref=e145]: "0"
-            - generic [ref=e146]:
-              - generic [ref=e147]:
-                - img [ref=e149]
-                - generic [ref=e151]: Известия
-              - generic [ref=e152]: "0"
-          - generic [ref=e153]:
-            - heading "Разпределение по статус" [level=2] [ref=e154]
-            - generic [ref=e155]:
-              - generic [ref=e156]:
-                - generic [ref=e157]: ⚪
-                - generic [ref=e158]: "0"
-                - generic [ref=e159]: Незапочната (0%)
-              - generic [ref=e160]:
-                - generic [ref=e161]: 🟠
-                - generic [ref=e162]: "0"
-                - generic [ref=e163]: В процес (0%)
-              - generic [ref=e164]:
-                - generic [ref=e165]: 🟡
-                - generic [ref=e166]: "0"
-                - generic [ref=e167]: Научена (0%)
-              - generic [ref=e168]:
-                - generic [ref=e169]: 🟢
-                - generic [ref=e170]: "0"
-                - generic [ref=e171]: Солидна (0%)
-          - generic [ref=e172]:
-            - img [ref=e173]
-            - paragraph [ref=e175]: Все още нямаш добавени предмети
-            - button "Добави първия си предмет" [ref=e176]:
-              - img [ref=e177]
-              - text: Добави първия си предмет
-  - button "Open Next.js Dev Tools" [ref=e183] [cursor=pointer]:
-    - img [ref=e184]
-  - alert [ref=e187]
+  - generic [ref=e6] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e7]:
+      - img [ref=e8]
+    - generic [ref=e11]:
+      - button "Open issues overlay" [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: "1"
+          - generic [ref=e15]: "2"
+        - generic [ref=e16]:
+          - text: Issue
+          - generic [ref=e17]: s
+      - button "Collapse issues badge" [ref=e18]:
+        - img [ref=e19]
+  - alert [ref=e21]
+  - generic [ref=e23]:
+    - img [ref=e25]
+    - heading "Нещо се обърка" [level=2] [ref=e27]
+    - paragraph [ref=e28]: Възникна неочаквана грешка. Опитай да презаредиш или се върни към началото.
+    - group [ref=e29]:
+      - generic "Технически детайли" [ref=e30] [cursor=pointer]
+    - generic [ref=e31]:
+      - button "Опитай отново" [ref=e32]:
+        - img [ref=e33]
+        - text: Опитай отново
+      - button "Начало" [ref=e38]:
+        - img [ref=e39]
+        - text: Начало
 ```

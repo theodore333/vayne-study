@@ -4,140 +4,118 @@
 - generic [ref=e1]:
   - generic [ref=e2]:
     - complementary [ref=e3]:
-      - generic [ref=e4]:
-        - generic [ref=e5]:
-          - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
-            - /url: /
-            - generic [ref=e7]: ⚡
-            - generic [ref=e8]: VAYNE
-          - button "Скрий меню" [ref=e9]:
-            - img [ref=e10]
-        - paragraph [ref=e13]: Study Command Center
-      - navigation [ref=e14]:
-        - list [ref=e15]:
-          - listitem [ref=e16]:
-            - link "Табло" [ref=e17] [cursor=pointer]:
+      - generic [ref=e5]:
+        - link "⚡ VAYNE" [ref=e6] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e7]: ⚡
+          - generic [ref=e8]: VAYNE
+        - button "Скрий меню" [ref=e9]:
+          - img [ref=e10]
+      - navigation [ref=e13]:
+        - list [ref=e14]:
+          - listitem [ref=e15]:
+            - link "Табло" [ref=e16] [cursor=pointer]:
               - /url: /
-              - img [ref=e18]
+              - img [ref=e17]
               - text: Табло
-          - listitem [ref=e23]:
-            - link "Днешен план" [ref=e24] [cursor=pointer]:
-              - /url: /today
-              - img [ref=e25]
-              - text: Днешен план
+          - listitem [ref=e22]:
+            - button "Учене" [active] [ref=e23]:
+              - img [ref=e24]
+              - generic [ref=e26]: Учене
+              - img [ref=e27]
           - listitem [ref=e29]:
-            - link "Седмичен график" [ref=e30] [cursor=pointer]:
-              - /url: /schedule
+            - button "Планиране" [ref=e30]:
               - img [ref=e31]
-              - text: Седмичен график
-          - listitem [ref=e33]:
-            - link "Предмети" [ref=e34] [cursor=pointer]:
-              - /url: /subjects
-              - img [ref=e35]
-              - text: Предмети
-          - listitem [ref=e37]:
-            - link "Проекти" [ref=e38] [cursor=pointer]:
-              - /url: /projects
-              - img [ref=e39]
-              - text: Проекти
-          - listitem [ref=e44]:
-            - link "Question Bank" [ref=e45] [cursor=pointer]:
-              - /url: /question-bank
-              - img [ref=e46]
-              - text: Question Bank
-          - listitem [ref=e49]:
-            - link "Клинични Случаи" [ref=e50] [cursor=pointer]:
-              - /url: /cases
-              - img [ref=e51]
-              - text: Клинични Случаи
-          - listitem [ref=e55]:
-            - link "Таймер" [ref=e56] [cursor=pointer]:
-              - /url: /timer
-              - img [ref=e57]
-              - text: Таймер
-          - listitem [ref=e60]:
-            - link "Прогноза" [ref=e61] [cursor=pointer]:
-              - /url: /prediction
-              - img [ref=e62]
-              - text: Прогноза
-          - listitem [ref=e65]:
-            - link "GPA Калкулатор" [ref=e66] [cursor=pointer]:
-              - /url: /gpa
-              - img [ref=e67]
-              - text: GPA Калкулатор
-          - listitem [ref=e70]:
-            - link "Настройки" [ref=e71] [cursor=pointer]:
-              - /url: /settings
-              - img [ref=e72]
-              - text: Настройки
-      - generic [ref=e75]:
-        - heading "Предмети" [level=3] [ref=e76]
-        - paragraph [ref=e77]: Няма добавени предмети
-    - generic [ref=e78]:
-      - banner [ref=e79]:
-        - generic [ref=e80]:
-          - generic [ref=e81]:
-            - generic [ref=e82]: 📚
-            - generic [ref=e84]:
-              - generic [ref=e85]: Студент
-              - generic [ref=e86]: Lv.1
-          - button "Нормален" [active] [ref=e88]:
-            - img [ref=e89]
-            - generic [ref=e91]: Нормален
-          - button "0%" [ref=e92]:
-            - img [ref=e93]
-            - generic [ref=e95]: 0%
-          - generic [ref=e96]:
-            - img [ref=e97]
-            - generic [ref=e99]: $0.000 / $5$
-          - button "Offline" [ref=e100]:
-            - img [ref=e101]
-            - generic [ref=e105]: Offline
-          - generic [ref=e106]:
-            - generic [ref=e107]: "Статус:"
-            - generic [ref=e108]:
-              - generic [ref=e109]:
-                - generic [ref=e110]: 🟢
-                - generic [ref=e111]: "0"
-              - generic [ref=e112]:
-                - generic [ref=e113]: 🟡
-                - generic [ref=e114]: "0"
-              - generic [ref=e115]:
-                - generic [ref=e116]: 🟠
-                - generic [ref=e117]: "0"
-              - generic [ref=e118]:
-                - generic [ref=e119]: ⚪
-                - generic [ref=e120]: "0"
-      - generic [ref=e123]:
+              - generic [ref=e33]: Планиране
+              - img [ref=e34]
+            - list [ref=e36]:
+              - listitem [ref=e37]:
+                - link "Днешен план" [ref=e38] [cursor=pointer]:
+                  - /url: /today
+                  - img [ref=e39]
+                  - text: Днешен план
+              - listitem [ref=e43]:
+                - link "График" [ref=e44] [cursor=pointer]:
+                  - /url: /schedule
+                  - img [ref=e45]
+                  - text: График
+          - listitem [ref=e47]:
+            - button "Анализи" [ref=e48]:
+              - img [ref=e49]
+              - generic [ref=e51]: Анализи
+              - img [ref=e52]
+            - list [ref=e54]:
+              - listitem [ref=e55]:
+                - link "Статистики" [ref=e56] [cursor=pointer]:
+                  - /url: /analytics
+                  - img [ref=e57]
+                  - text: Статистики
+              - listitem [ref=e59]:
+                - link "Прогноза" [ref=e60] [cursor=pointer]:
+                  - /url: /prediction
+                  - img [ref=e61]
+                  - text: Прогноза
+              - listitem [ref=e64]:
+                - link "GPA" [ref=e65] [cursor=pointer]:
+                  - /url: /gpa
+                  - img [ref=e66]
+                  - text: GPA
+          - listitem [ref=e69]:
+            - button "Инструменти" [ref=e70]:
+              - img [ref=e71]
+              - generic [ref=e74]: Инструменти
+              - img [ref=e75]
+      - generic [ref=e77]:
+        - heading "Предмети (0)" [level=3] [ref=e78]
+        - paragraph [ref=e79]: Няма добавени
+    - generic [ref=e80]:
+      - banner [ref=e81]:
+        - generic [ref=e82]:
+          - generic [ref=e83]:
+            - generic [ref=e84]: 📚
+            - generic [ref=e86]:
+              - generic [ref=e87]: Студент
+              - generic [ref=e88]: Lv.1
+          - button "Нормален" [ref=e90]:
+            - img [ref=e91]
+            - generic [ref=e93]: Нормален
+          - button "0%" [ref=e94]:
+            - img [ref=e95]
+            - generic [ref=e97]: 0%
+          - generic [ref=e98]:
+            - img [ref=e99]
+            - generic [ref=e101]: $0.000 / $5$
+          - button "Offline" [ref=e102]:
+            - img [ref=e103]
+            - generic [ref=e107]: Offline
+          - generic [ref=e108]:
+            - generic [ref=e109]: "Статус:"
+            - generic [ref=e110]:
+              - generic [ref=e111]:
+                - generic [ref=e112]: 🟢
+                - generic [ref=e113]: "0"
+              - generic [ref=e114]:
+                - generic [ref=e115]: 🟡
+                - generic [ref=e116]: "0"
+              - generic [ref=e117]:
+                - generic [ref=e118]: 🟠
+                - generic [ref=e119]: "0"
+              - generic [ref=e120]:
+                - generic [ref=e121]: ⚪
+                - generic [ref=e122]: "0"
+      - main [ref=e123]:
         - generic [ref=e124]:
-          - heading "Режим на деня" [level=2] [ref=e125]
-          - button [ref=e126]:
-            - img [ref=e127]
-        - generic [ref=e130]:
-          - 'button "Болен 🤒 Reduced workload: 2ч вместо 4ч" [ref=e131]':
-            - img [ref=e133]
-            - generic [ref=e135]:
-              - generic [ref=e136]: Болен 🤒
-              - generic [ref=e137]: "Reduced workload: 2ч вместо 4ч"
-          - 'button "Почивка 🏖️ Reduced workload: 2ч вместо 4ч" [ref=e139]':
-            - img [ref=e141]
-            - generic [ref=e146]:
-              - generic [ref=e147]: Почивка 🏖️
-              - generic [ref=e148]: "Reduced workload: 2ч вместо 4ч"
-        - button "Запази" [ref=e151]
-      - main [ref=e152]:
-        - generic [ref=e153]:
-          - generic [ref=e154]:
-            - generic [ref=e155]:
-              - heading "Прогноза за оценки" [level=1] [ref=e156]
-              - paragraph [ref=e157]: Предвиждане базирано на твоя прогрес
-            - button "Vayne Mode" [ref=e158]:
-              - img [ref=e159]
+          - generic [ref=e125]:
+            - generic [ref=e126]:
+              - heading "Прогноза за оценки" [level=1] [ref=e127]
+              - paragraph [ref=e128]: Предвиждане базирано на твоя прогрес
+            - button "Vayne Mode" [ref=e129]:
+              - img [ref=e130]
               - text: Vayne Mode
-          - generic [ref=e161]:
-            - img [ref=e162]
-            - paragraph [ref=e165]: Добави предмети за да видиш прогнози
-  - button "Open Next.js Dev Tools" [ref=e171] [cursor=pointer]:
-    - img [ref=e172]
-  - alert [ref=e175]
+          - generic [ref=e132]:
+            - img [ref=e133]
+            - paragraph [ref=e136]: Добави предмети за да видиш прогнози
+  - button "Open Next.js Dev Tools" [ref=e142] [cursor=pointer]:
+    - img [ref=e143]
+  - alert [ref=e146]
 ```

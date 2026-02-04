@@ -1474,6 +1474,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showMermaidModal, setShowMermaidModal] = useState(false);
   const [showDrawingModal, setShowDrawingModal] = useState(false);
   const [showImageLibrary, setShowImageLibrary] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -1689,6 +1690,9 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       },
     },
     onUpdate: ({ editor }) => {
+      // Don't trigger save if we're already saving
+      if (isSaving) return;
+
       setHasUnsavedChanges(true);
 
       if (saveTimeoutRef.current) {
@@ -1696,14 +1700,18 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       }
 
       saveTimeoutRef.current = setTimeout(() => {
+        setIsSaving(true);
         try {
           const markdown = htmlToMarkdown(editor.getHTML());
           onSaveMaterial(markdown);
           setLastSaved(new Date());
+          setHasUnsavedChanges(false);
         } catch (error) {
           console.error('Save error:', error);
-        } finally {
           setHasUnsavedChanges(false);
+        } finally {
+          // Small delay before allowing new saves
+          setTimeout(() => setIsSaving(false), 100);
         }
       }, 1000);
     },
@@ -1765,21 +1773,24 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
   // Force save
   const forceSave = useCallback(() => {
-    if (editor) {
+    if (editor && !isSaving) {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+      setIsSaving(true);
       try {
         const markdown = htmlToMarkdown(editor.getHTML());
         onSaveMaterial(markdown);
         setLastSaved(new Date());
+        setHasUnsavedChanges(false);
       } catch (error) {
         console.error('Force save error:', error);
-      } finally {
         setHasUnsavedChanges(false);
+      } finally {
+        setTimeout(() => setIsSaving(false), 100);
       }
     }
-  }, [editor, onSaveMaterial]);
+  }, [editor, onSaveMaterial, isSaving]);
 
   // Insert formula into editor
   const handleInsertFormula = (formula: string) => {
@@ -1944,8 +1955,10 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           <div className="flex items-center gap-2">
             {/* Save status */}
             <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400 mr-2">
-              {hasUnsavedChanges ? (
+              {isSaving ? (
                 <span className="text-amber-600">Записване...</span>
+              ) : hasUnsavedChanges ? (
+                <span className="text-amber-500">Несъхранено</span>
               ) : lastSaved ? (
                 <span className="text-green-600">Запазено</span>
               ) : null}

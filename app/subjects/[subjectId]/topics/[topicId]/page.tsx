@@ -12,6 +12,7 @@ import { getDaysSince, calculateRetrievability, getDaysUntilReview } from '@/lib
 import { useApp } from '@/lib/context';
 import Link from 'next/link';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import { setMaterial as saveMaterialToStorage } from '@/lib/storage';
 
 export default function TopicDetailPage() {
   const params = useParams();
@@ -329,20 +330,16 @@ export default function TopicDetailPage() {
 
   // Handle saving material from ReaderMode
   const handleSaveMaterialFromReader = (newMaterial: string) => {
-    setMaterial(newMaterial);
-    updateTopicMaterial(subjectId, topicId, newMaterial);
+    console.log('[TOPIC PAGE] handleSaveMaterialFromReader called, length:', newMaterial?.length);
 
-    // DIRECT localStorage backup - simple and reliable
-    try {
-      const key = `material-${topicId}`;
-      localStorage.setItem(key, newMaterial);
-    } catch (e) {
-      // Handle QuotaExceededError
-      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-        console.error('localStorage quota exceeded');
-        alert('Внимание: Браузърното хранилище е пълно. Някои данни може да не се запазят локално. Моля, освободете място или разчитайте на cloud синхронизация.');
-      }
-    }
+    // Update local React state
+    setMaterial(newMaterial);
+
+    // DIRECT save to IndexedDB + localStorage via storage.ts - THIS IS THE REAL SAVE
+    saveMaterialToStorage(topicId, newMaterial);
+
+    // Also update context (for UI consistency)
+    updateTopicMaterial(subjectId, topicId, newMaterial);
   };
 
   // ReaderMode needs the full topic with current material

@@ -1574,14 +1574,14 @@ function QuizContent() {
             }).filter(Boolean) as Array<{ question: string; answer: string; explanation: string; concept: string }>;
 
             const copyCard = (card: typeof wrongCards[0]) => {
-              const text = `${card.question}\t${card.answer}${card.explanation ? ' | ' + card.explanation : ''}\t${card.concept.replace(/\s+/g, '_')}`;
+              const text = `${card.question}\t${card.answer}${card.explanation ? ' | ' + card.explanation : ''}`;
               navigator.clipboard.writeText(text);
               showToast('Картата е копирана!', 'success');
             };
 
             const copyAll = () => {
               const text = wrongCards.map(c =>
-                `${c.question}\t${c.answer}${c.explanation ? ' | ' + c.explanation : ''}\t${c.concept.replace(/\s+/g, '_')}`
+                `${c.question}\t${c.answer}${c.explanation ? ' | ' + c.explanation : ''}`
               ).join('\n');
               navigator.clipboard.writeText(text);
               showToast(`${wrongCards.length} карти копирани!`, 'success');
@@ -1610,9 +1610,6 @@ function QuizContent() {
                           {card.explanation && (
                             <p className="text-slate-500 font-mono text-xs">{card.explanation}</p>
                           )}
-                          <span className="inline-block px-1.5 py-0.5 bg-slate-700/80 text-cyan-400/70 text-[10px] rounded font-mono">
-                            {card.concept}
-                          </span>
                         </div>
                         <button
                           onClick={() => copyCard(card)}

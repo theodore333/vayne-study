@@ -63,23 +63,23 @@ export function parseExamFormat(format: string | null): ParsedExamFormat | null 
 
   // Parse MCQ/тестове
   const mcqMatch = lower.match(/(\d+)\s*(mcq|тест|теста|тестове|въпрос|въпроса)/);
-  if (mcqMatch) result.mcq = parseInt(mcqMatch[1]);
+  if (mcqMatch) result.mcq = parseInt(mcqMatch[1], 10);
 
   // Parse open questions
   const openMatch = lower.match(/(\d+)\s*(отворен|отворени|open)/);
-  if (openMatch) result.openQuestions = parseInt(openMatch[1]);
+  if (openMatch) result.openQuestions = parseInt(openMatch[1], 10);
 
   // Parse cases/казуси
   const caseMatch = lower.match(/(\d+)\s*(казус|казуса|казуси|case|cases)/);
-  if (caseMatch) result.cases = parseInt(caseMatch[1]);
+  if (caseMatch) result.cases = parseInt(caseMatch[1], 10);
 
   // Parse essays/есета
   const essayMatch = lower.match(/(\d+)\s*(есе|есета|essay|essays)/);
-  if (essayMatch) result.essays = parseInt(essayMatch[1]);
+  if (essayMatch) result.essays = parseInt(essayMatch[1], 10);
 
   // Parse total topics (e.g., "5 теми от 65")
   const topicsMatch = lower.match(/(\d+)\s*(теми|тема|topics?)\s*(от|from)/);
-  if (topicsMatch) result.totalTopics = parseInt(topicsMatch[1]);
+  if (topicsMatch) result.totalTopics = parseInt(topicsMatch[1], 10);
 
   return result;
 }

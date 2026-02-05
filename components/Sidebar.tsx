@@ -84,9 +84,13 @@ export default function Sidebar() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     // Initialize from localStorage or default to all expanded
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('vayne-sidebar-expanded');
-      if (saved) {
-        return new Set(JSON.parse(saved));
+      try {
+        const saved = localStorage.getItem('vayne-sidebar-expanded');
+        if (saved) {
+          return new Set(JSON.parse(saved));
+        }
+      } catch {
+        // localStorage unavailable (private browsing, full storage)
       }
     }
     return new Set(['learning', 'planning']); // Default expanded
@@ -107,7 +111,11 @@ export default function Sidebar() {
   // Save expanded state to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('vayne-sidebar-expanded', JSON.stringify([...expandedGroups]));
+      try {
+        localStorage.setItem('vayne-sidebar-expanded', JSON.stringify([...expandedGroups]));
+      } catch {
+        // Storage full or unavailable
+      }
     }
   }, [expandedGroups]);
 
@@ -227,6 +235,11 @@ export default function Sidebar() {
               />
             </Link>
           ))}
+          {sortedSubjects.length > 6 && (
+            <div className="text-center text-[10px] text-slate-600 font-mono mt-1">
+              +{sortedSubjects.length - 6}
+            </div>
+          )}
         </div>
 
         {/* Alert indicator */}

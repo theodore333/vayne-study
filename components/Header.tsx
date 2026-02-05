@@ -78,13 +78,14 @@ export default function Header() {
             >
               Изчисти
             </button>
-            {!isStorageCritical && !storageError && (
+            {!isStorageCritical && (
               <button
                 onClick={() => {
                   setStorageWarningDismissed(true);
                   if (storageError) clearStorageError();
                 }}
                 className="p-1 hover:bg-slate-800 rounded"
+                aria-label="Затвори предупреждението"
               >
                 <X size={14} className="text-slate-400" />
               </button>
@@ -176,7 +177,8 @@ export default function Header() {
             onClick={syncNow}
             disabled={isSyncing}
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/30 border border-slate-800 hover:border-slate-600 transition-all disabled:opacity-50"
-            title={lastSynced ? `Последна синхронизация: ${lastSynced.toLocaleTimeString('bg-BG')}` : 'Не е синхронизирано'}
+            title={isSyncing ? 'Синхронизиране...' : lastSynced ? `Последна синхронизация: ${lastSynced.toLocaleTimeString('bg-BG')}` : 'Не е синхронизирано'}
+            aria-label="Синхронизирай с облака"
           >
             {isSyncing ? (
               <RefreshCw size={14} className="text-blue-400 animate-spin" />

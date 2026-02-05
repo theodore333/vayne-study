@@ -103,7 +103,7 @@ export function getStudyHeatmap(sessions: TimerSession[]): HourlyData[] {
 
     const date = new Date(session.startTime);
     const hour = date.getHours();
-    const dayOfWeek = date.getDay(); // 0 = Sunday
+    const dayOfWeek = (date.getDay() + 6) % 7; // Convert to Monday=0
 
     if (hour >= 6 && hour < 24) {
       const slot = data.find(d => d.hour === hour && d.dayOfWeek === dayOfWeek);
@@ -122,6 +122,7 @@ export function getStudyHeatmap(sessions: TimerSession[]): HourlyData[] {
 interface TopicStatusCount {
   date: string;
   gray: number;
+  orange: number;
   yellow: number;
   green: number;
   total: number;
@@ -136,6 +137,7 @@ export function getTopicStatusTimeline(
   const allTopics = subjects.flatMap(s => s.topics);
 
   const gray = allTopics.filter(t => t.status === 'gray').length;
+  const orange = allTopics.filter(t => t.status === 'orange').length;
   const yellow = allTopics.filter(t => t.status === 'yellow').length;
   const green = allTopics.filter(t => t.status === 'green').length;
 
@@ -148,9 +150,10 @@ export function getTopicStatusTimeline(
     result.push({
       date: date.toISOString().split('T')[0],
       gray,
+      orange,
       yellow,
       green,
-      total: gray + yellow + green
+      total: gray + orange + yellow + green
     });
   }
 
@@ -208,10 +211,16 @@ export function getBloomDistribution(subjects: Subject[]): BloomData[] {
     'create': 'Създаване',
   };
 
+  // Map numeric BloomLevel (1-6) to string keys
+  const bloomLevelToKey: Record<number, string> = {
+    1: 'remember', 2: 'understand', 3: 'apply',
+    4: 'analyze', 5: 'evaluate', 6: 'create'
+  };
+
   subjects.forEach(subject => {
     subject.topics.forEach(topic => {
-      const level = topic.currentBloomLevel || 'remember';
-      if (levels[level]) levels[level].count++;
+      const key = bloomLevelToKey[topic.currentBloomLevel] || 'remember';
+      if (levels[key]) levels[key].count++;
     });
   });
 
@@ -339,7 +348,7 @@ export function getLongestStreak(sessions: TimerSession[]): number {
   for (let i = 1; i < sortedDays.length; i++) {
     const prev = new Date(sortedDays[i - 1]);
     const curr = new Date(sortedDays[i]);
-    const diffDays = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+    const diffDays = Math.round((curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24));
 
     if (diffDays === 1) {
       currentStreak++;

@@ -76,15 +76,15 @@ export async function POST(request: Request) {
 
     // Handle different modes
     if (mode === 'free_recall' && requestHint) {
-      // Free Recall Hint Request
+      if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
       return handleFreeRecallHint(anthropic, material, topicName, userRecall, hintContext);
     }
 
     if (mode === 'free_recall' && userRecall !== undefined && !requestHint) {
-      // Free Recall Evaluation - check for userRecall being defined (can be empty string for empty submission)
       if (!userRecall.trim()) {
         return NextResponse.json({ error: 'Напиши нещо преди да оцениш' }, { status: 400 });
       }
+      if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
       return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall);
     }
 
@@ -191,7 +191,7 @@ Respond ONLY with the hint in Bulgarian, no other text.`
   const textContent = response.content.find(c => c.type === 'text');
   const hint = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * 0.00025 + response.usage.output_tokens * 0.00125) / 1000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     hint,
@@ -503,7 +503,7 @@ Questions must be in Bulgarian.`
     return NextResponse.json({ error: 'Failed to generate drill questions', raw: responseText.substring(0, 500) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * 0.003 + response.usage.output_tokens * 0.015) / 1000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     questions,
@@ -535,9 +535,8 @@ async function handleEvaluateOpen(
     });
   }
 
-  // Select model based on Bloom level - higher levels need smarter evaluation
-  const useOpus = bloomLevel >= 4;
-  const modelId = useOpus ? 'claude-opus-4-5-20251101' : 'claude-opus-4-5-20251101';
+  // All evaluations use Opus for quality
+  const modelId = 'claude-opus-4-5-20251101';
 
   // Determine strictness based on Bloom level
   const strictnessGuide = bloomLevel >= 5
@@ -623,16 +622,12 @@ ${strictnessGuide}
     };
   }
 
-  // Cost calculation based on model used
-  // Opus: $15/MTok input, $75/MTok output
-  // Sonnet: $3/MTok input, $15/MTok output
-  const inputCost = useOpus ? 15 : 3;
-  const outputCost = useOpus ? 75 : 15;
-  const cost = (response.usage.input_tokens * inputCost + response.usage.output_tokens * outputCost) / 1000000;
+  // Cost calculation - all evaluations use Opus ($15/$75 per MTok)
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     evaluation,
-    model: useOpus ? 'opus' : 'sonnet', // Return which model was used
+    model: 'opus',
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
@@ -641,11 +636,11 @@ ${strictnessGuide}
   });
 }
 
-// Model mapping for user selection
+// Model mapping - Opus for all quiz modes (quality is priority)
 const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
   opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
-  sonnet: { id: 'claude-opus-4-5-20251101', inputCost: 3, outputCost: 15 },
-  haiku: { id: 'claude-opus-4-5-20251101', inputCost: 0.8, outputCost: 4 }
+  sonnet: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
+  haiku: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 }
 };
 
 async function handleStandardQuiz(
@@ -970,7 +965,7 @@ Pattern types: "conceptual_gap" (не разбира концепция), "detai
   }
 
 
-  const cost = (response.usage.input_tokens * 0.8 + response.usage.output_tokens * 4) / 1000000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     analysis,
@@ -1031,7 +1026,7 @@ BLOOM НИВО: ${bloomLevel} - ${bloomGuidance[bloomLevel] || bloomGuidance[3]}
   const textContent = response.content.find(c => c.type === 'text');
   const hint = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * 0.8 + response.usage.output_tokens * 4) / 1000000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     hint,

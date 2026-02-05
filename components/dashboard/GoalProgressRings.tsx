@@ -129,7 +129,7 @@ export default function GoalProgressRings({ timerSessions, studyGoals }: GoalPro
         percentage: Math.min(100, (monthlyMinutes / monthlyGoal) * 100) || 0
       }
     };
-  }, [safeSessions, safeGoals]);
+  }, [safeSessions, safeGoals.dailyMinutes, safeGoals.weeklyMinutes, safeGoals.monthlyMinutes]);
 
   return (
     <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">

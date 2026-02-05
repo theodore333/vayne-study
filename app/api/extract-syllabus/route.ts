@@ -69,7 +69,7 @@ ${subjectName ? `Предметът е: ${subjectName}` : ''}
     });
 
     const message = await client.messages.create({
-      model: 'claude-opus-4-5-20251101',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 8000,
       messages: [{ role: 'user', content }]
     });
@@ -78,10 +78,14 @@ ${subjectName ? `Предметът е: ${subjectName}` : ''}
       ? message.content[0].text
       : '';
 
+    // Haiku pricing: $0.80/1M input, $4/1M output
+    const cost = (message.usage.input_tokens * 0.8 + message.usage.output_tokens * 4) / 1000000;
+
     return NextResponse.json({
       text: extractedText,
       inputTokens: message.usage.input_tokens,
-      outputTokens: message.usage.output_tokens
+      outputTokens: message.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
     });
 
   } catch (error) {

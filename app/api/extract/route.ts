@@ -1,6 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { PDFParse } from 'pdf-parse';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 // Railway: No edge runtime needed, Node.js supports longer timeouts
 
 interface PDFAnalysis {
@@ -52,7 +54,7 @@ export async function POST(request: Request) {
     let pdfAnalysis: PDFAnalysis | null = null;
     if (isPDF) {
       pdfAnalysis = await analyzePDF(buffer);
-      console.log('[EXTRACT] PDF Analysis:', pdfAnalysis);
+      if (isDev) console.log('[EXTRACT] PDF Analysis:', pdfAnalysis);
     }
 
     // Build the message content
@@ -112,9 +114,11 @@ RULES:
     });
 
     // Streaming with full logging
-    console.log('[EXTRACT] Starting Claude API call...');
-    console.log('[EXTRACT] File type:', file.type);
-    console.log('[EXTRACT] File size:', Math.round(base64.length / 1024), 'KB (base64)');
+    if (isDev) {
+      console.log('[EXTRACT] Starting Claude API call...');
+      console.log('[EXTRACT] File type:', file.type);
+      console.log('[EXTRACT] File size:', Math.round(base64.length / 1024), 'KB (base64)');
+    }
 
     let fullText = '';
     let inputTokens = 0;
@@ -139,11 +143,9 @@ RULES:
       }
     }
 
-    // === FULL RAW RESPONSE LOG ===
-    console.log('[EXTRACT] ========== FULL RAW RESPONSE ==========');
-    console.log(fullText);
-    console.log('[EXTRACT] ========== END RAW RESPONSE ==========');
-    console.log('[EXTRACT] Tokens - Input:', inputTokens, 'Output:', outputTokens);
+    if (isDev) {
+      console.log('[EXTRACT] Response length:', fullText.length, 'Tokens:', inputTokens, '+', outputTokens);
+    }
 
     if (!fullText) {
       console.error('[EXTRACT] ERROR: Empty response from Claude');
@@ -208,7 +210,7 @@ RULES:
       }
 
       // Try to salvage partial JSON - find all complete objects
-      console.log('[EXTRACT] Attempting to salvage partial JSON...');
+      if (isDev) console.log('[EXTRACT] Attempting to salvage partial JSON...');
 
       // Find the opening bracket
       const startIdx = responseText.indexOf('[');
@@ -230,7 +232,7 @@ RULES:
         try {
           const fixedJson = '[' + matches.join(',') + ']';
           topics = JSON.parse(fixedJson);
-          console.log('[EXTRACT] Salvaged', topics.length, 'complete topics from partial response');
+          if (isDev) console.log('[EXTRACT] Salvaged', topics.length, 'topics from partial response');
         } catch {
           return new Response(JSON.stringify({
             error: 'JSON parsing failed after salvage attempt',
@@ -282,7 +284,7 @@ RULES:
       });
     }
 
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: 'Грешка при извличане на теми. Опитай отново.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });

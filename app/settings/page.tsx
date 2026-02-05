@@ -445,7 +445,7 @@ export default function SettingsPage() {
                 max={80}
                 step={10}
                 value={studyGoals.vacationMultiplier * 100}
-                onChange={(e) => updateStudyGoals({ vacationMultiplier: (parseInt(e.target.value) || 50) / 100 })}
+                onChange={(e) => updateStudyGoals({ vacationMultiplier: (parseInt(e.target.value, 10) || 50) / 100 })}
                 className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-cyan-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
@@ -512,7 +512,7 @@ export default function SettingsPage() {
                 max={95}
                 step={5}
                 value={(studyGoals.fsrsTargetRetention ?? 0.85) * 100}
-                onChange={(e) => updateStudyGoals({ fsrsTargetRetention: parseInt(e.target.value) / 100 })}
+                onChange={(e) => updateStudyGoals({ fsrsTargetRetention: parseInt(e.target.value, 10) / 100 })}
                 className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
@@ -533,7 +533,7 @@ export default function SettingsPage() {
                 max={20}
                 step={1}
                 value={studyGoals.fsrsMaxReviewsPerDay ?? 8}
-                onChange={(e) => updateStudyGoals({ fsrsMaxReviewsPerDay: parseInt(e.target.value) })}
+                onChange={(e) => updateStudyGoals({ fsrsMaxReviewsPerDay: parseInt(e.target.value, 10) })}
                 className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
@@ -554,7 +554,7 @@ export default function SettingsPage() {
                 max={365}
                 step={30}
                 value={studyGoals.fsrsMaxInterval ?? 180}
-                onChange={(e) => updateStudyGoals({ fsrsMaxInterval: parseInt(e.target.value) })}
+                onChange={(e) => updateStudyGoals({ fsrsMaxInterval: parseInt(e.target.value, 10) })}
                 className="w-full h-2 bg-slate-700 rounded-lg cursor-pointer accent-purple-500"
               />
               <div className="flex justify-between text-xs text-slate-500 font-mono mt-1">
@@ -593,7 +593,7 @@ export default function SettingsPage() {
               <label className="block text-sm text-slate-400 mb-2 font-mono">Курс</label>
               <select
                 value={data.careerProfile?.currentYear || 1}
-                onChange={(e) => updateCareerProfile({ currentYear: parseInt(e.target.value) })}
+                onChange={(e) => updateCareerProfile({ currentYear: parseInt(e.target.value, 10) })}
                 className="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-sm appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-emerald-500"
               >
                 {[1, 2, 3, 4, 5, 6].map(year => (

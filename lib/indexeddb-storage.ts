@@ -27,6 +27,7 @@ function initDB(): Promise<IDBDatabase> {
 
     request.onerror = () => {
       console.error('Failed to open IndexedDB:', request.error);
+      dbInitPromise = null; // Reset so next call can retry
       reject(request.error);
     };
 
@@ -77,7 +78,6 @@ export async function getMaterialFromIDB(topicId: string): Promise<string> {
  * Set material in IndexedDB
  */
 export async function setMaterialInIDB(topicId: string, content: string): Promise<boolean> {
-  console.log('[IDB] setMaterialInIDB called for:', topicId, 'content length:', content?.length || 0);
   try {
     const db = await initDB();
     return new Promise((resolve) => {
@@ -86,7 +86,6 @@ export async function setMaterialInIDB(topicId: string, content: string): Promis
 
       // Add transaction complete handler
       transaction.oncomplete = () => {
-        console.log('[IDB] Transaction completed successfully for:', topicId);
       };
       transaction.onerror = () => {
         console.error('[IDB] Transaction error for:', topicId, transaction.error);
@@ -95,7 +94,6 @@ export async function setMaterialInIDB(topicId: string, content: string): Promis
       if (content) {
         const request = store.put({ topicId, content, updatedAt: new Date().toISOString() });
         request.onsuccess = () => {
-          console.log('[IDB] Put request succeeded for:', topicId);
           resolve(true);
         };
         request.onerror = () => {
@@ -119,7 +117,6 @@ export async function setMaterialInIDB(topicId: string, content: string): Promis
  * Get all materials from IndexedDB
  */
 export async function getAllMaterialsFromIDB(): Promise<Record<string, string>> {
-  console.log('[IDB] getAllMaterialsFromIDB called');
   try {
     const db = await initDB();
     return new Promise((resolve) => {
@@ -132,8 +129,6 @@ export async function getAllMaterialsFromIDB(): Promise<Record<string, string>> 
         for (const item of request.result) {
           materials[item.topicId] = item.content;
         }
-        console.log('[IDB] getAllMaterialsFromIDB loaded', Object.keys(materials).length, 'materials');
-        console.log('[IDB] Topic IDs in DB:', Object.keys(materials));
         resolve(materials);
       };
 

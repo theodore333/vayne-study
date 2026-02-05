@@ -2,8 +2,9 @@ import Anthropic from '@anthropic-ai/sdk';
 
 // See CLAUDE_MODELS.md for correct model IDs
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export async function POST(request: Request) {
-  console.log('[EXTRACT-MATERIAL] === REQUEST STARTED ===');
 
   try {
     const contentType = request.headers.get('content-type') || '';
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
       existingMaterial = body.existingMaterial || '';
       const images: string[] = body.images || [];
 
-      console.log('[EXTRACT-MATERIAL] Pasted images count:', images.length);
+      if (isDev) console.log('[EXTRACT-MATERIAL] Pasted images count:', images.length);
 
       if (!images.length || !apiKey) {
         return new Response(JSON.stringify({ error: 'Missing images or API key' }), {
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       subjectName = formData.get('subjectName') as string;
       existingMaterial = formData.get('existingMaterial') as string || '';
 
-      console.log('[EXTRACT-MATERIAL] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+      if (isDev) console.log('[EXTRACT-MATERIAL] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
 
       if (!file || !apiKey) {
         return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
       const buffer = Buffer.from(fileBuffer);
       const base64 = buffer.toString('base64');
 
-      console.log('[EXTRACT-MATERIAL] Base64 size:', Math.round(base64.length / 1024), 'KB');
+      if (isDev) console.log('[EXTRACT-MATERIAL] Base64 size:', Math.round(base64.length / 1024), 'KB');
 
       const isPDF = file.type === 'application/pdf';
 
@@ -152,14 +153,14 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
 </material>`
     });
 
-    console.log('[EXTRACT-MATERIAL] Starting Claude API call...');
+    if (isDev) console.log('[EXTRACT-MATERIAL] Starting Claude API call...');
 
     let fullText = '';
     let inputTokens = 0;
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-opus-4-5-20251101',
+      model: 'claude-sonnet-4-5-20250929',
       max_tokens: 16000,
       messages: [{ role: 'user', content }],
       stream: true
@@ -177,8 +178,10 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
       }
     }
 
-    console.log('[EXTRACT-MATERIAL] Tokens - Input:', inputTokens, 'Output:', outputTokens);
-    console.log('[EXTRACT-MATERIAL] Extracted text length:', fullText.length);
+    if (isDev) {
+      console.log('[EXTRACT-MATERIAL] Tokens - Input:', inputTokens, 'Output:', outputTokens);
+      console.log('[EXTRACT-MATERIAL] Extracted text length:', fullText.length);
+    }
 
     if (!fullText.trim()) {
       return new Response(JSON.stringify({
@@ -218,7 +221,7 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
       extractedText = extractedText.replace(prefix, '');
     }
 
-    console.log('[EXTRACT-MATERIAL] Detected size:', detectedSize);
+    if (isDev) console.log('[EXTRACT-MATERIAL] Detected size:', detectedSize);
 
     // Sonnet pricing: $3/1M input, $15/1M output
     const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
@@ -253,7 +256,7 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
       });
     }
 
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: 'Грешка при обработка на документа. Опитай отново.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });

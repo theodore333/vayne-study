@@ -187,33 +187,19 @@ const defaultData: AppData = {
  * Call this once at app startup
  */
 export async function initMaterialsCache(): Promise<void> {
-  if (materialsCacheLoaded) {
-    console.log('[LOAD] Materials cache already loaded, skipping');
-    return;
-  }
-  if (materialsCachePromise) {
-    console.log('[LOAD] Materials cache loading in progress, waiting');
-    return materialsCachePromise;
-  }
-
-  console.log('[LOAD] Starting materials cache initialization...');
+  if (materialsCacheLoaded) return;
+  if (materialsCachePromise) return materialsCachePromise;
 
   materialsCachePromise = (async () => {
     if (typeof window === 'undefined') return;
 
     try {
-      // Load from localStorage first (always available, synchronous)
-      console.log('[LOAD] Loading materials from localStorage...');
       const lsMaterials = loadMaterialsFromLocalStorage();
-      console.log('[LOAD] Loaded', Object.keys(lsMaterials).length, 'materials from localStorage');
 
-      // Also try IndexedDB
       let idbMaterials: Record<string, string> = {};
       if (isIndexedDBAvailable()) {
-        console.log('[LOAD] Loading materials from IndexedDB...');
         try {
           idbMaterials = await getAllMaterialsFromIDB();
-          console.log('[LOAD] Loaded', Object.keys(idbMaterials).length, 'materials from IndexedDB');
         } catch (error) {
           console.error('[LOAD] IndexedDB load failed:', error);
         }
@@ -222,26 +208,19 @@ export async function initMaterialsCache(): Promise<void> {
       // Merge: prefer IndexedDB (newer), fallback to localStorage
       materialsCache = { ...lsMaterials };
       for (const [topicId, content] of Object.entries(idbMaterials)) {
-        // Use IndexedDB version if it exists and is not empty
         if (content && content.length > 0) {
           materialsCache[topicId] = content;
         }
       }
-      // Also add any localStorage-only materials
       for (const [topicId, content] of Object.entries(lsMaterials)) {
         if (!materialsCache[topicId] && content && content.length > 0) {
           materialsCache[topicId] = content;
         }
       }
 
-      console.log('[LOAD] Final merged cache has', Object.keys(materialsCache).length, 'materials');
-      console.log('[LOAD] Topic IDs:', Object.keys(materialsCache));
-
       materialsCacheLoaded = true;
-      console.log('[LOAD] Materials cache initialization complete');
     } catch (error) {
       console.error('[LOAD] Error initializing materials cache:', error);
-      // Fallback to localStorage only
       materialsCache = loadMaterialsFromLocalStorage();
       materialsCacheLoaded = true;
     }
@@ -255,13 +234,9 @@ function loadMaterialsFromLocalStorage(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
     const stored = localStorage.getItem(MATERIALS_KEY);
-    console.log('[LS] loadMaterialsFromLocalStorage - stored exists:', !!stored, 'length:', stored?.length || 0);
     if (!stored) return {};
     const decompressed = LZString.decompress(stored);
-    console.log('[LS] Decompressed length:', decompressed?.length || 0);
-    const parsed = decompressed ? JSON.parse(decompressed) : {};
-    console.log('[LS] Parsed materials count:', Object.keys(parsed).length);
-    return parsed;
+    return decompressed ? JSON.parse(decompressed) : {};
   } catch (error) {
     console.error('[LS] Error loading materials from localStorage:', error);
     return {};
@@ -297,8 +272,6 @@ export function getMaterial(topicId: string): string {
  * Set material - updates cache and persists to BOTH IndexedDB AND localStorage
  */
 export function setMaterial(topicId: string, material: string): void {
-  console.log('[SAVE] setMaterial called for topic:', topicId, 'length:', material?.length || 0);
-
   // Update cache immediately
   if (material) {
     materialsCache[topicId] = material;
@@ -306,22 +279,13 @@ export function setMaterial(topicId: string, material: string): void {
     delete materialsCache[topicId];
   }
 
-  // ALWAYS save to localStorage as backup (synchronous, reliable)
-  console.log('[SAVE] Saving to localStorage backup...');
-  const lsError = saveMaterialsToLocalStorage(materialsCache);
-  if (lsError) {
-    console.error('[SAVE] localStorage save failed:', lsError);
-  } else {
-    console.log('[SAVE] localStorage backup saved successfully');
-  }
+  // Save to localStorage as backup (synchronous, reliable)
+  saveMaterialsToLocalStorage(materialsCache);
 
   // Also save to IndexedDB (async, larger capacity)
   if (isIndexedDBAvailable()) {
-    console.log('[SAVE] Also saving to IndexedDB...');
-    setMaterialInIDB(topicId, material).then(success => {
-      console.log('[SAVE] IndexedDB save result:', success ? 'SUCCESS' : 'FAILED');
-    }).catch(error => {
-      console.error('[SAVE] Error saving material to IndexedDB:', error);
+    setMaterialInIDB(topicId, material).catch(error => {
+      console.error('[SAVE] IndexedDB error:', error);
     });
   }
 }
@@ -345,7 +309,12 @@ export function loadData(): AppData {
           // If we get here, stored is valid JSON - compression flag was incorrect
           localStorage.setItem(COMPRESSED_FLAG, 'false');
         } catch {
-          console.error('Data recovery failed - returning default data');
+          console.error('Data recovery failed - backing up corrupted data');
+          // Save corrupted data as backup before returning defaults
+          try {
+            localStorage.setItem('vayne-study-backup-corrupted', stored);
+            console.warn('Corrupted data backed up to vayne-study-backup-corrupted');
+          } catch { /* ignore backup failure */ }
           return defaultData;
         }
       } else {
@@ -574,4 +543,13 @@ export function clearData(): void {
   localStorage.removeItem(MATERIALS_KEY);
   localStorage.removeItem(COMPRESSED_FLAG);
   localStorage.removeItem('vayne-last-decay-date');
+
+  // Also clear IndexedDB materials
+  try {
+    const request = indexedDB.deleteDatabase('vayne-materials-db');
+    request.onerror = () => console.error('Failed to clear IndexedDB');
+    request.onsuccess = () => {};
+  } catch {
+    // IndexedDB not available (e.g., server-side)
+  }
 }

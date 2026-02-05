@@ -10,6 +10,21 @@ interface ExamReadinessWidgetProps {
 }
 
 export default function ExamReadinessWidget({ readiness }: ExamReadinessWidgetProps) {
+  // useMemo MUST be called before any early return (Rules of Hooks)
+  const { statusConfig, progressColor } = useMemo(() => {
+    const configs = {
+      ready: { label: 'Готов', color: 'text-green-400', bg: 'bg-green-500', icon: '✅' },
+      on_track: { label: 'На път', color: 'text-blue-400', bg: 'bg-blue-500', icon: '📈' },
+      at_risk: { label: 'В риск', color: 'text-yellow-400', bg: 'bg-yellow-500', icon: '⚠️' },
+      behind: { label: 'Зад графика', color: 'text-red-400', bg: 'bg-red-500', icon: '🚨' }
+    };
+    const status = readiness?.status || 'on_track';
+    return {
+      statusConfig: configs[status],
+      progressColor: configs[status].bg
+    };
+  }, [readiness?.status]);
+
   if (!readiness) {
     return (
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
@@ -24,26 +39,13 @@ export default function ExamReadinessWidget({ readiness }: ExamReadinessWidgetPr
     );
   }
 
-  const { statusConfig, progressColor } = useMemo(() => {
-    const configs = {
-      ready: { label: 'Готов', color: 'text-green-400', bg: 'bg-green-500', icon: '✅' },
-      on_track: { label: 'На път', color: 'text-blue-400', bg: 'bg-blue-500', icon: '📈' },
-      at_risk: { label: 'В риск', color: 'text-yellow-400', bg: 'bg-yellow-500', icon: '⚠️' },
-      behind: { label: 'Зад графика', color: 'text-red-400', bg: 'bg-red-500', icon: '🚨' }
-    };
-    return {
-      statusConfig: configs[readiness.status],
-      progressColor: configs[readiness.status].bg
-    };
-  }, [readiness.status]);
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' });
   };
 
   return (
-    <Link href={`/subjects/${readiness.subjectId}`}>
+    <Link href={`/subjects?id=${readiness.subjectId}`}>
       <div className={`bg-[rgba(20,20,35,0.8)] border rounded-xl p-5 transition-all hover:border-purple-500/50 ${
         readiness.status === 'behind' || readiness.status === 'at_risk'
           ? 'border-red-500/30'

@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Timer, Brain, ListTodo } from 'lucide-react';
 import Link from 'next/link';
 import { Subject, Topic } from '@/lib/types';
@@ -10,19 +11,19 @@ interface QuickActionsRowProps {
 
 export default function QuickActionsRow({ subjects }: QuickActionsRowProps) {
   // Find weak topics for quick quiz (orange or gray topics with some material)
-  const weakTopicsForQuiz = subjects
+  const weakTopicsForQuiz = useMemo(() => subjects
     .filter(s => !s.archived && !s.deletedAt)
     .flatMap(s =>
       s.topics
         .filter(t => (t.status === 'orange' || t.status === 'yellow') && t.material)
         .map(t => ({ topic: t, subject: s }))
     )
-    .slice(0, 5);
+    .slice(0, 5), [subjects]);
 
-  // Pick a random weak topic for quick quiz
-  const randomWeakTopic = weakTopicsForQuiz.length > 0
+  // Pick a stable random weak topic (only changes when weakTopicsForQuiz changes)
+  const randomWeakTopic = useMemo(() => weakTopicsForQuiz.length > 0
     ? weakTopicsForQuiz[Math.floor(Math.random() * weakTopicsForQuiz.length)]
-    : null;
+    : null, [weakTopicsForQuiz]);
 
   return (
     <div className="grid grid-cols-3 gap-3">
@@ -58,7 +59,7 @@ export default function QuickActionsRow({ subjects }: QuickActionsRowProps) {
               Бърз тест
             </span>
             <span className="text-xs text-slate-500 font-mono truncate block">
-              {randomWeakTopic.topic.name.slice(0, 20)}...
+              {randomWeakTopic.topic.name.length > 20 ? randomWeakTopic.topic.name.slice(0, 20) + '...' : randomWeakTopic.topic.name}
             </span>
           </div>
         </Link>

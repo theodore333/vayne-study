@@ -17,6 +17,7 @@ import {
  StepEvaluation, InteractiveClinicalCase, EXAM_SYSTEMS, INVESTIGATION_CATEGORIES
 } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import { generateId } from '@/lib/algorithms';
 
 // Demo case for testing
 const DEMO_CASE: InteractiveClinicalCase = {
@@ -234,7 +235,7 @@ function CasesContent() {
  incrementApiCalls(result.usage?.cost || 0);
 
  const newCase: InteractiveClinicalCase = {
- id: Date.now().toString(),
+ id: generateId(),
  subjectId: selectedSubjectId!,
  topicId: randomTopic.id,
  difficulty,
@@ -307,7 +308,7 @@ function CasesContent() {
  if (isPatientResponding || !activeCase || !historyInput.trim()) return;
 
  const newMessage: CaseMessage = {
- id: Date.now().toString(),
+ id: generateId(),
  role: 'student',
  content: historyInput,
  timestamp: new Date().toISOString()
@@ -481,7 +482,7 @@ function CasesContent() {
  }
 
  const newInvestigation: CaseInvestigation = {
- id: Date.now().toString(),
+ id: generateId(),
  name: selectedInvestigation,
  category: Object.entries(INVESTIGATION_CATEGORIES).find(([, cat]) =>
  (cat.tests as readonly string[]).includes(selectedInvestigation)
@@ -509,7 +510,7 @@ function CasesContent() {
  const handleAddDdx = () => {
  if (!newDdxInput.trim()) return;
  const newItem: DifferentialDiagnosis = {
- id: Date.now().toString(),
+ id: generateId(),
  diagnosis: newDdxInput.trim(),
  rank: ddxItems.length + 1
  };
@@ -680,7 +681,7 @@ function CasesContent() {
  // Add treatment item
  const handleAddTreatmentItem = (category: TreatmentPlanItem['category']) => {
  const newItem: TreatmentPlanItem = {
- id: Date.now().toString(),
+ id: generateId(),
  category,
  description: '',
  priority: 'short_term'

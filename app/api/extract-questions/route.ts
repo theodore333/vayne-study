@@ -2,6 +2,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { PDFParse } from 'pdf-parse';
 import mammoth from 'mammoth';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 // See CLAUDE_CONTEXT.md for correct model IDs
 
 // Types for extracted questions
@@ -88,7 +90,7 @@ function repairTruncatedJSON(text: string): ExtractionResult | null {
                   }
                 } catch {
                   // Skip malformed
-                  console.log(`[EXTRACT-Q] Skipped malformed object at position ${objStart}`);
+                  if (isDev) console.log(`[EXTRACT-Q] Skipped malformed object at position ${objStart}`);
                 }
               }
               objStart = -1;
@@ -152,7 +154,7 @@ function repairTruncatedJSON(text: string): ExtractionResult | null {
     }
 
     if (questions.length > 0) {
-      console.log(`[EXTRACT-Q] Repaired truncated JSON: extracted ${questions.length} questions, ${cases.length} cases`);
+      if (isDev) console.log(`[EXTRACT-Q] Repaired truncated JSON: extracted ${questions.length} questions, ${cases.length} cases`);
       return { questions, cases };
     }
 
@@ -381,7 +383,7 @@ export async function POST(request: Request) {
 
         const cost = (extractionResult.inputTokens * 0.003 + extractionResult.outputTokens * 0.015) / 1000;
 
-        console.log(`[EXTRACT-Q] DOCX extraction complete: ${questions.length} questions`);
+        if (isDev) console.log(`[EXTRACT-Q] DOCX extraction complete: ${questions.length} questions`);
 
         return new Response(JSON.stringify({
           questions,
@@ -442,7 +444,7 @@ export async function POST(request: Request) {
 
       // Use chunking for text-based PDFs with more than PAGES_PER_CHUNK pages
       if (!pdfAnalysis.isScanned && pdfAnalysis.pageCount > PAGES_PER_CHUNK && pdfAnalysis.textByPage) {
-        console.log(`[EXTRACT-Q] Using CHUNKED extraction for ${pdfAnalysis.pageCount} pages`);
+        if (isDev) console.log(`[EXTRACT-Q] Using CHUNKED extraction for ${pdfAnalysis.pageCount} pages`);
 
         const allQuestions: ExtractedQuestion[] = [];
         const allCases: ExtractedCase[] = [];
@@ -455,7 +457,7 @@ export async function POST(request: Request) {
           const endPage = Math.min(startPage + PAGES_PER_CHUNK, pdfAnalysis.pageCount);
           const chunkText = pdfAnalysis.textByPage.slice(startPage, endPage).join('\n\n--- СТРАНИЦА ---\n\n');
 
-          console.log(`[EXTRACT-Q] Processing chunk ${chunkIdx + 1}/${numChunks} (pages ${startPage + 1}-${endPage})`);
+          if (isDev) console.log(`[EXTRACT-Q] Processing chunk ${chunkIdx + 1}/${numChunks} (pages ${startPage + 1}-${endPage})`);
 
           const chunkResult = await extractQuestionsFromText(
             anthropic,
@@ -470,7 +472,7 @@ export async function POST(request: Request) {
           totalInputTokens += chunkResult.inputTokens;
           totalOutputTokens += chunkResult.outputTokens;
 
-          console.log(`[EXTRACT-Q] Chunk ${chunkIdx + 1} extracted ${chunkResult.questions?.length || 0} questions`);
+          if (isDev) console.log(`[EXTRACT-Q] Chunk ${chunkIdx + 1} extracted ${chunkResult.questions?.length || 0} questions`);
         }
 
         // Transform and return chunked results - use topic IDs instead of names
@@ -489,7 +491,7 @@ export async function POST(request: Request) {
 
         const cost = (totalInputTokens * 0.003 + totalOutputTokens * 0.015) / 1000;
 
-        console.log(`[EXTRACT-Q] CHUNKED extraction complete: ${questions.length} total questions from ${numChunks} chunks`);
+        if (isDev) console.log(`[EXTRACT-Q] CHUNKED extraction complete: ${questions.length} total questions from ${numChunks} chunks`);
 
         return new Response(JSON.stringify({
           questions,
@@ -668,7 +670,7 @@ ${topicListForPrompt}
       if (repaired && repaired.questions.length > 0) {
         result = repaired;
         wasRepaired = true;
-        console.log(`[EXTRACT-Q] Successfully repaired: ${result.questions.length} questions recovered`);
+        if (isDev) console.log(`[EXTRACT-Q] Successfully repaired: ${result.questions.length} questions recovered`);
       } else {
         // Return partial result with warning
         return new Response(JSON.stringify({
@@ -741,7 +743,7 @@ ${topicListForPrompt}
       });
     }
 
-    return new Response(JSON.stringify({ error: message }), {
+    return new Response(JSON.stringify({ error: 'Грешка при извличане на въпроси. Опитай отново.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });

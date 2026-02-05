@@ -42,7 +42,7 @@ export default function SubjectHealthIndicator({ healthStatuses, maxItems = 3 }:
         {displayStatuses.map((status) => (
           <Link
             key={status.subjectId}
-            href={`/subjects/${status.subjectId}`}
+            href={`/subjects?id=${status.subjectId}`}
             className={`block p-3 rounded-lg transition-all ${
               status.health === 'critical'
                 ? 'bg-red-500/10 border border-red-500/30 hover:bg-red-500/20'

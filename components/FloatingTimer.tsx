@@ -220,6 +220,16 @@ export default function FloatingTimer() {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [pomodoroState, playSound, showNotification, isTimerPage]);
 
+  // Cleanup AudioContext on unmount
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
   // Normal timer tick
   useEffect(() => {
     if (!activeSession) {

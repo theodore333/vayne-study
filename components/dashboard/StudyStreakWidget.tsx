@@ -65,7 +65,7 @@ export default function StudyStreakWidget({ currentStreak, longestStreak }: Stud
           <div className="flex items-center gap-1.5">
             <Trophy size={12} className="text-yellow-500/70" />
             <span className="text-slate-500">Рекорд:</span>
-            <span className="text-slate-400">{longestStreak} дни</span>
+            <span className="text-slate-400">{longestStreak} {longestStreak === 1 ? 'ден' : 'дни'}</span>
           </div>
         </div>
 

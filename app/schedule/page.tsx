@@ -382,8 +382,9 @@ export default function SchedulePage() {
                           key={e.subject.id}
                           className="text-xs px-2 py-0.5 rounded font-mono"
                           style={{ backgroundColor: `${e.subject.color}30`, color: e.subject.color }}
+                          title={e.subject.name}
                         >
-                          {e.subject.name.slice(0, 15)}
+                          {e.subject.name.length > 15 ? e.subject.name.slice(0, 15) + '…' : e.subject.name}
                         </span>
                       ))}
                     </div>

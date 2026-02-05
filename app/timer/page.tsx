@@ -305,7 +305,7 @@ export default function TimerPage() {
     if (!settings.soundEnabled) return;
     try {
       if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       }
       const ctx = audioContextRef.current;
 
@@ -835,7 +835,7 @@ export default function TimerPage() {
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Работа (мин)</label>
                   <input type="number" value={settings.workDuration}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       if (val >= 1 && val <= 120) updatePomodoroSettings({ workDuration: val });
                     }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="120" />
@@ -844,7 +844,7 @@ export default function TimerPage() {
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Кратка почивка</label>
                   <input type="number" value={settings.shortBreakDuration}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       if (val >= 1 && val <= 30) updatePomodoroSettings({ shortBreakDuration: val });
                     }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="30" />
@@ -853,7 +853,7 @@ export default function TimerPage() {
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Дълга почивка</label>
                   <input type="number" value={settings.longBreakDuration}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       if (val >= 1 && val <= 60) updatePomodoroSettings({ longBreakDuration: val });
                     }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="60" />
@@ -862,7 +862,7 @@ export default function TimerPage() {
                   <label className="block text-xs text-slate-500 mb-2 font-mono">Дълга след # цикъла</label>
                   <input type="number" value={settings.longBreakAfter}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
+                      const val = parseInt(e.target.value, 10);
                       if (val >= 1 && val <= 10) updatePomodoroSettings({ longBreakAfter: val });
                     }}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center" min="1" max="10" />
@@ -903,7 +903,7 @@ export default function TimerPage() {
                     <label className="block text-xs text-slate-500 mb-2 font-mono">Делничен ден (ч)</label>
                     <input type="number" value={Math.round(goals.dailyMinutes / 60)}
                       onChange={(e) => {
-                        const daily = (parseInt(e.target.value) || 8) * 60;
+                        const daily = (parseInt(e.target.value, 10) || 8) * 60;
                         const weekend = goals.useWeekendHours ? (goals.weekendDailyMinutes || daily) : daily;
                         const weekly = daily * 5 + weekend * 2;
                         const monthly = Math.round(weekly * 4.33);
@@ -915,7 +915,7 @@ export default function TimerPage() {
                     <label className="block text-xs text-slate-500 mb-2 font-mono">Уикенд (ч)</label>
                     <input type="number" value={Math.round((goals.weekendDailyMinutes || goals.dailyMinutes) / 60)}
                       onChange={(e) => {
-                        const weekend = (parseInt(e.target.value) || 4) * 60;
+                        const weekend = (parseInt(e.target.value, 10) || 4) * 60;
                         const daily = goals.dailyMinutes;
                         const weekly = daily * 5 + weekend * 2;
                         const monthly = Math.round(weekly * 4.33);
@@ -1432,7 +1432,7 @@ export default function TimerPage() {
                     <input
                       type="number"
                       value={manualHours}
-                      onChange={(e) => setManualHours(Math.max(0, parseInt(e.target.value) || 0))}
+                      onChange={(e) => setManualHours(Math.max(0, parseInt(e.target.value, 10) || 0))}
                       min="0"
                       max="12"
                       className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center"
@@ -1443,7 +1443,7 @@ export default function TimerPage() {
                     <input
                       type="number"
                       value={manualMinutes}
-                      onChange={(e) => setManualMinutes(Math.max(0, Math.min(59, parseInt(e.target.value) || 0)))}
+                      onChange={(e) => setManualMinutes(Math.max(0, Math.min(59, parseInt(e.target.value, 10) || 0)))}
                       min="0"
                       max="59"
                       className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono text-center"

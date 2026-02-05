@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // See CLAUDE_MODELS.md for correct model IDs
 
+const isDev = process.env.NODE_ENV === 'development';
+
 export async function POST(request: NextRequest) {
-  console.log('[ANALYZE-SIZE] === REQUEST STARTED ===');
 
   try {
     const { material, topicName, apiKey } = await request.json();
@@ -17,7 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Материалът е твърде кратък за анализ' }, { status: 400 });
     }
 
-    console.log('[ANALYZE-SIZE] Topic:', topicName, 'Material length:', material.length);
+    if (isDev) console.log('[ANALYZE-SIZE] Topic:', topicName, 'Material length:', material.length);
 
     const anthropic = new Anthropic({ apiKey });
 
@@ -80,7 +81,7 @@ ${materialSample}
     const outputTokens = message.usage.output_tokens;
     const cost = (inputTokens * 0.0008 + outputTokens * 0.004) / 1000;
 
-    console.log('[ANALYZE-SIZE] Success. Size:', size, 'Tokens:', inputTokens + outputTokens);
+    if (isDev) console.log('[ANALYZE-SIZE] Size:', size, 'Tokens:', inputTokens + outputTokens);
 
     return NextResponse.json({
       size,
@@ -99,6 +100,6 @@ ${materialSample}
       return NextResponse.json({ error: 'Невалиден API ключ' }, { status: 401 });
     }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Грешка при анализ на размера' }, { status: 500 });
   }
 }

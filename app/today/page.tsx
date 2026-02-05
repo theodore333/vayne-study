@@ -185,8 +185,8 @@ export default function TodayPage() {
 
   // FSRS scheduled reviews - topics that need review based on retrievability
   const fsrsReviews = useMemo(
-    () => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85),
-    [activeSubjects, data.studyGoals.fsrsTargetRetention]
+    () => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals),
+    [activeSubjects, data.studyGoals]
   );
 
   // Calculate study streak

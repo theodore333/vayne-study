@@ -22,6 +22,17 @@ export async function POST(request: Request) {
 
   } catch (error: unknown) {
     console.error('API key test error:', error);
-    return NextResponse.json({ error: 'Invalid API key' }, { status: 401 });
+    const message = error instanceof Error ? error.message : '';
+
+    if (message.includes('invalid_api_key') || message.includes('authentication')) {
+      return NextResponse.json({ error: 'Невалиден API ключ' }, { status: 401 });
+    }
+    if (message.includes('rate_limit')) {
+      return NextResponse.json({ error: 'Rate limit - опитай отново след малко' }, { status: 429 });
+    }
+    if (message.includes('overloaded')) {
+      return NextResponse.json({ error: 'API сървърът е претоварен - опитай отново' }, { status: 503 });
+    }
+    return NextResponse.json({ error: 'Невалиден API ключ или проблем с връзката' }, { status: 401 });
   }
 }

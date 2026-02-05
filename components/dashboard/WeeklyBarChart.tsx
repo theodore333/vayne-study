@@ -43,7 +43,7 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
     }
 
     return result;
-  }, [safeSessions]);
+  }, [safeSessions, safeGoal]);
 
   const maxMinutes = Math.max(...weekData.map(d => d.minutes), safeGoal) || 1;
   const totalMinutes = weekData.reduce((sum, d) => sum + d.minutes, 0);

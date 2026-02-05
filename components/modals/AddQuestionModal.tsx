@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Plus, Trash2, Check } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
@@ -45,6 +45,14 @@ export default function AddQuestionModal({
 
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+  const resetTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   const letters = ['А', 'Б', 'В', 'Г', 'Д', 'Е'];
 
@@ -58,17 +66,33 @@ export default function AddQuestionModal({
     if (options.length > 2) {
       const newOptions = options.filter((_, i) => i !== index);
       setOptions(newOptions);
-      // Reset correct answer if it was removed
+
+      // Remap correct answers: letters after the removed index shift down by one
       const removedLetter = letters[index];
+
+      // Single correct answer
       if (correctAnswer === removedLetter) {
         setCorrectAnswer(letters[0]);
+      } else {
+        const correctIdx = letters.indexOf(correctAnswer);
+        if (correctIdx > index) {
+          setCorrectAnswer(letters[correctIdx - 1]);
+        }
       }
-      if (correctAnswers.has(removedLetter)) {
-        const newCorrect = new Set(correctAnswers);
-        newCorrect.delete(removedLetter);
-        if (newCorrect.size === 0) newCorrect.add(letters[0]);
-        setCorrectAnswers(newCorrect);
-      }
+
+      // Multiple correct answers
+      const newCorrect = new Set<string>();
+      correctAnswers.forEach(letter => {
+        const letterIdx = letters.indexOf(letter);
+        if (letterIdx === index) return; // removed
+        if (letterIdx > index) {
+          newCorrect.add(letters[letterIdx - 1]); // shift down
+        } else {
+          newCorrect.add(letter); // unchanged
+        }
+      });
+      if (newCorrect.size === 0) newCorrect.add(letters[0]);
+      setCorrectAnswers(newCorrect);
     }
   };
 
@@ -135,8 +159,9 @@ export default function AddQuestionModal({
 
       setSuccess(true);
 
-      // Reset form for another question
-      setTimeout(() => {
+      // Reset form for another question after delay
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = setTimeout(() => {
         setQuestionText('');
         setOptions(['', '', '', '']);
         setCorrectAnswer('А');
@@ -206,7 +231,10 @@ export default function AddQuestionModal({
             </label>
             <textarea
               value={questionText}
-              onChange={(e) => setQuestionText(e.target.value.slice(0, 2000))}
+              onChange={(e) => {
+                if (resetTimerRef.current) { clearTimeout(resetTimerRef.current); resetTimerRef.current = null; setSuccess(false); }
+                setQuestionText(e.target.value.slice(0, 2000));
+              }}
               placeholder="Напиши въпроса тук..."
               rows={3}
               maxLength={2000}

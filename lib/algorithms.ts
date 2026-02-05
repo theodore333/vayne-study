@@ -56,8 +56,9 @@ export function calculateRetrievability(fsrs: FSRSState): number {
  * Calculate days until retrievability drops to target threshold
  * Solving: targetR = e^(-t/S) → t = -S * ln(targetR)
  */
-export function getDaysUntilReview(fsrs: FSRSState): number {
-  const daysUntil = -fsrs.stability * Math.log(FSRS_PARAMS.targetR);
+export function getDaysUntilReview(fsrs: FSRSState, studyGoals?: StudyGoals): number {
+  const targetR = studyGoals?.fsrsTargetRetention || FSRS_PARAMS.targetR;
+  const daysUntil = -fsrs.stability * Math.log(targetR);
   const daysSinceReview = getDaysSince(fsrs.lastReview);
   return Math.max(0, Math.round(daysUntil - daysSinceReview));
 }
@@ -65,11 +66,12 @@ export function getDaysUntilReview(fsrs: FSRSState): number {
 /**
  * Check if topic needs review based on retrievability
  */
-export function topicNeedsReview(topic: Topic): boolean {
+export function topicNeedsReview(topic: Topic, studyGoals?: StudyGoals): boolean {
   if (!topic.fsrs) return false; // No FSRS state = use old decay system
 
+  const targetR = studyGoals?.fsrsTargetRetention || FSRS_PARAMS.targetR;
   const R = calculateRetrievability(topic.fsrs);
-  return R <= FSRS_PARAMS.targetR;
+  return R <= targetR;
 }
 
 /**
@@ -127,6 +129,8 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
     const ratingBonus = 1 + (rating - 1) * 0.15; // Easy = more growth
 
     newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS_PARAMS.topicMultiplier;
+    // Cap growth to max 3.5x per review to prevent jumping from 1 day to 180 days in 3 quizzes
+    newS = Math.min(currentFsrs.stability * 3.5, newS);
     newS = Math.min(FSRS_PARAMS.maxInterval, Math.max(FSRS_PARAMS.minInterval, newS));
 
     // Difficulty decreases slightly on success
@@ -149,8 +153,10 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
  */
 export function getTopicsNeedingFSRSReview(
   subjects: Subject[],
-  maxReviews: number = FSRS_PARAMS.maxDailyReviews
+  maxReviews: number = FSRS_PARAMS.maxDailyReviews,
+  studyGoals?: StudyGoals
 ): Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> {
+  const FSRS = getFSRSParams(studyGoals);
   const needsReview: Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> = [];
 
   for (const subject of subjects) {
@@ -161,10 +167,10 @@ export function getTopicsNeedingFSRSReview(
 
       const R = calculateRetrievability(topic.fsrs);
 
-      // Include if below threshold
-      if (R <= FSRS_PARAMS.targetR) {
+      // Include if below threshold (uses user-configured retention target)
+      if (R <= FSRS.targetR) {
         // Urgency: how far below threshold (lower R = more urgent)
-        const urgency = (FSRS_PARAMS.targetR - R) / FSRS_PARAMS.targetR;
+        const urgency = (FSRS.targetR - R) / FSRS.targetR;
         needsReview.push({ topic, subject, urgency, retrievability: R });
       }
     }
@@ -458,7 +464,8 @@ export function analyzeFormatGaps(
   const highBloomLowScore = lowScoreQuizzes.filter(q => q.bloomLevel >= 4);
 
   // If many high-bloom quizzes have low scores, likely weak at complex questions
-  if (highBloomLowScore.length > lowScoreQuizzes.length * 0.5) {
+  // Require at least 3 data points to avoid false positives
+  if (lowScoreQuizzes.length >= 3 && highBloomLowScore.length > lowScoreQuizzes.length * 0.5) {
     if (result.hasCases) result.caseWeakness = true;
     if (result.hasOpenQuestions) result.openWeakness = true;
   }
@@ -476,6 +483,9 @@ export function analyzeFormatGaps(
 }
 
 export function generateId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+  }
   return Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 }
 
@@ -981,7 +991,7 @@ export function calculatePredictedGrade(
 
   // Monte Carlo simulation for exam outcomes
   const examFormat = parseExamFormat(subject.examFormat);
-  const topicsOnExam = examFormat?.totalTopics || Math.min(5, Math.ceil(totalTopics * 0.1));
+  const topicsOnExam = examFormat?.totalTopics || Math.min(5, totalTopics, Math.max(2, Math.ceil(totalTopics * 0.3)));
   const simulation = simulateExamOutcome(topics, topicsOnExam);
 
   // Add simulation-based tips
@@ -1306,7 +1316,7 @@ export function generateDailyPlan(
   let capacityAfterFsrs = capacityForPriority;
 
   if (capacityForPriority > 0) {
-    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForPriority, fsrsParams.maxDailyReviews));
+    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForPriority, fsrsParams.maxDailyReviews), studyGoals);
 
     if (fsrsReviews.length > 0) {
       // Group by subject

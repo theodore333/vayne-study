@@ -115,7 +115,7 @@ export default function Dashboard() {
   // Analytics data
   const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
   const longestStreak = useMemo(() => getLongestStreak(data.timerSessions), [data.timerSessions]);
-  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85), [activeSubjects, data.studyGoals.fsrsTargetRetention]);
+  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals), [activeSubjects, data.studyGoals]);
   const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
 
   // New dashboard algorithms - wrapped in try-catch for safety

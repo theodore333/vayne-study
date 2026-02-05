@@ -132,21 +132,31 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 // Helper function to calculate study streak from timer sessions
+function getLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function calculateStudyStreak(sessions: TimerSession[]): number {
   const dates = new Set(
-    sessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0])
+    sessions.filter(s => s.endTime !== null).map(s => {
+      const d = new Date(s.startTime);
+      return getLocalDateStr(d);
+    })
   );
   let count = 0;
   const checkDate = new Date();
   while (true) {
-    const dateStr = checkDate.toISOString().split('T')[0];
+    const dateStr = getLocalDateStr(checkDate);
     if (dates.has(dateStr)) {
       count++;
       checkDate.setDate(checkDate.getDate() - 1);
     } else if (count === 0) {
       // Allow skipping today if no session yet
       checkDate.setDate(checkDate.getDate() - 1);
-      if (dates.has(checkDate.toISOString().split('T')[0])) {
+      if (dates.has(getLocalDateStr(checkDate))) {
         count++;
         checkDate.setDate(checkDate.getDate() - 1);
         continue;
@@ -198,7 +208,6 @@ const defaultAcademicPeriod: AcademicPeriod = {
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  console.log('=== VAYNE STUDY APP LOADED (v2) ===');
   const [data, setData] = useState<AppData>({
     subjects: [],
     schedule: [],
@@ -264,7 +273,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const initData = async () => {
-      console.log('[CONTEXT] Starting data initialization...');
+      if (process.env.NODE_ENV === 'development') console.log('[CONTEXT] Starting data initialization...');
 
       // Initialize materials cache from IndexedDB (handles migration from localStorage)
       await initMaterialsCache();
@@ -272,11 +281,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // First load from localStorage for instant display
       const localData = loadData();
 
-      // Log what we loaded
-      const topicsWithMaterial = localData.subjects.flatMap(s => s.topics.filter(t => t.material && t.material.length > 0));
-      console.log('[CONTEXT] Loaded localData with', topicsWithMaterial.length, 'topics that have material');
-      if (topicsWithMaterial.length > 0) {
-        console.log('[CONTEXT] Topics with material:', topicsWithMaterial.map(t => ({ id: t.id, name: t.name, materialLength: t.material?.length })));
+      // Log what we loaded (dev only)
+      if (process.env.NODE_ENV === 'development') {
+        const topicsWithMaterial = localData.subjects.flatMap(s => s.topics.filter(t => t.material && t.material.length > 0));
+        console.log('[CONTEXT] Loaded', topicsWithMaterial.length, 'topics with material');
       }
 
       setData(localData);
@@ -900,7 +908,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const updateTopicMaterial = useCallback((subjectId: string, topicId: string, material: string) => {
-    console.log('[CONTEXT] updateTopicMaterial called for topic:', topicId, 'material length:', material?.length || 0);
+    if (process.env.NODE_ENV === 'development') console.log('[CONTEXT] updateTopicMaterial:', topicId, 'length:', material?.length || 0);
     updateData(prev => ({
       ...prev,
       subjects: prev.subjects.map(s => {
@@ -1439,14 +1447,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const newGrades = [...(module.grades || []), validGrade];
       const avgGrade = newGrades.reduce((a, b) => a + b, 0) / newGrades.length;
 
-      // Bloom level advancement logic (same as topics)
+      // Bloom level advancement logic (same as topics - requires score >= 70)
       let newBloomLevel = (module.currentBloomLevel || 1) as BloomLevel;
       const currentLevelQuizzes = [...(module.quizHistory || []), quizResult]
-        .filter(q => q.bloomLevel === newBloomLevel);
+        .filter(q => q.bloomLevel === newBloomLevel && q.score >= 70);
 
-      if (currentLevelQuizzes.length >= 2) {
+      if (currentLevelQuizzes.length >= 2 && newBloomLevel < 6) {
         const currentLevelAvg = currentLevelQuizzes.reduce((sum, q) => sum + q.score, 0) / currentLevelQuizzes.length;
-        if (currentLevelAvg >= 75 && newBloomLevel < 6) {
+        if (currentLevelAvg >= 75) {
           newBloomLevel = (newBloomLevel + 1) as BloomLevel;
         }
       }
@@ -1475,9 +1483,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? Math.round((completedCount / newModules.length) * 100)
         : 0;
 
+      // Update combo FIRST to get correct multiplier (check if expired)
+      const progress = prev.userProgress || defaultUserProgress;
+      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
+      const comboMultiplier = getComboMultiplier(newCombo.count);
+
       // Calculate XP (same as quiz XP)
-      const comboMultiplier = getComboMultiplier(prev.userProgress.combo.count);
       const xpEarned = calculateQuizXp(score, comboMultiplier);
+      const newXp = progress.xp + xpEarned;
+
+      const newProgress: UserProgress = {
+        ...progress,
+        xp: newXp,
+        level: calculateLevel(newXp),
+        totalXpEarned: progress.totalXpEarned + xpEarned,
+        combo: newCombo,
+        stats: {
+          ...progress.stats,
+          quizzesTaken: progress.stats.quizzesTaken + 1
+        }
+      };
+
+      // Check achievements
+      const streak = calculateStudyStreak(prev.timerSessions);
+      const unlocked = checkAchievements(newProgress, prev.subjects, streak);
+      if (unlocked.length > 0) {
+        newProgress.achievements = [...newProgress.achievements, ...unlocked];
+        setNewAchievements(prev => [...prev, ...unlocked]);
+      }
 
       return {
         ...prev,
@@ -1485,15 +1518,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (p.id !== projectId) return p;
           return { ...p, modules: newModules, progressPercent, updatedAt: new Date().toISOString() };
         }),
-        userProgress: {
-          ...prev.userProgress,
-          xp: prev.userProgress.xp + xpEarned,
-          level: calculateLevel(prev.userProgress.xp + xpEarned),
-          stats: {
-            ...prev.userProgress.stats,
-            quizzesTaken: prev.userProgress.stats.quizzesTaken + 1
-          }
-        }
+        userProgress: newProgress
       };
     });
   }, [updateData]);

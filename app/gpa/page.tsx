@@ -201,10 +201,14 @@ export default function GPAPage() {
           <input
             type="number"
             value={targetGPA}
-            onChange={(e) => setTargetGPA(parseFloat(e.target.value) || 5.5)}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) setTargetGPA(Math.min(6, Math.max(2, val)));
+            }}
             min={2}
             max={6}
             step={0.1}
+            aria-label="Целева GPA"
             className="text-4xl font-bold font-mono text-purple-400 bg-transparent w-24 focus:outline-none"
           />
           <div className="mt-2 text-xs text-slate-500 font-mono">
@@ -336,7 +340,7 @@ export default function GPAPage() {
                   <label className="block text-sm text-slate-400 mb-1 font-mono">Семестър</label>
                   <select
                     value={newGrade.semester}
-                    onChange={(e) => setNewGrade({ ...newGrade, semester: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setNewGrade({ ...newGrade, semester: parseInt(e.target.value, 10) || 1 })}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
                   >
                     {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(s => (
@@ -349,7 +353,7 @@ export default function GPAPage() {
                   <input
                     type="number"
                     value={newGrade.year}
-                    onChange={(e) => setNewGrade({ ...newGrade, year: parseInt(e.target.value) || new Date().getFullYear() })}
+                    onChange={(e) => setNewGrade({ ...newGrade, year: parseInt(e.target.value, 10) || new Date().getFullYear() })}
                     className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 font-mono"
                   />
                 </div>

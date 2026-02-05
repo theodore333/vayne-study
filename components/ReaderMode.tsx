@@ -770,7 +770,7 @@ function extractTOC(html: string): Array<{ level: number; text: string; id: stri
   const items: Array<{ level: number; text: string; id: string }> = [];
 
   headings.forEach((heading, index) => {
-    const level = parseInt(heading.tagName[1]);
+    const level = parseInt(heading.tagName[1], 10);
     const text = heading.textContent?.trim() || '';
     if (text) {
       items.push({
@@ -1452,7 +1452,7 @@ export default function ReaderMode({
     if (!editor) return;
 
     const headings = editor.view.dom.querySelectorAll('h1, h2, h3');
-    const index = parseInt(id.split('-')[1]);
+    const index = parseInt(id.split('-')[1], 10);
     const heading = headings[index];
 
     if (heading) {

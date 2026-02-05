@@ -69,8 +69,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, redisAvailable: true });
   } catch (error) {
     console.error('[REDIS] Error saving data:', error);
-    // Return success anyway - client has localStorage backup
-    return NextResponse.json({ success: true, redisAvailable: false });
+    // Return failure so client knows cloud save failed
+    return NextResponse.json({ success: false, redisAvailable: false, error: 'Failed to save to cloud' });
   } finally {
     if (client) await client.disconnect();
   }

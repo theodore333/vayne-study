@@ -360,7 +360,7 @@ function QuizContent() {
         if ((e.key >= '1' && e.key <= '4') || (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'D')) {
           let index: number;
           if (e.key >= '1' && e.key <= '4') {
-            index = parseInt(e.key) - 1;
+            index = parseInt(e.key, 10) - 1;
           } else {
             index = e.key.toUpperCase().charCodeAt(0) - 65; // A=0, B=1, C=2, D=3
           }

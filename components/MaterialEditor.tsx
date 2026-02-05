@@ -416,6 +416,7 @@ export default function MaterialEditor({ value, onChange, placeholder, className
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [showDrawingModal, setShowDrawingModal] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const isInternalUpdateRef = useRef(false);
 
   const editor = useEditor({
     extensions: [
@@ -507,14 +508,19 @@ export default function MaterialEditor({ value, onChange, placeholder, className
       },
     },
     onUpdate: ({ editor }) => {
+      isInternalUpdateRef.current = true;
       const html = editor.getHTML();
       const text = htmlToText(html);
       onChange(text);
     },
   });
 
-  // Update editor content when value changes externally
+  // Update editor content when value changes externally (not from editor's own onUpdate)
   useEffect(() => {
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
     if (editor && value !== htmlToText(editor.getHTML())) {
       const currentPos = editor.state.selection.from;
       editor.commands.setContent(value ? parseMarkers(markdownToHtml(value)) : '');

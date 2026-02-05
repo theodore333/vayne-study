@@ -180,6 +180,11 @@ function QuizContent() {
   const [mistakeAnalysis, setMistakeAnalysis] = useState<MistakeAnalysis | null>(null);
   const [isAnalyzingMistakes, setIsAnalyzingMistakes] = useState(false);
 
+  // Cloze card generation state
+  const [clozeCards, setClozeCards] = useState<string[] | null>(null);
+  const [isGeneratingCloze, setIsGeneratingCloze] = useState(false);
+  const [clozeError, setClozeError] = useState<string | null>(null);
+
   // Grade save state - prevents duplicate saves and shows feedback
   const [gradeSaved, setGradeSaved] = useState(false);
   const [isSavingGrade, setIsSavingGrade] = useState(false);
@@ -955,6 +960,71 @@ function QuizContent() {
     setIsAnalyzingMistakes(false);
   };
 
+  const generateClozeCards = async () => {
+    if (isGeneratingCloze || clozeCards) return;
+
+    const topicName = isModuleQuiz ? module?.title : topic?.name;
+
+    // Collect wrong answers with student's actual answer
+    const wrongAnswers: Array<{
+      question: string;
+      userAnswer: string | null;
+      correctAnswer: string;
+      explanation?: string;
+    }> = [];
+
+    quizState.questions.forEach((q, i) => {
+      const userAnswer = quizState.answers[i];
+      if (q.type === 'open') {
+        const evaluation = openEvaluations[i];
+        if (!evaluation || evaluation.score < 0.7) {
+          wrongAnswers.push({
+            question: q.question,
+            userAnswer: userAnswer,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation
+          });
+        }
+      } else {
+        if (userAnswer !== q.correctAnswer) {
+          wrongAnswers.push({
+            question: q.question,
+            userAnswer: userAnswer,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation
+          });
+        }
+      }
+    });
+
+    if (wrongAnswers.length === 0) return;
+
+    setIsGeneratingCloze(true);
+    setClozeError(null);
+
+    try {
+      const response = await fetchWithTimeout('/api/anki-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wrongAnswers, topicName }),
+        signal: abortControllerRef.current?.signal,
+        timeout: 30000
+      });
+
+      const result = await response.json();
+      if (result.error) {
+        setClozeError(result.error);
+      } else if (result.cards) {
+        setClozeCards(result.cards);
+      }
+    } catch (err) {
+      if (!isAbortOrTimeoutError(err)) {
+        setClozeError(getFetchErrorMessage(err));
+      }
+    }
+    setIsGeneratingCloze(false);
+  };
+
   const handleSaveGrade = () => {
     // Prevent duplicate saves
     // Support both topic quizzes and module quizzes
@@ -1562,57 +1632,81 @@ function QuizContent() {
             )}
           </div>
 
-          {/* Anki Cards from Wrong Answers */}
-          {wrongCount > 0 && (() => {
-            const wrongCards = quizState.questions.map((q, i) => {
-              const openEval = openEvaluations[i];
-              const isWrong = q.type === 'open'
-                ? (!openEval || openEval.score < 0.7)
-                : quizState.answers[i] !== q.correctAnswer;
-              if (!isWrong) return null;
-              return { question: q.question, answer: q.correctAnswer, explanation: q.explanation, concept: q.concept || 'General' };
-            }).filter(Boolean) as Array<{ question: string; answer: string; explanation: string; concept: string }>;
+          {/* Cloze Cards from Wrong Answers */}
+          {wrongCount > 0 && (
+            <div className="mt-8 w-full max-w-2xl mx-auto">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-cyan-400 font-mono flex items-center gap-2">
+                  <FileText size={16} /> Cloze карти от грешки
+                </h3>
+                <div className="flex items-center gap-2">
+                  {clozeCards && (
+                    <button
+                      onClick={() => { setClozeCards(null); setClozeError(null); generateClozeCards(); }}
+                      className="flex items-center gap-1 px-2 py-1 text-slate-500 hover:text-cyan-400 font-mono text-xs transition-colors"
+                      title="Генерирай отново"
+                    >
+                      <RefreshCw size={12} />
+                    </button>
+                  )}
+                  {clozeCards && clozeCards.length > 0 && (
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(clozeCards.join('\n'));
+                        showToast(`${clozeCards.length} карти копирани!`, 'success');
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-600/40 text-cyan-300 rounded-lg font-mono text-xs hover:bg-cyan-600/30 transition-colors"
+                    >
+                      <Copy size={12} /> Копирай всички
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            const copyCard = (card: typeof wrongCards[0]) => {
-              const text = `${card.question}\t${card.answer}${card.explanation ? ' | ' + card.explanation : ''}`;
-              navigator.clipboard.writeText(text);
-              showToast('Картата е копирана!', 'success');
-            };
+              {!clozeCards && !isGeneratingCloze && !clozeError && (
+                <button
+                  onClick={generateClozeCards}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-cyan-600/20 to-blue-600/20 border border-cyan-600/30 text-cyan-300 font-mono text-sm rounded-lg hover:from-cyan-600/30 hover:to-blue-600/30 transition-all"
+                >
+                  <Sparkles size={16} /> Генерирай Cloze карти (Wozniak 20 Rules)
+                </button>
+              )}
 
-            const copyAll = () => {
-              const text = wrongCards.map(c =>
-                `${c.question}\t${c.answer}${c.explanation ? ' | ' + c.explanation : ''}`
-              ).join('\n');
-              navigator.clipboard.writeText(text);
-              showToast(`${wrongCards.length} карти копирани!`, 'success');
-            };
+              {isGeneratingCloze && (
+                <div className="flex items-center justify-center gap-3 py-6 text-cyan-400 font-mono text-sm">
+                  <RefreshCw size={16} className="animate-spin" />
+                  Генериране на cloze карти...
+                </div>
+              )}
 
-            return (
-              <div className="mt-8 w-full max-w-2xl mx-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-cyan-400 font-mono flex items-center gap-2">
-                    <FileText size={16} /> Карти от грешки ({wrongCards.length})
-                  </h3>
+              {clozeError && (
+                <div className="text-red-400 font-mono text-xs text-center py-3">
+                  {clozeError}
                   <button
-                    onClick={copyAll}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-600/40 text-cyan-300 rounded-lg font-mono text-xs hover:bg-cyan-600/30 transition-colors"
+                    onClick={() => { setClozeError(null); generateClozeCards(); }}
+                    className="ml-2 text-cyan-400 underline"
                   >
-                    <Copy size={12} /> Копирай всички
+                    Опитай отново
                   </button>
                 </div>
+              )}
+
+              {clozeCards && clozeCards.length > 0 && (
                 <div className="space-y-2">
-                  {wrongCards.map((card, i) => (
+                  {clozeCards.map((card, i) => (
                     <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3 group">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <p className="text-slate-200 font-mono text-sm font-medium">{card.question}</p>
-                          <p className="text-green-400/90 font-mono text-xs">{card.answer}</p>
-                          {card.explanation && (
-                            <p className="text-slate-500 font-mono text-xs">{card.explanation}</p>
-                          )}
-                        </div>
+                        <p className="flex-1 min-w-0 text-slate-200 font-mono text-sm leading-relaxed"
+                           dangerouslySetInnerHTML={{
+                             __html: card.replace(/\{\{c\d+::(.*?)\}\}/g,
+                               '<span class="text-cyan-400 font-semibold bg-cyan-400/10 px-1 rounded">$1</span>')
+                           }}
+                        />
                         <button
-                          onClick={() => copyCard(card)}
+                          onClick={() => {
+                            navigator.clipboard.writeText(card);
+                            showToast('Картата е копирана!', 'success');
+                          }}
                           className="flex-shrink-0 p-1.5 text-slate-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition-all"
                           title="Копирай"
                         >
@@ -1622,9 +1716,9 @@ function QuizContent() {
                     </div>
                   ))}
                 </div>
-              </div>
-            );
-          })()}
+              )}
+            </div>
+          )}
 
           {/* AI Mistake Analysis Section */}
           {wrongCount > 0 && (

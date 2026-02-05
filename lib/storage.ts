@@ -376,6 +376,10 @@ export function loadData(): AppData {
     // Academic Events migration
     if (!data.academicEvents) data.academicEvents = [];
 
+    // Dashboard widgets migration
+    if (data.lastOpenedTopic === undefined) data.lastOpenedTopic = null;
+    if (!data.dailyGoals) data.dailyGoals = [];
+
     // Phase 2: Migrate ProjectModule to have learning infrastructure
     if (data.developmentProjects && data.developmentProjects.length > 0) {
       data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({

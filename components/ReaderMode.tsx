@@ -27,11 +27,12 @@ import {
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
   Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
-  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight
+  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import TutorChat from '@/components/TutorChat';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
@@ -347,6 +348,7 @@ function ToolbarButton({ onClick, active, disabled, children, title }: {
 interface ReaderModeProps {
   topic: Topic;
   subjectName?: string;
+  subjectTopics?: string[];
   onClose: () => void;
   onSaveHighlights: (highlights: TextHighlight[]) => void;
   onSaveMaterial: (material: string) => void;
@@ -979,6 +981,7 @@ function TableOfContents({
 export default function ReaderMode({
   topic,
   subjectName,
+  subjectTopics,
   onClose,
   onSaveHighlights,
   onSaveMaterial,
@@ -992,6 +995,7 @@ export default function ReaderMode({
   const [fontSize, setFontSize] = useState(18);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showTutor, setShowTutor] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isFormatting, setIsFormatting] = useState(false);
@@ -1721,8 +1725,19 @@ export default function ReaderMode({
               <Eye size={20} />
             </button>
 
+            {/* AI Tutor toggle */}
             <button
-              onClick={() => setShowSidebar(!showSidebar)}
+              onClick={() => { setShowTutor(!showTutor); if (!showTutor) setShowSidebar(false); }}
+              className={`p-2 rounded-lg transition-colors ${
+                showTutor ? 'bg-purple-100 text-purple-700' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+              title={showTutor ? 'Скрий тютора' : 'AI Тютор'}
+            >
+              <Brain size={20} />
+            </button>
+
+            <button
+              onClick={() => { setShowSidebar(!showSidebar); if (!showSidebar) setShowTutor(false); }}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
               title={showSidebar ? 'Скрий панела' : 'Покажи панела'}
             >
@@ -2431,6 +2446,18 @@ export default function ReaderMode({
                 <p><code className="bg-stone-100 px-1 rounded">&gt; </code> Цитат</p>
               </div>
             </div>
+          </aside>
+        )}
+
+        {/* AI Tutor Panel */}
+        {showTutor && (
+          <aside className="w-96 flex-shrink-0 bg-[rgb(15,15,25)] border-l border-slate-700/50 flex flex-col overflow-hidden">
+            <TutorChat
+              topic={topic}
+              subjectName={subjectName || ''}
+              subjectTopics={subjectTopics}
+              onClose={() => setShowTutor(false)}
+            />
           </aside>
         )}
       </div>

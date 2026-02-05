@@ -370,6 +370,7 @@ export default function TopicDetailPage() {
         <ReaderMode
           topic={topicForReader}
           subjectName={subject.name}
+          subjectTopics={subject.topics.map(t => t.name)}
           onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
           onSaveMaterial={handleSaveMaterialFromReader}

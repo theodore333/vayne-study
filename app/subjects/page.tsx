@@ -32,7 +32,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, isSyncing, syncNow, deleteSubject, updateSubject, setTopicStatus, updateTopic, archiveSubject, unarchiveSubject, duplicateSubject, exportSubjectToJSON, importSubjectFromJSON, softDeleteSubject, restoreSubject, permanentlyDeleteSubject, emptyTrash } = useApp();
+  const { data, isLoading, isSyncing, syncNow, deleteSubject, updateSubject, setTopicStatus, updateTopic, deleteTopic, archiveSubject, unarchiveSubject, duplicateSubject, exportSubjectToJSON, importSubjectFromJSON, softDeleteSubject, restoreSubject, permanentlyDeleteSubject, emptyTrash } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -139,6 +139,19 @@ function SubjectsContent() {
     }
     clearBulkSelection();
     setBulkEditMode(false);
+  };
+
+  // Bulk delete
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const applyBulkDelete = () => {
+    if (!selectedSubjectId || selectedTopicsForBulk.length === 0) return;
+    for (const topicId of selectedTopicsForBulk) {
+      deleteTopic(selectedSubjectId, topicId);
+    }
+    clearBulkSelection();
+    setBulkEditMode(false);
+    setShowBulkDeleteConfirm(false);
   };
 
   // Export subject to Anki
@@ -1253,6 +1266,49 @@ function SubjectsContent() {
                 </button>
               </div>
             )}
+            {selectedTopicsForBulk.length > 0 && (
+              <div className="flex gap-2 border-l border-slate-700 pl-4">
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                  className="px-3 py-2 bg-red-600/30 hover:bg-red-600/50 text-red-400 rounded-lg font-mono text-xs transition-all border border-red-500/30 flex items-center gap-1"
+                  title="Изтрий избраните"
+                >
+                  🗑️ Изтрий ({selectedTopicsForBulk.length})
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowBulkDeleteConfirm(false)} />
+          <div className="relative bg-[#0f0f1a] border border-red-500/50 rounded-2xl w-full max-w-md shadow-2xl p-6">
+            <h3 className="text-lg font-semibold text-red-400 font-mono mb-4 flex items-center gap-2">
+              🗑️ Изтриване на теми
+            </h3>
+            <p className="text-slate-300 font-mono text-sm mb-4">
+              Сигурен ли си, че искаш да изтриеш <strong className="text-red-400">{selectedTopicsForBulk.length}</strong> теми?
+            </p>
+            <p className="text-slate-500 font-mono text-xs mb-6">
+              Това действие е необратимо. Всички данни за избраните теми ще бъдат изгубени.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowBulkDeleteConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-slate-800 text-slate-300 rounded-lg font-mono text-sm hover:bg-slate-700 transition-colors"
+              >
+                Отказ
+              </button>
+              <button
+                onClick={applyBulkDelete}
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-mono text-sm hover:bg-red-500 transition-colors"
+              >
+                🗑️ Изтрий
+              </button>
+            </div>
           </div>
         </div>
       )}

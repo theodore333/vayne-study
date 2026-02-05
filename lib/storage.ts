@@ -174,7 +174,10 @@ const defaultData: AppData = {
   developmentProjects: [],
   careerProfile: null,
   // Academic Events
-  academicEvents: []
+  academicEvents: [],
+  // Dashboard Features
+  lastOpenedTopic: null,
+  dailyGoals: []
 };
 
 // Materials storage helpers - now using IndexedDB with in-memory cache

@@ -3,13 +3,24 @@
 import { useState, useEffect, useMemo, ReactNode } from 'react';
 import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw, Flame, Brain, BarChart3, Zap } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview } from '@/lib/algorithms';
+import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
 import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
+
+// New Dashboard Widgets
+import StudyStreakWidget from '@/components/dashboard/StudyStreakWidget';
+import WeeklyBarChart from '@/components/dashboard/WeeklyBarChart';
+import GoalProgressRings from '@/components/dashboard/GoalProgressRings';
+import ContinueStudyWidget from '@/components/dashboard/ContinueStudyWidget';
+import QuickActionsRow from '@/components/dashboard/QuickActionsRow';
+import AcademicEventsWidget from '@/components/dashboard/AcademicEventsWidget';
+import SubjectHealthIndicator from '@/components/dashboard/SubjectHealthIndicator';
+import ExamReadinessWidget from '@/components/dashboard/ExamReadinessWidget';
+import DailyGoalsChecklist from '@/components/dashboard/DailyGoalsChecklist';
 
 // Component prop types
 interface StatsGridProps {
@@ -50,7 +61,7 @@ interface AlertsSectionProps {
 }
 
 export default function Dashboard() {
-  const { data, isLoading } = useApp();
+  const { data, isLoading, addDailyGoal, toggleDailyGoal, deleteDailyGoal } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
   const [ankiLoading, setAnkiLoading] = useState(false);
@@ -107,9 +118,55 @@ export default function Dashboard() {
   const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85), [activeSubjects, data.studyGoals.fsrsTargetRetention]);
   const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
 
+  // New dashboard algorithms
+  const subjectHealthStatuses = useMemo(() => getSubjectHealth(activeSubjects), [activeSubjects]);
+  const nextExamReadiness = useMemo(() => getNextExamReadiness(activeSubjects, data.questionBanks), [activeSubjects, data.questionBanks]);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
+
+      {/* HERO ROW: Streak + Exam Readiness + Continue */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StudyStreakWidget currentStreak={currentStreak} longestStreak={longestStreak} />
+        <ExamReadinessWidget readiness={nextExamReadiness} />
+        <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
+      </div>
+
+      {/* QUICK ACTIONS ROW */}
+      <QuickActionsRow subjects={activeSubjects} />
+
+      {/* PROGRESS ROW: Goal Rings + Weekly Bar Chart */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <GoalProgressRings
+          timerSessions={data.timerSessions}
+          studyGoals={data.studyGoals}
+        />
+        <WeeklyBarChart
+          timerSessions={data.timerSessions}
+          dailyGoal={data.studyGoals.dailyMinutes}
+        />
+      </div>
+
+      {/* WIDGETS ROW: Academic Events + Subject Health + Daily Goals */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <AcademicEventsWidget
+          events={data.academicEvents}
+          subjects={activeSubjects}
+          maxEvents={4}
+        />
+        <SubjectHealthIndicator
+          healthStatuses={subjectHealthStatuses}
+          maxItems={3}
+        />
+        <DailyGoalsChecklist
+          goals={data.dailyGoals}
+          onAddGoal={addDailyGoal}
+          onToggleGoal={toggleDailyGoal}
+          onDeleteGoal={deleteDailyGoal}
+        />
+      </div>
+
       <StatsGrid subjects={activeSubjects} totalTopics={totalTopics} alertsCount={alerts.length} />
 
       {/* Quick Analytics Widgets */}

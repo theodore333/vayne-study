@@ -1781,3 +1781,184 @@ export function getSubjectSetupStatus(subject: Subject): SubjectSetupStatus {
     isReadyForPlanning
   };
 }
+
+// ============================================================================
+// DASHBOARD WIDGET ALGORITHMS
+// ============================================================================
+
+export interface SubjectHealthStatus {
+  subjectId: string;
+  subjectName: string;
+  subjectColor: string;
+  health: 'healthy' | 'warning' | 'critical';
+  issues: string[];
+  daysUntilExam: number | null;
+  coverage: number;
+  decayingTopicsCount: number;
+}
+
+/**
+ * Get health status for all subjects
+ * Critical: exam ≤7d + coverage <50% OR exam ≤3d + coverage <70%
+ * Warning: exam ≤14d + coverage <70% OR >5 decaying topics
+ * Healthy: otherwise
+ */
+export function getSubjectHealth(subjects: Subject[]): SubjectHealthStatus[] {
+  const results: SubjectHealthStatus[] = [];
+
+  for (const subject of subjects) {
+    if (subject.archived || subject.deletedAt) continue;
+    if (subject.topics.length === 0) continue;
+
+    const daysUntilExam = getDaysUntil(subject.examDate);
+    const hasExam = daysUntilExam !== Infinity && daysUntilExam >= 0;
+
+    // Calculate coverage (green = 100%, yellow = 70%, orange = 30%, gray = 0%)
+    const totalTopics = subject.topics.length;
+    const greenCount = subject.topics.filter(t => t.status === 'green').length;
+    const yellowCount = subject.topics.filter(t => t.status === 'yellow').length;
+    const orangeCount = subject.topics.filter(t => t.status === 'orange').length;
+    const coverage = ((greenCount * 1.0 + yellowCount * 0.7 + orangeCount * 0.3) / totalTopics) * 100;
+
+    // Count decaying topics (not reviewed in >7 days and not gray)
+    const decayingTopicsCount = subject.topics.filter(t => {
+      if (t.status === 'gray') return false;
+      const days = getDaysSince(t.lastReview);
+      return days >= 7;
+    }).length;
+
+    const issues: string[] = [];
+    let health: 'healthy' | 'warning' | 'critical' = 'healthy';
+
+    // Critical conditions
+    if (hasExam && daysUntilExam <= 3 && coverage < 70) {
+      health = 'critical';
+      issues.push(`Изпит след ${daysUntilExam}д, само ${Math.round(coverage)}% покритие`);
+    } else if (hasExam && daysUntilExam <= 7 && coverage < 50) {
+      health = 'critical';
+      issues.push(`Изпит след ${daysUntilExam}д, само ${Math.round(coverage)}% покритие`);
+    }
+    // Warning conditions
+    else if (hasExam && daysUntilExam <= 14 && coverage < 70) {
+      health = 'warning';
+      issues.push(`Изпит след ${daysUntilExam}д, ${Math.round(coverage)}% покритие`);
+    } else if (decayingTopicsCount > 5) {
+      health = 'warning';
+      issues.push(`${decayingTopicsCount} теми се нуждаят от преговор`);
+    }
+
+    // Add decay warning if there are decaying topics but not already in issues
+    if (decayingTopicsCount > 0 && !issues.some(i => i.includes('преговор'))) {
+      if (decayingTopicsCount > 3) {
+        issues.push(`${decayingTopicsCount} теми не са преговаряни скоро`);
+      }
+    }
+
+    // Only add to results if not healthy or if there are any issues
+    if (health !== 'healthy' || issues.length > 0) {
+      results.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        health,
+        issues,
+        daysUntilExam: hasExam ? daysUntilExam : null,
+        coverage: Math.round(coverage),
+        decayingTopicsCount
+      });
+    }
+  }
+
+  // Sort by health (critical first) then by days until exam
+  const healthOrder = { critical: 0, warning: 1, healthy: 2 };
+  results.sort((a, b) => {
+    if (healthOrder[a.health] !== healthOrder[b.health]) {
+      return healthOrder[a.health] - healthOrder[b.health];
+    }
+    const aExam = a.daysUntilExam ?? Infinity;
+    const bExam = b.daysUntilExam ?? Infinity;
+    return aExam - bExam;
+  });
+
+  return results;
+}
+
+export interface NextExamReadiness {
+  subjectId: string;
+  subjectName: string;
+  subjectColor: string;
+  examDate: string;
+  daysUntil: number;
+  readinessPercent: number;
+  coverage: number;
+  predictedGrade: number;
+  status: 'ready' | 'on_track' | 'at_risk' | 'behind';
+}
+
+/**
+ * Get readiness status for the next upcoming exam
+ * Readiness = 40% coverage + 60% predicted grade (normalized to 0-100)
+ */
+export function getNextExamReadiness(
+  subjects: Subject[],
+  questionBanks: QuestionBank[] = []
+): NextExamReadiness | null {
+  // Find the closest exam
+  let closestSubject: Subject | null = null;
+  let closestDays = Infinity;
+
+  for (const subject of subjects) {
+    if (subject.archived || subject.deletedAt) continue;
+    if (!subject.examDate) continue;
+
+    const days = getDaysUntil(subject.examDate);
+    if (days >= 0 && days < closestDays) {
+      closestDays = days;
+      closestSubject = subject;
+    }
+  }
+
+  if (!closestSubject || closestDays === Infinity) return null;
+
+  // Calculate coverage
+  const totalTopics = closestSubject.topics.length;
+  if (totalTopics === 0) return null;
+
+  const greenCount = closestSubject.topics.filter(t => t.status === 'green').length;
+  const yellowCount = closestSubject.topics.filter(t => t.status === 'yellow').length;
+  const orangeCount = closestSubject.topics.filter(t => t.status === 'orange').length;
+  const coverage = ((greenCount * 1.0 + yellowCount * 0.7 + orangeCount * 0.3) / totalTopics) * 100;
+
+  // Get predicted grade
+  const prediction = calculatePredictedGrade(closestSubject, false, questionBanks);
+  const predictedGrade = prediction.current;
+
+  // Calculate readiness: 40% coverage + 60% predicted grade (normalized)
+  // Grade is 2-6, normalize to 0-100: (grade - 2) / 4 * 100
+  const gradeNormalized = ((predictedGrade - 2) / 4) * 100;
+  const readinessPercent = Math.round(coverage * 0.4 + gradeNormalized * 0.6);
+
+  // Determine status
+  let status: 'ready' | 'on_track' | 'at_risk' | 'behind';
+  if (readinessPercent >= 80) {
+    status = 'ready';
+  } else if (readinessPercent >= 60) {
+    status = 'on_track';
+  } else if (readinessPercent >= 40) {
+    status = 'at_risk';
+  } else {
+    status = 'behind';
+  }
+
+  return {
+    subjectId: closestSubject.id,
+    subjectName: closestSubject.name,
+    subjectColor: closestSubject.color,
+    examDate: closestSubject.examDate!,
+    daysUntil: closestDays,
+    readinessPercent,
+    coverage: Math.round(coverage),
+    predictedGrade,
+    status
+  };
+}

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal } from './types';
 import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
@@ -121,6 +121,12 @@ interface AppContextType {
   addAcademicEvent: (event: Omit<AcademicEvent, 'id' | 'createdAt'>) => void;
   updateAcademicEvent: (id: string, updates: Partial<AcademicEvent>) => void;
   deleteAcademicEvent: (id: string) => void;
+
+  // Dashboard Features
+  setLastOpenedTopic: (subjectId: string, topicId: string) => void;
+  addDailyGoal: (text: string, type: 'daily' | 'weekly') => void;
+  toggleDailyGoal: (id: string) => void;
+  deleteDailyGoal: (id: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -219,7 +225,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     developmentProjects: [],
     careerProfile: null,
     // Academic Events
-    academicEvents: []
+    academicEvents: [],
+    // Dashboard Features
+    lastOpenedTopic: null,
+    dailyGoals: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -1635,6 +1644,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  // ================ Dashboard Features ================
+
+  const setLastOpenedTopic = useCallback((subjectId: string, topicId: string) => {
+    updateData(prev => ({
+      ...prev,
+      lastOpenedTopic: {
+        subjectId,
+        topicId,
+        timestamp: new Date().toISOString()
+      }
+    }));
+  }, [updateData]);
+
+  const addDailyGoal = useCallback((text: string, type: 'daily' | 'weekly') => {
+    updateData(prev => ({
+      ...prev,
+      dailyGoals: [...prev.dailyGoals, {
+        id: generateId(),
+        text,
+        completed: false,
+        date: getTodayString(),
+        type,
+        createdAt: new Date().toISOString()
+      }]
+    }));
+  }, [updateData]);
+
+  const toggleDailyGoal = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      dailyGoals: prev.dailyGoals.map(goal =>
+        goal.id === id ? { ...goal, completed: !goal.completed } : goal
+      )
+    }));
+  }, [updateData]);
+
+  const deleteDailyGoal = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      dailyGoals: prev.dailyGoals.filter(goal => goal.id !== id)
+    }));
+  }, [updateData]);
+
   // Calculate streak for achievement checking (uses helper function)
   const calculateStreak = useCallback((sessions: TimerSession[]) => {
     return calculateStudyStreak(sessions);
@@ -1759,7 +1811,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Academic Events
       addAcademicEvent,
       updateAcademicEvent,
-      deleteAcademicEvent
+      deleteAcademicEvent,
+      // Dashboard Features
+      setLastOpenedTopic,
+      addDailyGoal,
+      toggleDailyGoal,
+      deleteDailyGoal
     }}>
       {children}
     </AppContext.Provider>

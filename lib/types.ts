@@ -426,6 +426,9 @@ export interface AppData {
   careerProfile: CareerProfile | null;
   // Academic Events (Колоквиуми, Контролни)
   academicEvents: AcademicEvent[];
+  // Dashboard Features
+  lastOpenedTopic: LastOpenedTopic | null;
+  dailyGoals: DailyGoal[];
 }
 
 export interface PredictedGrade {
@@ -784,5 +787,24 @@ export interface AcademicEvent {
   name?: string;             // "Колоквиум 1", "Контролно №2"
   description?: string;
   weight: number;            // 0.5 = light, 1.0 = normal, 1.5 = important
+  createdAt: string;
+}
+
+// ================ DASHBOARD FEATURES ================
+
+// Track last opened topic for "Continue where you left off"
+export interface LastOpenedTopic {
+  subjectId: string;
+  topicId: string;
+  timestamp: string;          // ISO timestamp
+}
+
+// Daily goals checklist item
+export interface DailyGoal {
+  id: string;
+  text: string;
+  completed: boolean;
+  date: string;               // YYYY-MM-DD
+  type: 'daily' | 'weekly';
   createdAt: string;
 }

@@ -18,7 +18,7 @@ export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic, trackTopicRead } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic, trackTopicRead, setLastOpenedTopic } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -181,6 +181,13 @@ export default function TopicDetailPage() {
       setMaterialSaved(true);
     }
   }, [topic?.id, topic?.material]);
+
+  // Track last opened topic for "Continue where you left off" dashboard feature
+  useEffect(() => {
+    if (subjectId && topicId && topic && subject) {
+      setLastOpenedTopic(subjectId, topicId);
+    }
+  }, [subjectId, topicId, topic, subject, setLastOpenedTopic]);
 
   if (isLoading) {
     return (

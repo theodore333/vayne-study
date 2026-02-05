@@ -80,6 +80,9 @@ function SubjectsContent() {
   const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
   const [editingTopicName, setEditingTopicName] = useState('');
 
+  // Single topic delete confirmation
+  const [topicToDelete, setTopicToDelete] = useState<{id: string, name: string} | null>(null);
+
   // Anki export state
   const [ankiConnected, setAnkiConnected] = useState(false);
   const [isExportingAnki, setIsExportingAnki] = useState(false);
@@ -1200,6 +1203,19 @@ function SubjectsContent() {
                               Quiz
                             </button>
                           )}
+                          {/* Delete Topic Button - hide in select modes */}
+                          {!quizSelectMode && !bulkEditMode && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTopicToDelete({ id: topic.id, name: topic.name });
+                              }}
+                              title="Изтрий тема"
+                              className="p-2.5 rounded-lg transition-all bg-slate-700/30 hover:bg-red-600/30 text-slate-500 hover:text-red-400 border border-transparent hover:border-red-500/30"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       );
                     })}
@@ -1378,6 +1394,22 @@ function SubjectsContent() {
           title="Изтрий завинаги"
           message={`Сигурен ли си, че искаш да изтриеш "${selectedSubject.name}" ЗАВИНАГИ? Това действие е необратимо!`}
           confirmText="Изтрий завинаги"
+          variant="danger"
+        />
+      )}
+
+      {/* Single Topic Delete Confirmation */}
+      {topicToDelete && selectedSubjectId && (
+        <ConfirmDialog
+          isOpen={!!topicToDelete}
+          onClose={() => setTopicToDelete(null)}
+          onConfirm={() => {
+            deleteTopic(selectedSubjectId, topicToDelete.id);
+            setTopicToDelete(null);
+          }}
+          title="Изтрий тема"
+          message={`Сигурен ли си, че искаш да изтриеш темата "${topicToDelete.name}"?`}
+          confirmText="Изтрий"
           variant="danger"
         />
       )}

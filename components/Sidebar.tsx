@@ -36,6 +36,15 @@ const NAV_GROUPS = [
     href: '/', // Direct link, no children
   },
   {
+    id: 'planning',
+    label: 'Планиране',
+    icon: 'Calendar',
+    children: [
+      { href: '/today', label: 'Днешен план', icon: 'Target' },
+      { href: '/schedule', label: 'График', icon: 'Calendar' },
+    ]
+  },
+  {
     id: 'learning',
     label: 'Учене',
     icon: 'BookOpen',
@@ -45,15 +54,6 @@ const NAV_GROUPS = [
       { href: '/question-bank', label: 'Сборници', icon: 'FileQuestion' },
       { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
       { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
-    ]
-  },
-  {
-    id: 'planning',
-    label: 'Планиране',
-    icon: 'Calendar',
-    children: [
-      { href: '/today', label: 'Днешен план', icon: 'Target' },
-      { href: '/schedule', label: 'График', icon: 'Calendar' },
     ]
   },
   {

@@ -160,7 +160,7 @@ export default function Dashboard() {
           maxItems={3}
         />
         <DailyGoalsChecklist
-          goals={data.dailyGoals}
+          goals={data.dailyGoals || []}
           onAddGoal={addDailyGoal}
           onToggleGoal={toggleDailyGoal}
           onDeleteGoal={deleteDailyGoal}

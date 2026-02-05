@@ -20,9 +20,10 @@ export default function DailyGoalsChecklist({
   const [newGoalText, setNewGoalText] = useState('');
   const [isAdding, setIsAdding] = useState(false);
 
-  // Filter goals for today
+  // Filter goals for today (handle undefined/null gracefully)
   const today = new Date().toISOString().split('T')[0];
-  const todayGoals = goals.filter(g => g.date === today || g.type === 'weekly');
+  const safeGoals = goals || [];
+  const todayGoals = safeGoals.filter(g => g.date === today || g.type === 'weekly');
   const completedCount = todayGoals.filter(g => g.completed).length;
 
   const handleSubmit = (e: React.FormEvent) => {

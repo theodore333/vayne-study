@@ -76,6 +76,10 @@ function SubjectsContent() {
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Inline topic name editing
+  const [editingTopicId, setEditingTopicId] = useState<string | null>(null);
+  const [editingTopicName, setEditingTopicName] = useState('');
+
   // Anki export state
   const [ankiConnected, setAnkiConnected] = useState(false);
   const [isExportingAnki, setIsExportingAnki] = useState(false);
@@ -560,7 +564,11 @@ function SubjectsContent() {
                         </div>
                       ) : (
                         <button
-                          onClick={() => setSelectedSubjectId(subject.id)}
+                          onClick={() => {
+                            setSelectedSubjectId(subject.id);
+                            // Update URL so back navigation works correctly
+                            router.push(`/subjects?id=${subject.id}`, { scroll: false });
+                          }}
                           className={"w-full p-3 rounded-lg text-left transition-all " + (isSelected ? "bg-slate-700/50 border border-slate-600" : "hover:bg-slate-800/50 border border-transparent")}
                         >
                           <div className="flex items-center gap-2 mb-2">
@@ -1087,12 +1095,47 @@ function SubjectsContent() {
                                 <span className="text-xs font-mono px-2 py-0.5 rounded shrink-0 mt-0.5" style={{ backgroundColor: selectedSubject.color + "30", color: selectedSubject.color }}>
                                   #{topic.number}
                                 </span>
-                                <span
-                                  className="text-slate-200 font-medium line-clamp-2 text-sm leading-snug"
-                                  title={topic.name}
-                                >
-                                  {topic.name}
-                                </span>
+                                {editingTopicId === topic.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingTopicName}
+                                    onChange={(e) => setEditingTopicName(e.target.value)}
+                                    onBlur={() => {
+                                      if (editingTopicName.trim() && editingTopicName !== topic.name) {
+                                        updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                      }
+                                      setEditingTopicId(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        if (editingTopicName.trim() && editingTopicName !== topic.name) {
+                                          updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                        }
+                                        setEditingTopicId(null);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingTopicId(null);
+                                      }
+                                    }}
+                                    onClick={(e) => e.preventDefault()}
+                                    autoFocus
+                                    className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-slate-200 text-sm focus:outline-none focus:border-purple-500"
+                                  />
+                                ) : (
+                                  <span
+                                    className="text-slate-200 font-medium line-clamp-2 text-sm leading-snug cursor-pointer hover:text-purple-300 transition-colors"
+                                    title="Кликни за редакция"
+                                    onClick={(e) => {
+                                      if (!quizSelectMode && !bulkEditMode) {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setEditingTopicId(topic.id);
+                                        setEditingTopicName(topic.name);
+                                      }
+                                    }}
+                                  >
+                                    {topic.name}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-mono flex-wrap">
                                 <span>{config.label}</span>

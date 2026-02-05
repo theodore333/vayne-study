@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 import MaterialEditor from '@/components/MaterialEditor';
 import { TextHighlight } from '@/lib/types';
@@ -49,6 +49,10 @@ export default function TopicDetailPage() {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null); // For enlarged view
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
+
+  // Inline topic name editing
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
 
   // Open/close reader mode via URL
   const openReaderMode = () => {
@@ -419,9 +423,62 @@ export default function TopicDetailPage() {
               </span>
               <span className="text-sm text-slate-400 font-mono">{config.label}</span>
             </div>
-            <h1 className="text-2xl font-bold text-slate-100 font-mono">
-              {topic.name}
-            </h1>
+            {/* Editable Topic Name */}
+            {isEditingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && editNameValue.trim()) {
+                      updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      setIsEditingName(false);
+                    }
+                    if (e.key === 'Escape') {
+                      setIsEditingName(false);
+                      setEditNameValue(topic.name);
+                    }
+                  }}
+                  className="flex-1 text-2xl font-bold text-slate-100 font-mono bg-slate-800/50 border border-slate-600 rounded-lg px-3 py-1 focus:outline-none focus:border-cyan-500"
+                  autoFocus
+                />
+                <button
+                  onClick={() => {
+                    if (editNameValue.trim()) {
+                      updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      setIsEditingName(false);
+                    }
+                  }}
+                  className="p-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+                  title="Запази"
+                >
+                  <Check size={18} />
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingName(false);
+                    setEditNameValue(topic.name);
+                  }}
+                  className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors"
+                  title="Откажи"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            ) : (
+              <h1
+                onClick={() => {
+                  setEditNameValue(topic.name);
+                  setIsEditingName(true);
+                }}
+                className="text-2xl font-bold text-slate-100 font-mono cursor-pointer hover:text-cyan-300 transition-colors group flex items-center gap-2"
+                title="Кликни за редактиране"
+              >
+                {topic.name}
+                <Pencil size={16} className="opacity-0 group-hover:opacity-50 transition-opacity" />
+              </h1>
+            )}
 
             {/* Topic Size Selector */}
             <div className="flex items-center gap-2 mt-3">

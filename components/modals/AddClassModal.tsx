@@ -20,7 +20,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
   const { data, addClass } = useApp();
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const [subjectId, setSubjectId] = useState(activeSubjects[0]?.id || '');
   const [day, setDay] = useState(defaultDay);
   const [time, setTime] = useState('09:00');

@@ -65,9 +65,9 @@ export default function TimerPage() {
   const settings = data.pomodoroSettings;
   const goals = data.studyGoals;
 
-  // Filter out archived subjects
+  // Filter out archived and soft-deleted subjects
   const activeSubjects = useMemo(
-    () => data.subjects.filter(s => !s.archived),
+    () => data.subjects.filter(s => !s.archived && !s.deletedAt),
     [data.subjects]
   );
   const academicPeriod = data.academicPeriod;

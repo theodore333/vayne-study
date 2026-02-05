@@ -25,7 +25,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   }, [onClose]);
   const { data } = useApp();
   const activeSubjects = useMemo(
-    () => data.subjects.filter(s => !s.archived),
+    () => data.subjects.filter(s => !s.archived && !s.deletedAt),
     [data.subjects]
   );
 

@@ -17,7 +17,7 @@ interface ImportResult {
 export default function SettingsPage() {
   const { data, updateUsageBudget, setTopicStatus, updateStudyGoals, updateCareerProfile } = useApp();
   const { usageData, studyGoals } = data;
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
@@ -234,7 +234,7 @@ export default function SettingsPage() {
     };
 
     // Build a map of topics ONLY from the selected subject
-    const activeSubjects = data.subjects.filter(s => !s.archived);
+    const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
     const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
     if (!selectedSubject) {
       setImportError('Предметът не е намерен');

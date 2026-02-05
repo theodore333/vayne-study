@@ -135,9 +135,9 @@ export default function TodayPage() {
     localStorage.setItem(`completed-topics-${today}`, JSON.stringify([...completedTopics]));
   }, [completedTopics, today]);
 
-  // Filter out archived subjects
+  // Filter out archived and soft-deleted subjects
   const activeSubjects = useMemo(
-    () => data.subjects.filter(s => !s.archived),
+    () => data.subjects.filter(s => !s.archived && !s.deletedAt),
     [data.subjects]
   );
 

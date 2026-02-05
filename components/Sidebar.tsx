@@ -143,8 +143,8 @@ export default function Sidebar() {
     );
   }
 
-  // Filter out archived subjects
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  // Filter out archived and soft-deleted subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   // Wrap in try-catch to prevent sidebar crash if algorithm fails
   let alerts: ReturnType<typeof getAlerts> = [];

@@ -17,7 +17,7 @@ export default function AddAcademicEventModal({
 }: AddAcademicEventModalProps) {
   const { data, addAcademicEvent } = useApp();
 
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const [eventType, setEventType] = useState<AcademicEventType>('colloquium');
   const [subjectId, setSubjectId] = useState(preselectedSubjectId || activeSubjects[0]?.id || '');

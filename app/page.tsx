@@ -88,8 +88,8 @@ export default function Dashboard() {
     );
   }
 
-  // Filter out archived subjects
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  // Filter out archived and soft-deleted subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals);
   const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);

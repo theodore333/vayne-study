@@ -11,13 +11,13 @@ import ConfirmDialog from '@/components/modals/ConfirmDialog';
 export default function QuestionBankPage() {
   const { data, deleteQuestionBank } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
-    data.subjects.filter(s => !s.archived).length > 0 ? data.subjects.filter(s => !s.archived)[0].id : null
+    data.subjects.filter(s => !s.archived && !s.deletedAt).length > 0 ? data.subjects.filter(s => !s.archived && !s.deletedAt)[0].id : null
   );
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingBank, setDeletingBank] = useState<{ id: string; name: string } | null>(null);
 
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
   const subjectBanks = (data.questionBanks || []).filter(b => b.subjectId === selectedSubjectId);
 

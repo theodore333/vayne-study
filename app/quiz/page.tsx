@@ -94,9 +94,9 @@ function QuizContent() {
     };
   }, []);
 
-  // Filter out archived subjects for selection
+  // Filter out archived and soft-deleted subjects for selection
   const activeSubjects = useMemo(
-    () => data.subjects.filter(s => !s.archived),
+    () => data.subjects.filter(s => !s.archived && !s.deletedAt),
     [data.subjects]
   );
 

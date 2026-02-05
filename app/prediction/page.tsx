@@ -19,8 +19,8 @@ export default function PredictionPage() {
     );
   }
 
-  // Filter out archived subjects
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  // Filter out archived and soft-deleted subjects
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const selectedSubject = selectedSubjectId
     ? activeSubjects.find(s => s.id === selectedSubjectId)

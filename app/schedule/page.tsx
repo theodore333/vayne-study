@@ -36,7 +36,7 @@ export default function SchedulePage() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const activeSubjects = data.subjects.filter(s => !s.archived);
+    const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
     // Get all exams sorted by date
     const exams = activeSubjects
@@ -108,7 +108,7 @@ export default function SchedulePage() {
       .sort((a, b) => a.time.localeCompare(b.time));
   };
 
-  const activeSubjects = data.subjects.filter(s => !s.archived);
+  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const getSubjectById = (id: string) => data.subjects.find(s => s.id === id);
 
   return (

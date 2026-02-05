@@ -9,7 +9,7 @@ export default function AnalyticsPage() {
   const { data, isLoading } = useApp();
 
   const activeSubjects = useMemo(() =>
-    data.subjects.filter(s => !s.archived),
+    data.subjects.filter(s => !s.archived && !s.deletedAt),
     [data.subjects]
   );
 

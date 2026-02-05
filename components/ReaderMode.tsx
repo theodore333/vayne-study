@@ -659,13 +659,20 @@ function htmlToMarkdown(html: string): string {
       .replace(/<li[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, '- [ ] $1\n') + '\n';
   });
 
-  // Tables
+  // Tables - strip ALL HTML from cells and remove newlines
   md = md.replace(/<table[^>]*>([\s\S]*?)<\/table>/gi, (_, content) => {
     let result = '';
     const rows = content.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
     rows.forEach((row: string, index: number) => {
       const cells = row.match(/<t[hd][^>]*>([\s\S]*?)<\/t[hd]>/gi) || [];
-      const cellContents = cells.map((cell: string) => cell.replace(/<\/?t[hd][^>]*>/gi, '').trim());
+      const cellContents = cells.map((cell: string) => {
+        // Remove td/th tags, then ALL other HTML tags, then clean whitespace
+        return cell
+          .replace(/<\/?t[hd][^>]*>/gi, '')
+          .replace(/<[^>]+>/g, '') // Remove ALL HTML tags
+          .replace(/\s+/g, ' ')    // Collapse whitespace
+          .trim();
+      });
       result += '| ' + cellContents.join(' | ') + ' |\n';
       if (index === 0) {
         result += '| ' + cellContents.map(() => '---').join(' | ') + ' |\n';

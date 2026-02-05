@@ -1082,7 +1082,12 @@ export default function ReaderMode({
         },
       }),
     ],
-    content: cleanupEmptyListItems(markdownToHtml(topic.material)),
+    // Detect if content is HTML (starts with <) or markdown, handle accordingly
+    content: cleanupEmptyListItems(
+      topic.material?.trim().startsWith('<')
+        ? topic.material  // Already HTML, use directly
+        : markdownToHtml(topic.material)  // Markdown, convert to HTML
+    ),
     editorProps: {
       attributes: {
         class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',
@@ -1253,8 +1258,8 @@ export default function ReaderMode({
         setIsSaving(true);
 
         try {
-          const markdown = htmlToMarkdown(html);
-          onSaveMaterialRef.current(markdown);
+          // Save HTML directly - no markdown conversion (avoids table/formatting bugs)
+          onSaveMaterialRef.current(html);
           setLastSaved(new Date());
           hasUnsavedChangesRef.current = false;
           setHasUnsavedChanges(false);
@@ -1316,8 +1321,7 @@ export default function ReaderMode({
         clearTimeout(saveTimeoutRef.current);
       }
       if (editor && hasUnsavedChangesRef.current) {
-        const markdown = htmlToMarkdown(editor.getHTML());
-        onSaveMaterialRef.current(markdown);
+        onSaveMaterialRef.current(editor.getHTML());
       }
     };
   }, [editor]);
@@ -1331,8 +1335,7 @@ export default function ReaderMode({
           isSavingRef.current = true;
           setIsSaving(true);
           try {
-            const markdown = htmlToMarkdown(html);
-            onSaveMaterialRef.current(markdown);
+            onSaveMaterialRef.current(html);
             setLastSaved(new Date());
             hasUnsavedChangesRef.current = false;
             setHasUnsavedChanges(false);
@@ -1366,8 +1369,7 @@ export default function ReaderMode({
 
     // ALWAYS save - ignore isSaving state to prevent data loss
     try {
-      const markdown = htmlToMarkdown(editor.getHTML());
-      onSaveMaterialRef.current(markdown);
+      onSaveMaterialRef.current(editor.getHTML());
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
       isSavingRef.current = false;
@@ -1511,8 +1513,7 @@ export default function ReaderMode({
       if (hasUnsavedChangesRef.current) {
         // Force save before unload
         if (editor) {
-          const markdown = htmlToMarkdown(editor.getHTML());
-          onSaveMaterialRef.current(markdown);
+          onSaveMaterialRef.current(editor.getHTML());
         }
         // Show browser warning
         e.preventDefault();

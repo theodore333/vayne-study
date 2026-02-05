@@ -26,7 +26,8 @@ import {
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
-  Calculator, Check
+  Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
+  ChevronRight, Eye
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -51,6 +52,17 @@ function ResizableImageComponent({ node, updateAttributes, selected }: NodeViewP
   const imageRef = useRef<HTMLImageElement>(null);
   const startX = useRef(0);
   const startWidth = useRef(0);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Cleanup on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, []);
 
   const handleMouseDown = (e: React.MouseEvent, corner: string) => {
     e.preventDefault();
@@ -67,6 +79,13 @@ function ResizableImageComponent({ node, updateAttributes, selected }: NodeViewP
 
     const handleMouseUp = () => {
       setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      cleanupRef.current = null;
+    };
+
+    // Store cleanup function
+    cleanupRef.current = () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -698,6 +717,236 @@ function htmlToMarkdown(html: string): string {
   return md;
 }
 
+// Calculate word count and reading time
+function calculateWordCount(html: string): { words: number; chars: number; readingTime: number } {
+  if (typeof window === 'undefined') return { words: 0, chars: 0, readingTime: 0 };
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  const text = tempDiv.textContent || '';
+  const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+  const chars = text.length;
+  const readingTime = Math.ceil(words / 200); // ~200 words per minute
+
+  return { words, chars, readingTime };
+}
+
+// Extract TOC from editor content
+function extractTOC(html: string): Array<{ level: number; text: string; id: string }> {
+  if (typeof window === 'undefined') return [];
+
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  const headings = tempDiv.querySelectorAll('h1, h2, h3');
+  const items: Array<{ level: number; text: string; id: string }> = [];
+
+  headings.forEach((heading, index) => {
+    const level = parseInt(heading.tagName[1]);
+    const text = heading.textContent?.trim() || '';
+    if (text) {
+      items.push({
+        level,
+        text,
+        id: `heading-${index}`
+      });
+    }
+  });
+
+  return items;
+}
+
+// Toast notification component
+function SaveToast({ show, message, type, onClose }: {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error';
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (show) {
+      const timer = setTimeout(onClose, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [show, onClose]);
+
+  if (!show) return null;
+
+  return (
+    <div className={`fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in ${
+      type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
+    }`}>
+      {type === 'success' ? <CheckCircle2 size={18} /> : <X size={18} />}
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  );
+}
+
+// Search bar component
+function SearchBar({
+  show,
+  query,
+  setQuery,
+  replaceQuery,
+  setReplaceQuery,
+  showReplace,
+  setShowReplace,
+  onClose,
+  onNext,
+  onPrev,
+  onReplace,
+  onReplaceAll,
+  resultsCount,
+  currentIndex,
+  inputRef
+}: {
+  show: boolean;
+  query: string;
+  setQuery: (q: string) => void;
+  replaceQuery: string;
+  setReplaceQuery: (q: string) => void;
+  showReplace: boolean;
+  setShowReplace: (show: boolean) => void;
+  onClose: () => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onReplace: () => void;
+  onReplaceAll: () => void;
+  resultsCount: number;
+  currentIndex: number;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}) {
+  if (!show) return null;
+
+  return (
+    <div className="absolute top-0 right-0 z-50 bg-white border border-stone-200 rounded-lg shadow-lg p-3 m-4 w-80">
+      <div className="flex items-center gap-2 mb-2">
+        <Search size={16} className="text-stone-400" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Търси..."
+          className="flex-1 px-2 py-1 text-sm border border-stone-200 rounded focus:outline-none focus:border-amber-500"
+          autoFocus
+        />
+        <button
+          onClick={() => setShowReplace(!showReplace)}
+          className={`p-1 rounded ${showReplace ? 'bg-amber-100 text-amber-700' : 'text-stone-400 hover:bg-stone-100'}`}
+          title="Замени"
+        >
+          <Replace size={16} />
+        </button>
+        <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-600">
+          <X size={16} />
+        </button>
+      </div>
+
+      {showReplace && (
+        <div className="flex items-center gap-2 mb-2">
+          <Replace size={16} className="text-stone-400" />
+          <input
+            type="text"
+            value={replaceQuery}
+            onChange={(e) => setReplaceQuery(e.target.value)}
+            placeholder="Замени с..."
+            className="flex-1 px-2 py-1 text-sm border border-stone-200 rounded focus:outline-none focus:border-amber-500"
+          />
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-stone-500">
+          {query ? `${resultsCount > 0 ? currentIndex + 1 : 0} от ${resultsCount}` : 'Въведи текст'}
+        </span>
+        <div className="flex items-center gap-1">
+          {showReplace && (
+            <>
+              <button
+                onClick={onReplace}
+                disabled={resultsCount === 0}
+                className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+              >
+                Замени
+              </button>
+              <button
+                onClick={onReplaceAll}
+                disabled={resultsCount === 0}
+                className="px-2 py-1 text-xs bg-amber-100 text-amber-700 rounded hover:bg-amber-200 disabled:opacity-50"
+              >
+                Всички
+              </button>
+            </>
+          )}
+          <button
+            onClick={onPrev}
+            disabled={resultsCount === 0}
+            className="p-1 text-stone-500 hover:bg-stone-100 rounded disabled:opacity-50"
+          >
+            <ChevronUp size={16} />
+          </button>
+          <button
+            onClick={onNext}
+            disabled={resultsCount === 0}
+            className="p-1 text-stone-500 hover:bg-stone-100 rounded disabled:opacity-50"
+          >
+            <ChevronDown size={16} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Table of Contents component
+function TableOfContents({
+  items,
+  show,
+  onClose,
+  onNavigate
+}: {
+  items: Array<{ level: number; text: string; id: string }>;
+  show: boolean;
+  onClose: () => void;
+  onNavigate: (id: string) => void;
+}) {
+  if (!show) return null;
+
+  return (
+    <div className="absolute top-0 left-0 z-50 bg-white border border-stone-200 rounded-lg shadow-lg p-4 m-4 w-72 max-h-96 overflow-y-auto">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2">
+          <ListTree size={16} />
+          Съдържание
+        </h3>
+        <button onClick={onClose} className="p-1 text-stone-400 hover:text-stone-600">
+          <X size={16} />
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-stone-400 text-center py-4">Няма заглавия</p>
+      ) : (
+        <nav className="space-y-1">
+          {items.map((item, index) => (
+            <button
+              key={index}
+              onClick={() => onNavigate(item.id)}
+              className={`w-full text-left px-2 py-1.5 text-sm rounded hover:bg-stone-100 transition-colors ${
+                item.level === 1 ? 'font-semibold text-stone-800' :
+                item.level === 2 ? 'pl-4 text-stone-700' :
+                'pl-6 text-stone-600 text-xs'
+              }`}
+            >
+              <span className="line-clamp-1">{item.text}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+    </div>
+  );
+}
+
 export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveMaterial }: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -711,7 +960,21 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // New features state
+  const [showSearch, setShowSearch] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [replaceQuery, setReplaceQuery] = useState('');
+  const [showReplace, setShowReplace] = useState(false);
+  const [searchResults, setSearchResults] = useState<number>(0);
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [showTOC, setShowTOC] = useState(false);
+  const [tocItems, setTocItems] = useState<Array<{ level: number; text: string; id: string }>>([]);
+  const [saveToast, setSaveToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
+  const [wordCount, setWordCount] = useState({ words: 0, chars: 0, readingTime: 0 });
+  const [focusMode, setFocusMode] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const highlightPickerRef = useRef<HTMLDivElement>(null);
   const tableMenuRef = useRef<HTMLDivElement>(null);
@@ -1006,6 +1269,11 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     };
   }, [editor, hasUnsavedChanges, onSaveMaterial]);
 
+  // Show toast helper
+  const showToast = useCallback((message: string, type: 'success' | 'error') => {
+    setSaveToast({ show: true, message, type });
+  }, []);
+
   // Force save
   const forceSave = useCallback(() => {
     if (editor && !isSaving) {
@@ -1018,14 +1286,16 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         onSaveMaterial(markdown);
         setLastSaved(new Date());
         setHasUnsavedChanges(false);
+        showToast('Запазено успешно', 'success');
       } catch (error) {
         console.error('Force save error:', error);
+        showToast('Грешка при запазване', 'error');
         setHasUnsavedChanges(false);
       } finally {
         setTimeout(() => setIsSaving(false), 100);
       }
     }
-  }, [editor, onSaveMaterial, isSaving]);
+  }, [editor, onSaveMaterial, isSaving, showToast]);
 
   // Insert formula into editor
   const handleInsertFormula = (formula: string) => {
@@ -1045,22 +1315,115 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
+  // Search functionality
+  useEffect(() => {
+    if (!editor || !searchQuery) {
+      setSearchResults(0);
+      setCurrentSearchIndex(0);
+      return;
+    }
+
+    // Use editor's built-in search or manual search
+    const text = editor.getText();
+    const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const matches = text.match(regex);
+    setSearchResults(matches?.length || 0);
+    setCurrentSearchIndex(0);
+  }, [editor, searchQuery]);
+
+  const handleSearchNext = useCallback(() => {
+    if (!editor || searchResults === 0) return;
+    setCurrentSearchIndex((prev) => (prev + 1) % searchResults);
+    // Focus on match in editor
+    editor.commands.focus();
+  }, [editor, searchResults]);
+
+  const handleSearchPrev = useCallback(() => {
+    if (!editor || searchResults === 0) return;
+    setCurrentSearchIndex((prev) => (prev - 1 + searchResults) % searchResults);
+    editor.commands.focus();
+  }, [editor, searchResults]);
+
+  const handleReplace = useCallback(() => {
+    if (!editor || !searchQuery) return;
+    const { state } = editor;
+    const { from, to } = state.selection;
+    const selectedText = state.doc.textBetween(from, to);
+
+    if (selectedText.toLowerCase() === searchQuery.toLowerCase()) {
+      editor.chain().focus().deleteSelection().insertContent(replaceQuery).run();
+    }
+  }, [editor, searchQuery, replaceQuery]);
+
+  const handleReplaceAll = useCallback(() => {
+    if (!editor || !searchQuery) return;
+    const html = editor.getHTML();
+    const regex = new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const newHtml = html.replace(regex, replaceQuery);
+    editor.commands.setContent(newHtml);
+    setSearchResults(0);
+    showToast(`Заменени ${searchResults} съвпадения`, 'success');
+  }, [editor, searchQuery, replaceQuery, searchResults, showToast]);
+
+  // Navigate to heading in TOC
+  const handleTOCNavigate = useCallback((id: string) => {
+    if (!editor) return;
+
+    const headings = editor.view.dom.querySelectorAll('h1, h2, h3');
+    const index = parseInt(id.split('-')[1]);
+    const heading = headings[index];
+
+    if (heading) {
+      heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setShowTOC(false);
+    }
+  }, [editor]);
+
+  // Update word count and TOC when content changes
+  useEffect(() => {
+    if (editor) {
+      const html = editor.getHTML();
+      setWordCount(calculateWordCount(html));
+      setTocItems(extractTOC(html));
+    }
+  }, [editor?.getHTML()]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        forceSave();
-        onClose();
+        if (showSearch) {
+          setShowSearch(false);
+          setSearchQuery('');
+        } else if (showTOC) {
+          setShowTOC(false);
+        } else {
+          forceSave();
+          onClose();
+        }
       }
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         forceSave();
       }
+      // Ctrl+F for search
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setShowSearch(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
+      // Ctrl+H for replace
+      if (e.key === 'h' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setShowSearch(true);
+        setShowReplace(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, forceSave]);
+  }, [onClose, forceSave, showSearch, showTOC]);
 
   // Warn about unsaved changes before page unload
   useEffect(() => {
@@ -1183,6 +1546,51 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               ) : null}
             </div>
 
+            {/* Word count badge */}
+            <div className="hidden md:flex items-center gap-1.5 text-xs text-stone-400 bg-stone-100 px-2 py-1 rounded">
+              <FileText size={12} />
+              <span>{wordCount.words} думи</span>
+              <span className="text-stone-300">•</span>
+              <Clock size={12} />
+              <span>{wordCount.readingTime} мин</span>
+            </div>
+
+            {/* Search button */}
+            <button
+              onClick={() => {
+                setShowSearch(!showSearch);
+                if (!showSearch) setTimeout(() => searchInputRef.current?.focus(), 100);
+              }}
+              className={`p-2 rounded-lg transition-colors ${
+                showSearch ? 'bg-amber-100 text-amber-700' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+              title="Търсене (Ctrl+F)"
+            >
+              <Search size={20} />
+            </button>
+
+            {/* TOC button */}
+            <button
+              onClick={() => setShowTOC(!showTOC)}
+              className={`p-2 rounded-lg transition-colors ${
+                showTOC ? 'bg-amber-100 text-amber-700' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+              title="Съдържание"
+            >
+              <ListTree size={20} />
+            </button>
+
+            {/* Focus mode toggle */}
+            <button
+              onClick={() => setFocusMode(!focusMode)}
+              className={`p-2 rounded-lg transition-colors ${
+                focusMode ? 'bg-indigo-100 text-indigo-700' : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+              title={focusMode ? 'Изключи режим фокус' : 'Режим фокус (чисто четене)'}
+            >
+              <Eye size={20} />
+            </button>
+
             <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
@@ -1200,7 +1608,8 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           </div>
         </div>
 
-        {/* Formatting Toolbar */}
+        {/* Formatting Toolbar - hidden in focus mode */}
+        {!focusMode && (
         <div className="px-4 py-2 border-t border-stone-100 flex items-center gap-1 flex-wrap bg-stone-50/50">
           {/* Undo/Redo */}
           <ToolbarButton
@@ -1539,6 +1948,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
             <span className="hidden sm:inline">{isFormatting ? 'Форматиране...' : 'AI Формат'}</span>
           </button>
         </div>
+        )}
       </header>
 
       {/* Main content */}
@@ -1559,78 +1969,118 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           )}
 
           {/* Editor */}
-          <article className="px-6 py-6 max-w-none">
+          <article className={`py-6 pb-16 max-w-none transition-all duration-300 ${
+            focusMode
+              ? 'px-8 md:px-16 lg:px-32 xl:px-48 bg-stone-50'
+              : 'px-6 md:px-12 lg:px-20'
+          }`}>
             <style jsx global>{`
+              /* Animation for toast */
+              @keyframes fade-in {
+                from { opacity: 0; transform: translate(-50%, 10px); }
+                to { opacity: 1; transform: translate(-50%, 0); }
+              }
+              .animate-fade-in {
+                animation: fade-in 0.2s ease-out;
+              }
+
               .ProseMirror {
-                font-family: 'Georgia', 'Charter', serif;
+                font-family: 'Georgia', 'Charter', 'Cambria', 'Times New Roman', serif;
                 font-size: ${fontSize}px;
-                line-height: 1.8;
-                color: #292524;
+                line-height: 1.9;
+                color: #1c1917;
+                letter-spacing: 0.01em;
+                word-spacing: 0.05em;
+                max-width: ${focusMode ? '65ch' : '80ch'};
+                margin: 0 auto;
+                text-rendering: optimizeLegibility;
+                -webkit-font-smoothing: antialiased;
               }
               .ProseMirror:focus {
                 outline: none;
               }
               .ProseMirror p {
-                margin-bottom: 1em;
+                margin-bottom: 1.25em;
+                text-align: justify;
+                hyphens: auto;
               }
               .ProseMirror h1 {
-                font-size: 1.875em;
+                font-size: 2em;
                 font-weight: 700;
+                margin-top: 2em;
+                margin-bottom: 0.75em;
+                color: #0c0a09;
+                letter-spacing: -0.02em;
+                line-height: 1.3;
+                border-bottom: 2px solid #e7e5e4;
+                padding-bottom: 0.3em;
+              }
+              .ProseMirror h2 {
+                font-size: 1.6em;
+                font-weight: 700;
+                margin-top: 1.75em;
+                margin-bottom: 0.6em;
+                color: #0c0a09;
+                letter-spacing: -0.01em;
+                line-height: 1.35;
+              }
+              .ProseMirror h3 {
+                font-size: 1.3em;
+                font-weight: 600;
                 margin-top: 1.5em;
                 margin-bottom: 0.5em;
                 color: #1c1917;
-              }
-              .ProseMirror h2 {
-                font-size: 1.5em;
-                font-weight: 700;
-                margin-top: 1.25em;
-                margin-bottom: 0.5em;
-                color: #1c1917;
-              }
-              .ProseMirror h3 {
-                font-size: 1.25em;
-                font-weight: 600;
-                margin-top: 1em;
-                margin-bottom: 0.5em;
-                color: #1c1917;
+                line-height: 1.4;
               }
               .ProseMirror strong {
                 font-weight: 700;
-                color: #1c1917;
+                color: #0c0a09;
               }
               .ProseMirror em {
                 font-style: italic;
               }
               .ProseMirror u {
                 text-decoration: underline;
+                text-underline-offset: 2px;
               }
               .ProseMirror s {
                 text-decoration: line-through;
+                opacity: 0.7;
               }
               .ProseMirror mark {
-                padding: 0.125em 0.25em;
-                border-radius: 0.25em;
+                padding: 0.1em 0.3em;
+                border-radius: 0.2em;
+                box-decoration-break: clone;
               }
               .ProseMirror ul {
                 list-style-type: disc;
-                padding-left: 1.5em;
-                margin-bottom: 1em;
+                padding-left: 1.75em;
+                margin-bottom: 1.25em;
               }
               .ProseMirror ol {
                 list-style-type: decimal;
-                padding-left: 1.5em;
-                margin-bottom: 1em;
+                padding-left: 1.75em;
+                margin-bottom: 1.25em;
               }
               .ProseMirror li {
-                margin-bottom: 0.25em;
+                margin-bottom: 0.4em;
+                padding-left: 0.25em;
+              }
+              .ProseMirror li::marker {
+                color: #78716c;
               }
               .ProseMirror blockquote {
-                border-left: 4px solid #d6d3d1;
-                padding-left: 1em;
+                border-left: 4px solid #d97706;
+                padding-left: 1.25em;
                 margin-left: 0;
                 margin-right: 0;
-                color: #57534e;
+                margin-top: 1.5em;
+                margin-bottom: 1.5em;
+                color: #44403c;
                 font-style: italic;
+                background: linear-gradient(to right, rgba(217, 119, 6, 0.05), transparent);
+                padding: 1em 1.25em;
+                border-radius: 0 0.5em 0.5em 0;
               }
               .ProseMirror p.is-editor-empty:first-child::before {
                 content: attr(data-placeholder);
@@ -1864,6 +2314,63 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           <ChevronUp size={24} />
         </button>
       )}
+
+      {/* Search Bar */}
+      <SearchBar
+        show={showSearch}
+        query={searchQuery}
+        setQuery={setSearchQuery}
+        replaceQuery={replaceQuery}
+        setReplaceQuery={setReplaceQuery}
+        showReplace={showReplace}
+        setShowReplace={setShowReplace}
+        onClose={() => {
+          setShowSearch(false);
+          setSearchQuery('');
+          setReplaceQuery('');
+        }}
+        onNext={handleSearchNext}
+        onPrev={handleSearchPrev}
+        onReplace={handleReplace}
+        onReplaceAll={handleReplaceAll}
+        resultsCount={searchResults}
+        currentIndex={currentSearchIndex}
+        inputRef={searchInputRef}
+      />
+
+      {/* Table of Contents */}
+      <TableOfContents
+        items={tocItems}
+        show={showTOC}
+        onClose={() => setShowTOC(false)}
+        onNavigate={handleTOCNavigate}
+      />
+
+      {/* Save Toast */}
+      <SaveToast
+        show={saveToast.show}
+        message={saveToast.message}
+        type={saveToast.type}
+        onClose={() => setSaveToast({ ...saveToast, show: false })}
+      />
+
+      {/* Status bar */}
+      <div className="fixed bottom-0 left-0 right-0 h-8 bg-stone-100 border-t border-stone-200 flex items-center justify-between px-4 text-xs text-stone-500 z-40">
+        <div className="flex items-center gap-4">
+          <span className="flex items-center gap-1">
+            <FileText size={12} />
+            {wordCount.words} думи • {wordCount.chars} символи
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock size={12} />
+            ~{wordCount.readingTime} мин четене
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <span>{Math.round(scrollProgress)}% прочетено</span>
+          {focusMode && <span className="text-indigo-600 font-medium">Режим фокус</span>}
+        </div>
+      </div>
 
       {/* Formula Modal */}
       <FormulaModal

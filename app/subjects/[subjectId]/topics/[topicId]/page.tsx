@@ -319,7 +319,11 @@ export default function TopicDetailPage() {
       const key = `material-${topicId}`;
       localStorage.setItem(key, newMaterial);
     } catch (e) {
-      // ignore
+      // Handle QuotaExceededError
+      if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+        console.error('localStorage quota exceeded');
+        alert('Внимание: Браузърното хранилище е пълно. Някои данни може да не се запазят локално. Моля, освободете място или разчитайте на cloud синхронизация.');
+      }
     }
   };
 

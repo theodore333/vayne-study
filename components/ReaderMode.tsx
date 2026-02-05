@@ -978,7 +978,8 @@ export default function ReaderMode({
   const [showTableGridPicker, setShowTableGridPicker] = useState(false);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const isSavingRef = useRef(false); // Ref to track saving state for onUpdate callback
+  const isSavingRef = useRef(false);
+  const hasUnsavedChangesRef = useRef(false); // Use ref to avoid re-renders on every keystroke
 
   // New features state
   const [showSearch, setShowSearch] = useState(false);
@@ -1212,24 +1213,28 @@ export default function ReaderMode({
       },
     },
     onUpdate: ({ editor }) => {
-      setHasUnsavedChanges(true);
+      // Use ref to avoid re-render on every keystroke - only update UI state when saving
+      hasUnsavedChangesRef.current = true;
 
-      // Always clear and reschedule - don't skip saves
+      // Always clear and reschedule
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
       saveTimeoutRef.current = setTimeout(() => {
-        // Double-check we have content before saving
         const html = editor.getHTML();
         if (!html || html === '<p></p>') return;
 
+        // Now update UI state (only once per save, not per keystroke)
+        setHasUnsavedChanges(true);
         isSavingRef.current = true;
         setIsSaving(true);
+
         try {
           const markdown = htmlToMarkdown(html);
           onSaveMaterialRef.current(markdown);
           setLastSaved(new Date());
+          hasUnsavedChangesRef.current = false;
           setHasUnsavedChanges(false);
         } catch (error) {
           console.error('Save error:', error);
@@ -1288,17 +1293,17 @@ export default function ReaderMode({
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
-      if (editor && hasUnsavedChanges) {
+      if (editor && hasUnsavedChangesRef.current) {
         const markdown = htmlToMarkdown(editor.getHTML());
         onSaveMaterialRef.current(markdown);
       }
     };
-  }, [editor, hasUnsavedChanges]);
+  }, [editor]);
 
   // BACKUP: Auto-save every 3 seconds if there are unsaved changes
   useEffect(() => {
     const interval = setInterval(() => {
-      if (editor && hasUnsavedChanges && !isSavingRef.current) {
+      if (editor && hasUnsavedChangesRef.current && !isSavingRef.current) {
         const html = editor.getHTML();
         if (html && html !== '<p></p>') {
           isSavingRef.current = true;
@@ -1307,6 +1312,7 @@ export default function ReaderMode({
             const markdown = htmlToMarkdown(html);
             onSaveMaterialRef.current(markdown);
             setLastSaved(new Date());
+            hasUnsavedChangesRef.current = false;
             setHasUnsavedChanges(false);
           } catch (e) {
             console.error('Backup save error:', e);
@@ -1319,7 +1325,7 @@ export default function ReaderMode({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [editor, hasUnsavedChanges]);
+  }, [editor]);
 
   // Show toast helper
   const showToast = useCallback((message: string, type: 'success' | 'error') => {
@@ -1480,11 +1486,11 @@ export default function ReaderMode({
   // Warn about unsaved changes before page unload
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
+      if (hasUnsavedChangesRef.current) {
         // Force save before unload
         if (editor) {
           const markdown = htmlToMarkdown(editor.getHTML());
-          onSaveMaterial(markdown);
+          onSaveMaterialRef.current(markdown);
         }
         // Show browser warning
         e.preventDefault();
@@ -1494,7 +1500,7 @@ export default function ReaderMode({
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [hasUnsavedChanges, editor, onSaveMaterial]);
+  }, [editor]);
 
   // Format text with AI
   const formatTextWithAI = async () => {

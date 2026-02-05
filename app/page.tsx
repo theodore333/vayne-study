@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, ReactNode } from 'react';
+import dynamic from 'next/dynamic';
 import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw, Flame, Brain, BarChart3, Zap } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
@@ -11,9 +12,12 @@ import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 
-// New Dashboard Widgets
+// Dashboard Widgets
 import StudyStreakWidget from '@/components/dashboard/StudyStreakWidget';
-import WeeklyBarChart from '@/components/dashboard/WeeklyBarChart';
+const WeeklyBarChart = dynamic(() => import('@/components/dashboard/WeeklyBarChart'), {
+  ssr: false,
+  loading: () => <div className="h-40 bg-slate-800/30 rounded-lg animate-pulse" />
+});
 import GoalProgressRings from '@/components/dashboard/GoalProgressRings';
 import ContinueStudyWidget from '@/components/dashboard/ContinueStudyWidget';
 import QuickActionsRow from '@/components/dashboard/QuickActionsRow';
@@ -93,8 +97,26 @@ export default function Dashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-slate-500 font-mono">Зареждане...</div>
+      <div className="max-w-6xl mx-auto p-6 space-y-6">
+        {/* Skeleton header */}
+        <div className="h-8 w-64 bg-slate-800/50 rounded animate-pulse" />
+        {/* Skeleton top row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-32 bg-slate-800/30 rounded-xl animate-pulse" />
+          ))}
+        </div>
+        {/* Skeleton middle row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
+          <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
+        </div>
+        {/* Skeleton bottom row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-40 bg-slate-800/30 rounded-xl animate-pulse" />
+          ))}
+        </div>
       </div>
     );
   }

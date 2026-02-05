@@ -6,6 +6,7 @@ import Sidebar from "@/components/Sidebar";
 import MainContent from "@/components/MainContent";
 import FloatingTimer from "@/components/FloatingTimer";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import ToastContainer from "@/components/Toast";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -32,6 +33,7 @@ export default function RootLayout({
               <MainContent>{children}</MainContent>
             </div>
             <FloatingTimer />
+            <ToastContainer />
           </ErrorBoundary>
         </AppProvider>
       </body>

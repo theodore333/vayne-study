@@ -8,6 +8,7 @@ import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@/lib/fetch-utils';
+import { showToast } from '@/components/Toast';
 
 type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
 
@@ -130,6 +131,8 @@ function QuizContent() {
     isGenerating: false,
     error: null
   });
+  const [generatingStartTime, setGeneratingStartTime] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
@@ -186,6 +189,18 @@ function QuizContent() {
   const [ankiCards, setAnkiCards] = useState<Array<{ front: string; back: string; tag: string }>>([]);
   const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const MAX_HINTS = 3;
+
+  // Elapsed time counter during generation
+  useEffect(() => {
+    if (!generatingStartTime) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - generatingStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [generatingStartTime]);
 
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
@@ -439,6 +454,7 @@ function QuizContent() {
     }
 
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
+    setGeneratingStartTime(Date.now());
 
     try {
       // Use preview question count (user may have adjusted it)
@@ -499,13 +515,14 @@ function QuizContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody),
-        // 60s for quiz generation (can be slow)
+        timeout: 240000, // 4 min - long topics can take 2-3 min
         signal: abortControllerRef.current?.signal
       });
 
       const result = await response.json();
 
       if (!response.ok) {
+        setGeneratingStartTime(null);
         setQuizState(prev => ({
           ...prev,
           isGenerating: false,
@@ -525,6 +542,7 @@ function QuizContent() {
         setCountWarning(null);
       }
 
+      setGeneratingStartTime(null);
       setQuizState({
         questions: result.questions,
         currentIndex: 0,
@@ -539,12 +557,32 @@ function QuizContent() {
       setQuestionStartTime(now);
       setQuestionTimes(new Array(result.questions.length).fill(0));
     } catch (error) {
-      setQuizState(prev => ({
-        ...prev,
-        isGenerating: false,
-        error: getFetchErrorMessage(error)
-      }));
+      setGeneratingStartTime(null);
+      if (isAbortOrTimeoutError(error)) {
+        setQuizState(prev => ({
+          ...prev,
+          isGenerating: false,
+          error: 'Генерирането беше отменено.'
+        }));
+      } else {
+        setQuizState(prev => ({
+          ...prev,
+          isGenerating: false,
+          error: getFetchErrorMessage(error)
+        }));
+      }
     }
+  };
+
+  const cancelGeneration = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = new AbortController();
+    setGeneratingStartTime(null);
+    setQuizState(prev => ({
+      ...prev,
+      isGenerating: false,
+      error: null
+    }));
   };
 
   const requestHint = async () => {
@@ -890,51 +928,35 @@ function QuizContent() {
     setIsAnalyzingMistakes(false);
   };
 
-  // Prepare Anki cards for preview (not download)
-  const prepareAnkiCards = () => {
+  // Build Anki cards from wrong answers
+  const buildAnkiCards = (): Array<{ front: string; back: string; tag: string }> => {
     const cards: Array<{ front: string; back: string; tag: string }> = [];
 
     quizState.questions.forEach((q, i) => {
-      const userAnswer = quizState.answers[i];
       const openEval = openEvaluations[i];
 
-      // Determine if wrong
       const isWrong = q.type === 'open'
         ? (!openEval || openEval.score < 0.7)
-        : userAnswer !== q.correctAnswer;
+        : quizState.answers[i] !== q.correctAnswer;
 
       if (!isWrong) return;
 
-      // Front: Question (clean text, no HTML)
       const front = q.question.replace(/\t/g, ' ').replace(/\n/g, ' ');
-
-      // Back: Correct answer + explanation (clean text)
       let back = q.correctAnswer.replace(/\t/g, ' ').replace(/\n/g, ' ');
       if (q.explanation) {
         back += '\n\n' + q.explanation.replace(/\t/g, ' ').replace(/\n/g, ' ');
       }
-
-      // Tag from concept
       const tag = q.concept ? q.concept.replace(/\s+/g, '_') : 'General';
 
       cards.push({ front, back, tag });
     });
 
-    if (cards.length === 0) {
-      alert('Няма грешки за генериране на карти!');
-      return;
-    }
-
-    setAnkiCards(cards);
-    setShowAnkiPreview(true);
-    setEditingCardIndex(null);
+    return cards;
   };
 
-  // Export Anki cards to TSV file
-  const exportAnkiCards = () => {
-    if (ankiCards.length === 0) return;
-
-    const content = ankiCards.map(card =>
+  // Download TSV file from cards array
+  const downloadAnkiTSV = (cards: Array<{ front: string; back: string; tag: string }>) => {
+    const content = cards.map(card =>
       `${card.front.replace(/\t/g, ' ')}\t${card.back.replace(/\t/g, ' ').replace(/\n/g, '<br>')}\t${card.tag}`
     ).join('\n');
 
@@ -948,8 +970,37 @@ function QuizContent() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
 
+  // Direct export - one click download
+  const exportAnkiDirect = () => {
+    const cards = buildAnkiCards();
+    if (cards.length === 0) {
+      showToast('Няма грешки за експорт.', 'info');
+      return;
+    }
+    downloadAnkiTSV(cards);
+    showToast(`${cards.length} Anki карти изтеглени!`, 'success');
+  };
+
+  // Open preview modal for editing before export
+  const prepareAnkiCards = () => {
+    const cards = buildAnkiCards();
+    if (cards.length === 0) {
+      showToast('Няма грешки за генериране на карти.', 'info');
+      return;
+    }
+    setAnkiCards(cards);
+    setShowAnkiPreview(true);
+    setEditingCardIndex(null);
+  };
+
+  // Export from preview modal (after editing)
+  const exportAnkiCards = () => {
+    if (ankiCards.length === 0) return;
+    downloadAnkiTSV(ankiCards);
     setShowAnkiPreview(false);
+    showToast(`${ankiCards.length} Anki карти изтеглени!`, 'success');
   };
 
   // Update a single Anki card
@@ -1571,15 +1622,24 @@ function QuizContent() {
                 <Repeat size={20} /> Drill Weakness
               </button>
             )}
-            {/* Anki Export button - only show if there were wrong answers */}
+            {/* Anki Export buttons - only show if there were wrong answers */}
             {wrongCount > 0 && (
-              <button
-                onClick={prepareAnkiCards}
-                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
-                title="Изтегли грешките като Anki карти (TSV формат)"
-              >
-                <Download size={20} /> Anki Export
-              </button>
+              <>
+                <button
+                  onClick={exportAnkiDirect}
+                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
+                  title="Изтегли грешките като Anki карти (TSV)"
+                >
+                  <Download size={20} /> Anki Export
+                </button>
+                <button
+                  onClick={prepareAnkiCards}
+                  className="flex items-center gap-2 px-4 py-3 bg-slate-700/60 border border-slate-600/50 text-slate-300 rounded-lg font-mono text-sm hover:bg-slate-700 hover:text-cyan-300 transition-all"
+                  title="Прегледай и редактирай картите преди експорт"
+                >
+                  <Settings size={16} /> Preview
+                </button>
+              </>
             )}
           </div>
 
@@ -2439,35 +2499,62 @@ function QuizContent() {
               <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
                 <AlertCircle size={16} /> {quizState.error}
               </div>
+              <button
+                onClick={generateQuiz}
+                className="mt-2 px-4 py-1.5 bg-amber-600/20 border border-amber-600/40 text-amber-300 rounded-lg font-mono text-xs hover:bg-amber-600/30 transition-colors"
+              >
+                <RefreshCw size={12} className="inline mr-1.5" /> Опитай отново
+              </button>
             </div>
           )}
 
-          {/* Start Button */}
-          <button
-            onClick={generateQuiz}
-            disabled={quizState.isGenerating || !mode}
-            className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-              mode === 'gap_analysis'
-                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
-                : mode === 'drill_weakness'
-                  ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white hover:from-orange-500 hover:to-amber-500'
-                  : mode === 'mid_order'
-                    ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'
-                    : mode === 'higher_order'
-                      ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500'
-                      : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500'
-            }`}
-          >
-            {quizState.isGenerating ? (
-              <><RefreshCw size={20} className="animate-spin" /> Генериране...</>
-            ) : !mode ? (
-              <>Избери режим първо</>
-            ) : mode === 'drill_weakness' ? (
-              <><Repeat size={20} /> Drill Weakness ({previewQuestionCount} въпроса)</>
-            ) : (
-              <><Play size={20} /> Старт Quiz ({previewQuestionCount} въпроса)</>
-            )}
-          </button>
+          {/* Generating state - full feedback */}
+          {quizState.isGenerating ? (
+            <div className="space-y-3">
+              <div className="w-full py-4 bg-slate-700/50 border border-slate-600/50 rounded-lg font-mono text-center">
+                <div className="flex items-center justify-center gap-2 text-slate-200 mb-2">
+                  <RefreshCw size={20} className="animate-spin text-amber-400" />
+                  <span className="font-semibold">Генериране... ({elapsedSeconds}s)</span>
+                </div>
+                <p className="text-xs text-slate-400">Обикновено 30-120 секунди. По-дълги теми отнемат повече.</p>
+                {/* Progress bar animation */}
+                <div className="mt-3 mx-8 h-1 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full animate-pulse" style={{ width: `${Math.min(95, (elapsedSeconds / 120) * 100)}%`, transition: 'width 1s linear' }} />
+                </div>
+              </div>
+              <button
+                onClick={cancelGeneration}
+                className="w-full py-2 bg-slate-800/60 border border-slate-600/50 text-slate-400 hover:text-red-400 hover:border-red-600/40 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all"
+              >
+                <StopCircle size={16} /> Отмени
+              </button>
+            </div>
+          ) : (
+            /* Start Button */
+            <button
+              onClick={generateQuiz}
+              disabled={!mode}
+              className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                mode === 'gap_analysis'
+                  ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
+                  : mode === 'drill_weakness'
+                    ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white hover:from-orange-500 hover:to-amber-500'
+                    : mode === 'mid_order'
+                      ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'
+                      : mode === 'higher_order'
+                        ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500'
+                        : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white hover:from-amber-500 hover:to-orange-500'
+              }`}
+            >
+              {!mode ? (
+                <>Избери режим първо</>
+              ) : mode === 'drill_weakness' ? (
+                <><Repeat size={20} /> Drill Weakness ({previewQuestionCount} въпроса)</>
+              ) : (
+                <><Play size={20} /> Старт Quiz ({previewQuestionCount} въпроса)</>
+              )}
+            </button>
+          )}
         </div>
       </div>
     );

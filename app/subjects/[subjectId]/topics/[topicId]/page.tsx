@@ -2,9 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
-import MaterialEditor from '@/components/MaterialEditor';
+const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
+  ssr: false,
+  loading: () => <div className="h-64 bg-slate-800/30 rounded-lg animate-pulse flex items-center justify-center text-slate-500 font-mono text-sm">Зареждане на редактора...</div>
+});
 import { TextHighlight } from '@/lib/types';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';

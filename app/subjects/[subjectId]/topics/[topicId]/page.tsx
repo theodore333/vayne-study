@@ -335,8 +335,15 @@ export default function TopicDetailPage() {
     // Update local React state
     setMaterial(newMaterial);
 
-    // DIRECT save to IndexedDB + localStorage via storage.ts - THIS IS THE REAL SAVE
+    // DIRECT save to IndexedDB + localStorage via storage.ts
     saveMaterialToStorage(topicId, newMaterial);
+
+    // ALSO save directly to localStorage with topic-specific key (for fast reload)
+    try {
+      localStorage.setItem(`material-${topicId}`, newMaterial);
+    } catch (e) {
+      console.error('Direct localStorage save failed:', e);
+    }
 
     // Also update context (for UI consistency)
     updateTopicMaterial(subjectId, topicId, newMaterial);

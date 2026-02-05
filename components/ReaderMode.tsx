@@ -1563,12 +1563,12 @@ export default function ReaderMode({
       const formattedHtml = markdownToHtml(data.formattedText);
       editor.commands.setContent(formattedHtml);
 
-      // Save IMMEDIATELY - don't use timeout, don't risk losing AI-formatted content
+      // Save IMMEDIATELY - save the HTML, not the markdown!
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = null;
       }
-      onSaveMaterialRef.current(data.formattedText);
+      onSaveMaterialRef.current(editor.getHTML());
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
 

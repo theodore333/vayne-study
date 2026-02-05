@@ -978,6 +978,7 @@ export default function ReaderMode({
   const [showTableGridPicker, setShowTableGridPicker] = useState(false);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const isSavingRef = useRef(false); // Ref to track saving state for onUpdate callback
 
   // New features state
   const [showSearch, setShowSearch] = useState(false);
@@ -995,6 +996,10 @@ export default function ReaderMode({
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const onSaveMaterialRef = useRef(onSaveMaterial); // Ref for stable callback
+
+  // Keep refs in sync with state/props
+  onSaveMaterialRef.current = onSaveMaterial;
   const highlightPickerRef = useRef<HTMLDivElement>(null);
   const tableMenuRef = useRef<HTMLDivElement>(null);
   const tableGridPickerRef = useRef<HTMLDivElement>(null);
@@ -1207,8 +1212,8 @@ export default function ReaderMode({
       },
     },
     onUpdate: ({ editor }) => {
-      // Don't trigger save if we're already saving
-      if (isSaving) return;
+      // Don't trigger save if we're already saving (use ref for current value)
+      if (isSavingRef.current) return;
 
       setHasUnsavedChanges(true);
 
@@ -1217,10 +1222,11 @@ export default function ReaderMode({
       }
 
       saveTimeoutRef.current = setTimeout(() => {
+        isSavingRef.current = true;
         setIsSaving(true);
         try {
           const markdown = htmlToMarkdown(editor.getHTML());
-          onSaveMaterial(markdown);
+          onSaveMaterialRef.current(markdown); // Use ref for stable callback
           setLastSaved(new Date());
           setHasUnsavedChanges(false);
         } catch (error) {
@@ -1228,7 +1234,10 @@ export default function ReaderMode({
           // Don't clear hasUnsavedChanges on error - keep showing "unsaved" state
         } finally {
           // Small delay before allowing new saves
-          setTimeout(() => setIsSaving(false), 100);
+          setTimeout(() => {
+            isSavingRef.current = false;
+            setIsSaving(false);
+          }, 100);
         }
       }, 1000);
     },
@@ -1295,14 +1304,15 @@ export default function ReaderMode({
 
   // Force save
   const forceSave = useCallback(() => {
-    if (editor && !isSaving) {
+    if (editor && !isSavingRef.current) {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+      isSavingRef.current = true;
       setIsSaving(true);
       try {
         const markdown = htmlToMarkdown(editor.getHTML());
-        onSaveMaterial(markdown);
+        onSaveMaterialRef.current(markdown);
         setLastSaved(new Date());
         setHasUnsavedChanges(false);
         showToast('Запазено успешно', 'success');
@@ -1311,10 +1321,13 @@ export default function ReaderMode({
         showToast('Грешка при запазване', 'error');
         setHasUnsavedChanges(false);
       } finally {
-        setTimeout(() => setIsSaving(false), 100);
+        setTimeout(() => {
+          isSavingRef.current = false;
+          setIsSaving(false);
+        }, 100);
       }
     }
-  }, [editor, onSaveMaterial, isSaving, showToast]);
+  }, [editor, showToast]);
 
   // Insert formula into editor
   const handleInsertFormula = (formula: string) => {

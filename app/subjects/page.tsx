@@ -1,7 +1,7 @@
 'use client';
-import { useState, useEffect, Suspense, useRef } from 'react';
+import { useState, useEffect, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore, Copy, FileDown, FileUp, CalendarDays, CloudUpload, Check } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -32,7 +32,7 @@ export default function SubjectsPage() {
 function SubjectsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { data, isLoading, deleteSubject, updateSubject, setTopicStatus, updateTopic, archiveSubject, unarchiveSubject } = useApp();
+  const { data, isLoading, isSyncing, syncNow, deleteSubject, updateSubject, setTopicStatus, updateTopic, archiveSubject, unarchiveSubject, duplicateSubject, exportSubjectToJSON, importSubjectFromJSON, softDeleteSubject, restoreSubject, permanentlyDeleteSubject, emptyTrash } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [showImportTopics, setShowImportTopics] = useState(false);
@@ -47,6 +47,7 @@ function SubjectsContent() {
   const [editExamDate, setEditExamDate] = useState('');
   const [editExamFormat, setEditExamFormat] = useState('');
   const [editSubjectType, setEditSubjectType] = useState<SubjectType>('preclinical');
+  const [editSemester, setEditSemester] = useState('');
 
   // Sidebar toggle
   const [sidebarHidden, setSidebarHidden] = useState(false);
@@ -54,9 +55,15 @@ function SubjectsContent() {
   // Show archived subjects
   const [showArchived, setShowArchived] = useState(false);
 
+  // Show trash (soft-deleted subjects)
+  const [showTrash, setShowTrash] = useState(false);
+
   // Sort subjects
   type SortOption = 'exam' | 'name' | 'progress' | 'topics';
   const [sortBy, setSortBy] = useState<SortOption>('exam');
+
+  // Semester filter
+  const [semesterFilter, setSemesterFilter] = useState<string>('all');
 
   // Multi-topic quiz selection
   const [quizSelectMode, setQuizSelectMode] = useState(false);
@@ -193,11 +200,35 @@ function SubjectsContent() {
     });
   };
 
-  // Filter by archive status first, then sort
-  const activeSubjects = data.subjects.filter(s => !s.archived);
-  const archivedSubjects = data.subjects.filter(s => s.archived);
-  const displayedSubjects = showArchived ? archivedSubjects : activeSubjects;
-  const sortedSubjects = sortSubjects(displayedSubjects);
+  // Filter by archive/trash status, then sort (memoized for performance)
+  const { activeSubjects, archivedSubjects, trashedSubjects, sortedSubjects, uniqueSemesters } = useMemo(() => {
+    // Separate trashed subjects first
+    const trashed = data.subjects.filter(s => s.deletedAt);
+    const notTrashed = data.subjects.filter(s => !s.deletedAt);
+    const active = notTrashed.filter(s => !s.archived);
+    const archived = notTrashed.filter(s => s.archived);
+
+    // Get unique semesters from active subjects
+    const semesters = [...new Set(active.map(s => s.semester).filter(Boolean))] as string[];
+    semesters.sort();
+
+    let displayed;
+    if (showTrash) {
+      displayed = trashed;
+    } else if (showArchived) {
+      displayed = archived;
+    } else {
+      displayed = active;
+    }
+
+    // Apply semester filter (only for active subjects view)
+    if (!showTrash && !showArchived && semesterFilter !== 'all') {
+      displayed = displayed.filter(s => s.semester === semesterFilter);
+    }
+
+    const sorted = sortSubjects(displayed);
+    return { activeSubjects: active, archivedSubjects: archived, trashedSubjects: trashed, sortedSubjects: sorted, uniqueSemesters: semesters };
+  }, [data.subjects, showArchived, showTrash, sortBy, semesterFilter]);
 
   // Initial subject selection - only runs once on mount/URL change
   useEffect(() => {
@@ -236,15 +267,19 @@ function SubjectsContent() {
 
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
 
-  const filteredTopics = selectedSubject?.topics.filter(topic => {
-    const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
-    const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
-    const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
-    const matchesSearch = searchQuery === '' ||
-      topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      topic.number.toString().includes(searchQuery);
-    return matchesStatus && matchesSize && matchesSection && matchesSearch;
-  }) || [];
+  // Memoize filtered topics for performance
+  const filteredTopics = useMemo(() => {
+    if (!selectedSubject) return [];
+    return selectedSubject.topics.filter(topic => {
+      const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
+      const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
+      const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
+      const matchesSearch = searchQuery === '' ||
+        topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        topic.number.toString().includes(searchQuery);
+      return matchesStatus && matchesSize && matchesSection && matchesSearch;
+    });
+  }, [selectedSubject, statusFilter, sizeFilter, sectionFilter, searchQuery]);
 
   const handleStartEdit = (subject: Subject) => {
     setEditingSubject(subject.id);
@@ -253,6 +288,7 @@ function SubjectsContent() {
     setEditExamDate(subject.examDate || '');
     setEditExamFormat(subject.examFormat || '');
     setEditSubjectType(subject.subjectType || 'preclinical');
+    setEditSemester(subject.semester || '');
   };
 
   const handleSaveEdit = () => {
@@ -262,7 +298,8 @@ function SubjectsContent() {
         color: editColor,
         subjectType: editSubjectType,
         examDate: editExamDate || null,
-        examFormat: editExamFormat.trim() || null
+        examFormat: editExamFormat.trim() || null,
+        semester: editSemester.trim() || undefined
       });
       setEditingSubject(null);
     }
@@ -270,9 +307,33 @@ function SubjectsContent() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-100 font-mono">Предмети</h1>
-        <p className="text-sm text-slate-500 font-mono mt-1">Управлявай предмети и теми</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-100 font-mono">Предмети</h1>
+          <p className="text-sm text-slate-500 font-mono mt-1">Управлявай предмети и теми</p>
+        </div>
+        <button
+          onClick={() => syncNow()}
+          disabled={isSyncing}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-xs transition-all ${
+            isSyncing
+              ? 'bg-blue-600/30 text-blue-300 cursor-wait'
+              : 'bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200'
+          }`}
+          title="Синхронизирай с облака"
+        >
+          {isSyncing ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              Синхронизиране...
+            </>
+          ) : (
+            <>
+              <CloudUpload size={14} />
+              Запази сега
+            </>
+          )}
+        </button>
       </div>
 
       <div className="flex gap-6">
@@ -304,30 +365,108 @@ function SubjectsContent() {
                     ))}
                   </select>
                 </div>
+                {/* Sort indicator badge */}
+                <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
+                  <span className={`px-1.5 py-0.5 rounded ${
+                    sortBy === 'exam' ? 'bg-red-600/20 text-red-400' :
+                    sortBy === 'name' ? 'bg-blue-600/20 text-blue-400' :
+                    sortBy === 'progress' ? 'bg-yellow-600/20 text-yellow-400' :
+                    'bg-green-600/20 text-green-400'
+                  }`}>
+                    {sortBy === 'exam' && '📅 Скоро → Далеч'}
+                    {sortBy === 'name' && '🔤 А → Я'}
+                    {sortBy === 'progress' && '📊 Малко → Много'}
+                    {sortBy === 'topics' && '📚 Много → Малко'}
+                  </span>
+                </div>
               </div>
-              {/* Archive toggle */}
-              {archivedSubjects.length > 0 && (
+              {/* Semester filter - only show if there are semesters defined */}
+              {uniqueSemesters.length > 0 && !showArchived && !showTrash && (
                 <div className="mb-3">
+                  <select
+                    value={semesterFilter}
+                    onChange={(e) => setSemesterFilter(e.target.value)}
+                    className="w-full px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-300 font-mono text-xs appearance-none cursor-pointer hover:border-slate-600 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="all">Всички семестри</option>
+                    {uniqueSemesters.map(sem => (
+                      <option key={sem} value={sem}>{sem}</option>
+                    ))}
+                  </select>
+                  {semesterFilter !== 'all' && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-mono">
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-600/20 text-indigo-400">
+                        📆 {semesterFilter}
+                      </span>
+                      <button
+                        onClick={() => setSemesterFilter('all')}
+                        className="px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 hover:text-slate-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* View toggles */}
+              <div className="mb-3 flex gap-2">
+                {/* Archive toggle */}
+                {archivedSubjects.length > 0 && (
                   <button
                     onClick={() => {
                       setShowArchived(!showArchived);
-                      // Clear selection when switching views
+                      setShowTrash(false);
                       setSelectedSubjectId(null);
                     }}
-                    className={`w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg font-mono text-xs transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg font-mono text-xs transition-colors ${
                       showArchived
                         ? 'bg-amber-600/20 text-amber-400 border border-amber-600/30'
                         : 'bg-slate-800/50 text-slate-400 border border-slate-700 hover:border-slate-600'
                     }`}
+                    title="Покажи архивирани предмети"
                   >
-                    <Archive size={14} />
-                    {showArchived ? `Активни (${activeSubjects.length})` : `Архив (${archivedSubjects.length})`}
+                    <Archive size={12} />
+                    {archivedSubjects.length}
                   </button>
-                </div>
+                )}
+                {/* Trash toggle */}
+                {trashedSubjects.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setShowTrash(!showTrash);
+                      setShowArchived(false);
+                      setSelectedSubjectId(null);
+                    }}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg font-mono text-xs transition-colors ${
+                      showTrash
+                        ? 'bg-red-600/20 text-red-400 border border-red-600/30'
+                        : 'bg-slate-800/50 text-slate-400 border border-slate-700 hover:border-slate-600'
+                    }`}
+                    title="Покажи кошче"
+                  >
+                    <Trash2 size={12} />
+                    {trashedSubjects.length}
+                  </button>
+                )}
+              </div>
+              {/* Empty trash button */}
+              {showTrash && trashedSubjects.length > 0 && (
+                <button
+                  onClick={() => {
+                    if (confirm(`Изтрий перманентно ${trashedSubjects.length} предмет(а)? Това действие е необратимо!`)) {
+                      emptyTrash();
+                      setShowTrash(false);
+                    }
+                  }}
+                  className="w-full mb-3 flex items-center justify-center gap-2 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 rounded-lg font-mono text-xs"
+                >
+                  <Trash2 size={12} />
+                  Изпразни кошчето
+                </button>
               )}
             {sortedSubjects.length === 0 ? (
               <p className="text-sm text-slate-500 font-mono">
-                {showArchived ? 'Няма архивирани предмети' : 'Няма предмети'}
+                {showTrash ? 'Кошчето е празно' : showArchived ? 'Няма архивирани предмети' : 'Няма предмети'}
               </p>
             ) : (
               <ul className="space-y-2">
@@ -375,6 +514,14 @@ function SubjectsContent() {
                               </button>
                             ))}
                           </div>
+                          {/* Semester input */}
+                          <input
+                            type="text"
+                            value={editSemester}
+                            onChange={(e) => setEditSemester(e.target.value)}
+                            placeholder="Семестър (напр. Зимен 2024, 3-ти курс)"
+                            className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-slate-100 font-mono"
+                          />
                           <input
                             type="date"
                             value={editExamDate}
@@ -406,17 +553,25 @@ function SubjectsContent() {
                           <div className="flex items-center gap-2 mb-2">
                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subject.color }} />
                             <span className="text-sm font-medium text-slate-200 truncate flex-1">{subject.name}</span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); handleStartEdit(subject); }}
-                              className="p-1 hover:bg-slate-600 rounded opacity-50 hover:opacity-100"
-                            >
-                              <Edit2 size={12} className="text-slate-400" />
-                            </button>
+                            {!subject.archived && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleStartEdit(subject); }}
+                                className="p-1 hover:bg-slate-600 rounded opacity-50 hover:opacity-100"
+                                title="Редактирай предмет"
+                              >
+                                <Edit2 size={12} className="text-slate-400" />
+                              </button>
+                            )}
                           </div>
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-slate-500 font-mono">{subject.topics.length} теми</span>
                             <span className="text-slate-500 font-mono">{progress.percentage}%</span>
                           </div>
+                          {subject.semester && (
+                            <div className="text-[10px] font-mono mt-1 px-1.5 py-0.5 rounded bg-indigo-600/20 text-indigo-400 inline-block">
+                              {subject.semester}
+                            </div>
+                          )}
                           {daysUntil !== Infinity && (
                             <div className={"text-xs font-mono mt-1 flex items-center gap-1 " + (daysUntil <= 7 ? "text-red-400" : "text-slate-500")}>
                               <Calendar size={10} />
@@ -436,6 +591,32 @@ function SubjectsContent() {
             >
               <Plus size={18} /> Нов предмет
             </button>
+            {/* Import subject button */}
+            <label className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-400 hover:text-slate-300 border border-slate-600/50 rounded-lg transition-colors font-mono text-xs cursor-pointer">
+              <FileUp size={16} /> Импортирай JSON
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const json = event.target?.result as string;
+                      const success = importSubjectFromJSON(json);
+                      if (success) {
+                        alert('Предметът е импортиран успешно!');
+                      } else {
+                        alert('Грешка при импортиране. Проверете файла.');
+                      }
+                    };
+                    reader.readAsText(file);
+                    e.target.value = ''; // Reset input
+                  }
+                }}
+              />
+            </label>
           </div>
         </div>
         ) : (
@@ -461,111 +642,235 @@ function SubjectsContent() {
                     <span className="text-sm text-slate-500 font-mono">({selectedSubject.topics.length} теми)</span>
                   </div>
                   <div className="flex gap-2">
-                    {/* Bulk Edit Button */}
-                    <button
-                      onClick={() => {
-                        setBulkEditMode(!bulkEditMode);
-                        if (bulkEditMode) clearBulkSelection();
-                        if (quizSelectMode) {
-                          setQuizSelectMode(false);
-                          setSelectedTopicsForQuiz([]);
-                        }
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
-                        bulkEditMode
-                          ? 'bg-orange-600 text-white'
-                          : 'bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/30'
-                      }`}
-                    >
-                      <Edit2 size={16} /> {bulkEditMode ? 'Отказ' : 'Bulk Edit'}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setQuizSelectMode(!quizSelectMode);
-                        if (quizSelectMode) setSelectedTopicsForQuiz([]);
-                        if (bulkEditMode) {
-                          setBulkEditMode(false);
-                          clearBulkSelection();
-                        }
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
-                        quizSelectMode
-                          ? 'bg-purple-600 text-white'
-                          : 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30'
-                      }`}
-                    >
-                      <Brain size={16} /> {quizSelectMode ? 'Отказ' : 'Mix Quiz'}
-                    </button>
-                    <button
-                      onClick={() => setShowAIImport(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-colors font-mono text-sm"
-                    >
-                      <Sparkles size={16} /> AI Импорт
-                    </button>
-                    <button
-                      onClick={() => setShowImportTopics(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-mono text-sm"
-                    >
-                      <Upload size={16} /> Ръчен
-                    </button>
-                    {/* Export to Anki Button */}
-                    <button
-                      onClick={handleExportToAnki}
-                      disabled={isExportingAnki || selectedSubject.topics.length === 0}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
-                        ankiConnected
-                          ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
-                          : 'bg-slate-600/20 hover:bg-slate-600/30 text-slate-400 border border-slate-500/30'
-                      }`}
-                      title={!ankiConnected ? 'Anki не е свързан - отвори Anki и AnkiConnect' : selectedSubject.topics.length === 0 ? 'Няма теми за експорт' : 'Създай deck структура в Anki'}
-                    >
-                      {isExportingAnki ? (
-                        <>
-                          <Loader2 size={16} className="animate-spin" />
-                          Експорт...
-                        </>
-                      ) : (
-                        <>
-                          <Download size={16} />
-                          Anki
-                        </>
-                      )}
-                    </button>
-                    {/* Archive/Unarchive button */}
-                    <button
-                      onClick={() => {
-                        if (selectedSubject.archived) {
-                          unarchiveSubject(selectedSubject.id);
-                          setShowArchived(false);
-                        } else {
-                          archiveSubject(selectedSubject.id);
-                          // Select the next active subject or show archived view
-                          const remainingActive = activeSubjects.filter(s => s.id !== selectedSubject.id);
-                          if (remainingActive.length > 0) {
-                            setSelectedSubjectId(remainingActive[0].id);
-                          } else {
-                            setShowArchived(true);
-                          }
-                        }
-                      }}
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
-                        selectedSubject.archived
-                          ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
-                          : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30'
-                      }`}
-                      title={selectedSubject.archived ? 'Активирай предмета' : 'Архивирай предмета'}
-                    >
-                      {selectedSubject.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
-                      {selectedSubject.archived ? 'Активирай' : 'Архив'}
-                    </button>
-                    <button
-                      onClick={() => setShowDeleteConfirm(true)}
-                      className="flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors font-mono text-sm"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {/* Action buttons - hide in trash view */}
+                    {!showTrash && (
+                      <>
+                        {/* Bulk Edit Button */}
+                        <button
+                          onClick={() => {
+                            setBulkEditMode(!bulkEditMode);
+                            if (bulkEditMode) clearBulkSelection();
+                            if (quizSelectMode) {
+                              setQuizSelectMode(false);
+                              setSelectedTopicsForQuiz([]);
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                            bulkEditMode
+                              ? 'bg-orange-600 text-white'
+                              : 'bg-orange-600/20 hover:bg-orange-600/30 text-orange-400 border border-orange-500/30'
+                          }`}
+                        >
+                          <Edit2 size={16} /> {bulkEditMode ? 'Отказ' : 'Bulk Edit'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setQuizSelectMode(!quizSelectMode);
+                            if (quizSelectMode) setSelectedTopicsForQuiz([]);
+                            if (bulkEditMode) {
+                              setBulkEditMode(false);
+                              clearBulkSelection();
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                            quizSelectMode
+                              ? 'bg-purple-600 text-white'
+                              : 'bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 border border-purple-500/30'
+                          }`}
+                        >
+                          <Brain size={16} /> {quizSelectMode ? 'Отказ' : 'Mix Quiz'}
+                        </button>
+                        <button
+                          onClick={() => setShowAIImport(true)}
+                          className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg transition-colors font-mono text-sm"
+                        >
+                          <Sparkles size={16} /> AI Импорт
+                        </button>
+                        <button
+                          onClick={() => setShowImportTopics(true)}
+                          className="flex items-center gap-2 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors font-mono text-sm"
+                        >
+                          <Upload size={16} /> Ръчен
+                        </button>
+                      </>
+                    )}
+                    {/* These buttons only show for non-trashed subjects */}
+                    {!showTrash && (
+                      <>
+                        {/* Export to Anki Button */}
+                        <button
+                          onClick={handleExportToAnki}
+                          disabled={isExportingAnki || selectedSubject.topics.length === 0}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+                            ankiConnected
+                              ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
+                              : 'bg-slate-600/20 hover:bg-slate-600/30 text-slate-400 border border-slate-500/30'
+                          }`}
+                          title={!ankiConnected ? 'Anki не е свързан - отвори Anki и AnkiConnect' : selectedSubject.topics.length === 0 ? 'Няма теми за експорт' : 'Създай deck структура в Anki'}
+                        >
+                          {isExportingAnki ? (
+                            <>
+                              <Loader2 size={16} className="animate-spin" />
+                              Експорт...
+                            </>
+                          ) : (
+                            <>
+                              <Download size={16} />
+                              Anki
+                            </>
+                          )}
+                        </button>
+                        {/* Duplicate button */}
+                        <button
+                          onClick={() => {
+                            duplicateSubject(selectedSubject.id);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 rounded-lg transition-colors font-mono text-sm"
+                          title="Дублирай предмета с всички теми"
+                        >
+                          <Copy size={16} />
+                        </button>
+                        {/* Export button */}
+                        <button
+                          onClick={() => {
+                            const json = exportSubjectToJSON(selectedSubject.id);
+                            if (json) {
+                              const blob = new Blob([json], { type: 'application/json' });
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = `${selectedSubject.name.replace(/[^a-zA-Z0-9а-яА-Я]/g, '_')}.json`;
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            }
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 bg-slate-600/20 hover:bg-slate-600/30 text-slate-400 border border-slate-500/30 rounded-lg transition-colors font-mono text-sm"
+                          title="Експортирай предмета като JSON"
+                        >
+                          <FileDown size={16} />
+                        </button>
+                        {/* Archive/Unarchive button */}
+                        <button
+                          onClick={() => {
+                            if (selectedSubject.archived) {
+                              unarchiveSubject(selectedSubject.id);
+                              setShowArchived(false);
+                            } else {
+                              archiveSubject(selectedSubject.id);
+                              // Select the next active subject or show archived view
+                              const remainingActive = activeSubjects.filter(s => s.id !== selectedSubject.id);
+                              if (remainingActive.length > 0) {
+                                setSelectedSubjectId(remainingActive[0].id);
+                              } else {
+                                setShowArchived(true);
+                              }
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors font-mono text-sm ${
+                            selectedSubject.archived
+                              ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
+                              : 'bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 border border-amber-500/30'
+                          }`}
+                          title={selectedSubject.archived ? 'Активирай предмета' : 'Архивирай предмета'}
+                        >
+                          {selectedSubject.archived ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                          {selectedSubject.archived ? 'Активирай' : 'Архив'}
+                        </button>
+                      </>
+                    )}
+                    {/* Trash/Restore/Permanent Delete buttons - context-dependent */}
+                    {showTrash ? (
+                      <>
+                        {/* Restore button - for trashed subjects */}
+                        <button
+                          onClick={() => {
+                            restoreSubject(selectedSubject.id);
+                            setSelectedSubjectId(null);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30 rounded-lg transition-colors font-mono text-sm"
+                          title="Възстанови предмета"
+                        >
+                          <ArchiveRestore size={16} />
+                          Възстанови
+                        </button>
+                        {/* Permanent delete button - for trashed subjects */}
+                        <button
+                          onClick={() => setShowDeleteConfirm(true)}
+                          className="flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors font-mono text-sm"
+                          title="Изтрий завинаги"
+                        >
+                          <Trash2 size={16} />
+                          Изтрий завинаги
+                        </button>
+                      </>
+                    ) : (
+                      /* Soft delete button - for active/archived subjects */
+                      <button
+                        onClick={() => {
+                          softDeleteSubject(selectedSubject.id);
+                          // Select next subject or clear selection
+                          const remaining = showArchived
+                            ? archivedSubjects.filter(s => s.id !== selectedSubject.id)
+                            : activeSubjects.filter(s => s.id !== selectedSubject.id);
+                          setSelectedSubjectId(remaining.length > 0 ? remaining[0].id : null);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg transition-colors font-mono text-sm"
+                        title="Премести в кошчето"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* Mode Indicators */}
+                {bulkEditMode && (
+                  <div className="mb-4 p-3 bg-orange-600/20 border border-orange-500/50 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Edit2 size={18} className="text-orange-400" />
+                      <span className="text-orange-300 font-mono text-sm">
+                        <strong>Bulk Edit режим</strong> - избери теми и промени статус/секция наведнъж
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-orange-400 font-mono text-xs">{selectedTopicsForBulk.length} избрани</span>
+                      <button
+                        onClick={() => { setBulkEditMode(false); clearBulkSelection(); }}
+                        className="px-2 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-mono"
+                      >
+                        Изход
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {quizSelectMode && (
+                  <div className="mb-4 p-3 bg-purple-600/20 border border-purple-500/50 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Brain size={18} className="text-purple-400" />
+                      <span className="text-purple-300 font-mono text-sm">
+                        <strong>Mix Quiz режим</strong> - избери теми от различни предмети за комбиниран тест
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-purple-400 font-mono text-xs">{selectedTopicsForQuiz.length} избрани</span>
+                      {selectedTopicsForQuiz.length > 0 && (
+                        <button
+                          onClick={startMixQuiz}
+                          className="px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded text-xs font-mono"
+                        >
+                          Старт Quiz
+                        </button>
+                      )}
+                      <button
+                        onClick={() => { setQuizSelectMode(false); setSelectedTopicsForQuiz([]); }}
+                        className="px-2 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs font-mono"
+                      >
+                        Изход
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Filters */}
                 <div className="flex flex-col gap-3">
@@ -962,18 +1267,18 @@ function SubjectsContent() {
         />
       )}
 
-      {/* Delete Subject Confirmation */}
-      {selectedSubject && (
+      {/* Permanent Delete Confirmation - only for trash */}
+      {selectedSubject && showTrash && (
         <ConfirmDialog
           isOpen={showDeleteConfirm}
           onClose={() => setShowDeleteConfirm(false)}
           onConfirm={() => {
-            deleteSubject(selectedSubject.id);
+            permanentlyDeleteSubject(selectedSubject.id);
             setSelectedSubjectId(null);
           }}
-          title="Изтрий предмет"
-          message={`Сигурен ли си, че искаш да изтриеш "${selectedSubject.name}"? Всички теми, материали и прогрес ще бъдат загубени.`}
-          confirmText="Изтрий"
+          title="Изтрий завинаги"
+          message={`Сигурен ли си, че искаш да изтриеш "${selectedSubject.name}" ЗАВИНАГИ? Това действие е необратимо!`}
+          confirmText="Изтрий завинаги"
           variant="danger"
         />
       )}

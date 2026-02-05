@@ -20,6 +20,14 @@ interface AppContextType {
   deleteSubject: (id: string) => void;
   archiveSubject: (id: string) => void;
   unarchiveSubject: (id: string) => void;
+  duplicateSubject: (id: string, newName?: string) => void;
+  exportSubjectToJSON: (id: string) => string | null;
+  importSubjectFromJSON: (json: string) => boolean;
+  // Soft delete operations
+  softDeleteSubject: (id: string) => void;
+  restoreSubject: (id: string) => void;
+  permanentlyDeleteSubject: (id: string) => void;
+  emptyTrash: () => void;
 
   // Topic operations
   addTopics: (subjectId: string, topics: Omit<Topic, 'id'>[]) => void;
@@ -400,6 +408,199 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...prev,
       subjects: prev.subjects.map(s => s.id === id ? { ...s, archived: false } : s)
     }));
+  }, [updateData]);
+
+  const duplicateSubject = useCallback((id: string, newName?: string) => {
+    updateData(prev => {
+      const original = prev.subjects.find(s => s.id === id);
+      if (!original) return prev;
+
+      const duplicated: Subject = {
+        ...original,
+        id: generateId(),
+        name: newName || `${original.name} (копие)`,
+        createdAt: new Date().toISOString(),
+        archived: false,
+        topics: original.topics.map(t => ({
+          ...t,
+          id: generateId(),
+          // Reset progress for duplicated topics
+          status: 'gray' as TopicStatus,
+          grades: [],
+          avgGrade: null,
+          quizCount: 0,
+          quizHistory: [],
+          lastReview: null,
+          readCount: 0,
+          lastRead: null,
+          wrongAnswers: [],
+          highlights: [],
+          fsrs: undefined
+        }))
+      };
+
+      return {
+        ...prev,
+        subjects: [...prev.subjects, duplicated]
+      };
+    });
+  }, [updateData]);
+
+  const exportSubjectToJSON = useCallback((id: string): string | null => {
+    const subject = data.subjects.find(s => s.id === id);
+    if (!subject) return null;
+
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      subject: {
+        ...subject,
+        // Remove IDs as they'll be regenerated on import
+        id: undefined,
+        topics: subject.topics.map(t => ({
+          ...t,
+          id: undefined
+        }))
+      }
+    };
+
+    return JSON.stringify(exportData, null, 2);
+  }, [data.subjects]);
+
+  const importSubjectFromJSON = useCallback((json: string): boolean => {
+    try {
+      const importData = JSON.parse(json);
+      if (!importData.version || !importData.subject) {
+        console.error('Invalid import format');
+        return false;
+      }
+
+      const importedSubject: Subject = {
+        ...importData.subject,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+        archived: false,
+        topics: (importData.subject.topics || []).map((t: any) => ({
+          ...t,
+          id: generateId(),
+          // Reset progress
+          status: 'gray' as TopicStatus,
+          grades: [],
+          avgGrade: null,
+          quizCount: 0,
+          quizHistory: [],
+          lastReview: null,
+          readCount: 0,
+          lastRead: null,
+          wrongAnswers: [],
+          highlights: [],
+          fsrs: undefined
+        }))
+      };
+
+      updateData(prev => ({
+        ...prev,
+        subjects: [...prev.subjects, importedSubject]
+      }));
+
+      return true;
+    } catch (error) {
+      console.error('Import error:', error);
+      return false;
+    }
+  }, [updateData]);
+
+  // Soft delete operations
+  const softDeleteSubject = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s =>
+        s.id === id ? { ...s, deletedAt: new Date().toISOString() } : s
+      )
+    }));
+  }, [updateData]);
+
+  const restoreSubject = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s =>
+        s.id === id ? { ...s, deletedAt: null } : s
+      )
+    }));
+  }, [updateData]);
+
+  const permanentlyDeleteSubject = useCallback((id: string) => {
+    updateData(prev => {
+      // Find the subject to calculate stats to decrement
+      const subjectToDelete = prev.subjects.find(s => s.id === id);
+      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
+
+      if (subjectToDelete) {
+        subjectToDelete.topics.forEach(topic => {
+          if (topic.status !== 'gray') statsDecrements.topicsCompleted++;
+          if (topic.status === 'green') statsDecrements.greenTopics++;
+          statsDecrements.quizzesTaken += topic.quizCount || 0;
+        });
+      }
+
+      const currentStats = prev.userProgress?.stats || {
+        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
+      };
+
+      return {
+        ...prev,
+        subjects: prev.subjects.filter(s => s.id !== id),
+        schedule: prev.schedule.filter(c => c.subjectId !== id),
+        academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
+        questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
+        userProgress: {
+          ...prev.userProgress,
+          stats: {
+            ...currentStats,
+            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
+            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
+            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
+          }
+        }
+      };
+    });
+  }, [updateData]);
+
+  const emptyTrash = useCallback(() => {
+    updateData(prev => {
+      const trashedSubjects = prev.subjects.filter(s => s.deletedAt);
+      let totalDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
+
+      trashedSubjects.forEach(subject => {
+        subject.topics.forEach(topic => {
+          if (topic.status !== 'gray') totalDecrements.topicsCompleted++;
+          if (topic.status === 'green') totalDecrements.greenTopics++;
+          totalDecrements.quizzesTaken += topic.quizCount || 0;
+        });
+      });
+
+      const trashedIds = new Set(trashedSubjects.map(s => s.id));
+      const currentStats = prev.userProgress?.stats || {
+        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
+      };
+
+      return {
+        ...prev,
+        subjects: prev.subjects.filter(s => !s.deletedAt),
+        schedule: prev.schedule.filter(c => !trashedIds.has(c.subjectId)),
+        academicEvents: prev.academicEvents.filter(e => !trashedIds.has(e.subjectId)),
+        questionBanks: prev.questionBanks.filter(b => !trashedIds.has(b.subjectId)),
+        userProgress: {
+          ...prev.userProgress,
+          stats: {
+            ...currentStats,
+            topicsCompleted: Math.max(0, currentStats.topicsCompleted - totalDecrements.topicsCompleted),
+            greenTopics: Math.max(0, currentStats.greenTopics - totalDecrements.greenTopics),
+            quizzesTaken: Math.max(0, currentStats.quizzesTaken - totalDecrements.quizzesTaken)
+          }
+        }
+      };
+    });
   }, [updateData]);
 
   // Topic operations
@@ -1488,6 +1689,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteSubject,
       archiveSubject,
       unarchiveSubject,
+      duplicateSubject,
+      exportSubjectToJSON,
+      importSubjectFromJSON,
+      softDeleteSubject,
+      restoreSubject,
+      permanentlyDeleteSubject,
+      emptyTrash,
       addTopics,
       updateTopic,
       deleteTopic,

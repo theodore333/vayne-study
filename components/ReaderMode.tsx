@@ -463,6 +463,31 @@ function markdownToHtml(markdown: string): string {
   // Blockquotes
   html = html.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
 
+  // Tables - parse BEFORE list processing to avoid interference
+  const tableRegex = /((?:^\|[^\n]+\|\n?)+)/gm;
+  html = html.replace(tableRegex, (tableBlock) => {
+    const rows = tableBlock.trim().split('\n').filter(r => r.trim());
+    let tableHtml = '<table><tbody>';
+    let isFirstDataRow = true;
+
+    for (const row of rows) {
+      // Skip separator rows (| --- | --- |)
+      if (/^\|[\s-:|]+\|$/.test(row)) continue;
+
+      // Parse cells
+      const cellMatch = row.match(/^\|(.+)\|$/);
+      if (!cellMatch) continue;
+
+      const cells = cellMatch[1].split('|').map(c => c.trim());
+      const tag = isFirstDataRow ? 'th' : 'td';
+      tableHtml += `<tr>${cells.map(c => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
+      isFirstDataRow = false;
+    }
+
+    tableHtml += '</tbody></table>';
+    return tableHtml;
+  });
+
   // Process lists line-by-line (prevents empty bullet points)
   const lines = html.split('\n');
   const processedLines: string[] = [];
@@ -514,16 +539,6 @@ function markdownToHtml(markdown: string): string {
   }
 
   html = processedLines.join('\n');
-
-  // Tables
-  html = html.replace(/^\|(.+)\|$/gm, (match, content) => {
-    const cells = content.split('|').map((cell: string) => cell.trim());
-    const isHeader = cells.every((cell: string) => /^-+$/.test(cell));
-    if (isHeader) return '<!-- table-separator -->';
-    return `<tr>${cells.map((cell: string) => `<td>${cell}</td>`).join('')}</tr>`;
-  });
-  html = html.replace(/(<!-- table-separator -->)/g, '');
-  html = html.replace(/(<tr>.*<\/tr>\n?)+/g, (match) => `<table><tbody>${match}</tbody></table>`);
 
   // Paragraphs - split by double newlines
   const blocks = html.split(/\n\n+/);

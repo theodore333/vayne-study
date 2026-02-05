@@ -511,42 +511,73 @@ function QuizContent() {
         };
       }
 
-      const response = await fetchWithTimeout('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-        timeout: 240000, // 4 min - long topics can take 2-3 min
-        signal: abortControllerRef.current?.signal
-      });
+      // Auto-retry logic: try up to 2 times on failure
+      let response: Response | null = null;
+      let result: Record<string, unknown> | null = null;
+      let lastError: string | null = null;
 
-      const result = await response.json();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (abortControllerRef.current?.signal.aborted) break;
 
-      if (!response.ok) {
+        try {
+          response = await fetchWithTimeout('/api/quiz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+            timeout: 240000, // 4 min - long topics can take 2-3 min
+            signal: abortControllerRef.current?.signal
+          });
+
+          result = await response.json() as Record<string, unknown>;
+
+          if (response.ok) break; // Success - exit retry loop
+
+          lastError = (result?.error as string) || `HTTP ${response.status}`;
+
+          // Don't retry on 4xx errors (bad request, auth, etc.)
+          if (response.status >= 400 && response.status < 500) break;
+
+          // Retry on 5xx - show toast so user knows
+          if (attempt === 0) {
+            showToast('Първият опит се провали, опитвам отново...', 'info');
+          }
+        } catch (err) {
+          if (isAbortOrTimeoutError(err)) throw err; // Don't retry aborts
+          lastError = getFetchErrorMessage(err);
+          if (attempt === 0) {
+            showToast('Първият опит се провали, опитвам отново...', 'info');
+          }
+        }
+      }
+
+      if (!response?.ok || !result) {
         setGeneratingStartTime(null);
         setQuizState(prev => ({
           ...prev,
           isGenerating: false,
-          error: result.error || 'Грешка при генериране.'
+          error: lastError || 'Грешка при генериране.'
         }));
         return;
       }
 
-      if (result.usage) {
-        incrementApiCalls(result.usage.cost);
+      const usage = result.usage as { cost: number } | undefined;
+      if (usage) {
+        incrementApiCalls(usage.cost);
       }
 
       // Check for count warning
       if (result.countWarning) {
-        setCountWarning(result.countWarning);
+        setCountWarning(result.countWarning as string);
       } else {
         setCountWarning(null);
       }
 
+      const questions = result.questions as Question[];
       setGeneratingStartTime(null);
       setQuizState({
-        questions: result.questions,
+        questions,
         currentIndex: 0,
-        answers: new Array(result.questions.length).fill(null),
+        answers: new Array(questions.length).fill(null),
         showResult: false,
         isGenerating: false,
         error: null
@@ -555,7 +586,7 @@ function QuizContent() {
       const now = Date.now();
       setQuizStartTime(now);
       setQuestionStartTime(now);
-      setQuestionTimes(new Array(result.questions.length).fill(0));
+      setQuestionTimes(new Array(questions.length).fill(0));
     } catch (error) {
       setGeneratingStartTime(null);
       if (isAbortOrTimeoutError(error)) {
@@ -954,18 +985,37 @@ function QuizContent() {
     return cards;
   };
 
-  // Download TSV file from cards array
+  // Download Anki-compatible file with proper card formats
   const downloadAnkiTSV = (cards: Array<{ front: string; back: string; tag: string }>) => {
-    const content = cards.map(card =>
-      `${card.front.replace(/\t/g, ' ')}\t${card.back.replace(/\t/g, ' ').replace(/\n/g, '<br>')}\t${card.tag}`
-    ).join('\n');
+    // Anki import directives - Cloze note type
+    const header = [
+      '#separator:tab',
+      '#html:true',
+      '#notetype:Cloze',
+      '#deck:Vayne Study',
+      '#tags column:2',
+      ''
+    ].join('\n');
 
-    const blob = new Blob([content], { type: 'text/tab-separated-values;charset=utf-8' });
+    // Create cloze cards: question visible, answer is the cloze
+    const rows = cards.map(card => {
+      const question = card.front.replace(/\t/g, ' ');
+      const answer = card.back.replace(/\t/g, ' ').replace(/\n/g, '<br>');
+      const tag = card.tag;
+
+      // Format as cloze: show the question, cloze the answer
+      const clozeText = `<b>❓ ${question}</b><br><br>{{c1::${answer}}}`;
+
+      return `${clozeText}\t${tag}`;
+    }).join('\n');
+
+    const content = header + rows;
+    const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8' }); // BOM for UTF-8
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = `anki-cards-${topic?.name || 'quiz'}-${new Date().toISOString().split('T')[0]}.txt`;
+    a.download = `anki-${topic?.name || 'quiz'}-${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -980,7 +1030,7 @@ function QuizContent() {
       return;
     }
     downloadAnkiTSV(cards);
-    showToast(`${cards.length} Anki карти изтеглени!`, 'success');
+    showToast(`${cards.length} Anki карти изтеглени! Import в Anki: File → Import`, 'success');
   };
 
   // Open preview modal for editing before export

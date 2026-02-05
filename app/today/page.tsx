@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, GraduationCap } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -9,7 +9,7 @@ import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
 import WeeklyReviewModal from '@/components/modals/WeeklyReviewModal';
 import Link from 'next/link';
-import { DailyTask, ProjectModule, DevelopmentProject } from '@/lib/types';
+import { DailyTask, ProjectModule, DevelopmentProject, AcademicEvent } from '@/lib/types';
 import ModuleDetailModal from '@/components/modals/ModuleDetailModal';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
@@ -188,6 +188,26 @@ export default function TodayPage() {
     () => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85),
     [activeSubjects, data.studyGoals.fsrsTargetRetention]
   );
+
+  // Upcoming academic events (next 14 days)
+  const upcomingEvents = useMemo(() => {
+    if (!data.academicEvents) return [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const twoWeeksLater = new Date(today);
+    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+
+    return data.academicEvents
+      .map(event => {
+        const eventDate = new Date(event.date);
+        eventDate.setHours(0, 0, 0, 0);
+        const daysUntil = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        const subject = activeSubjects.find(s => s.id === event.subjectId);
+        return { ...event, daysUntil, subject };
+      })
+      .filter(e => e.daysUntil >= 0 && e.daysUntil <= 14)
+      .sort((a, b) => a.daysUntil - b.daysUntil);
+  }, [data.academicEvents, activeSubjects]);
 
   // Calculate study streak
   const streak = useMemo(() => {
@@ -520,6 +540,72 @@ export default function TodayPage() {
         </div>
       )}
 
+      {/* Upcoming Academic Events Widget */}
+      {upcomingEvents.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <GraduationCap size={20} className="text-purple-400" />
+            <h3 className="text-sm font-semibold text-slate-100 font-mono">Предстоящи събития</h3>
+          </div>
+          <div className="space-y-2">
+            {upcomingEvents.map(event => {
+              const eventTypeLabels: Record<string, string> = {
+                colloquium: 'Колоквиум',
+                control_test: 'Контролно',
+                practical_exam: 'Практически изпит',
+                seminar: 'Семинар',
+                other: 'Друго'
+              };
+              const isUrgent = event.daysUntil <= 3;
+              const isToday = event.daysUntil === 0;
+              const isTomorrow = event.daysUntil === 1;
+
+              return (
+                <div
+                  key={event.id}
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    isUrgent
+                      ? 'bg-red-500/10 border border-red-500/30'
+                      : 'bg-slate-800/30'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: event.subject?.color || '#8b5cf6' }}
+                    />
+                    <div>
+                      <div className="text-sm font-medium text-slate-200 font-mono">
+                        {event.name || eventTypeLabels[event.type]}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono">
+                        {event.subject?.name || 'Неизвестен предмет'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`text-sm font-mono font-bold ${
+                    isToday ? 'text-red-400' :
+                    isTomorrow ? 'text-orange-400' :
+                    isUrgent ? 'text-yellow-400' :
+                    'text-slate-400'
+                  }`}>
+                    {isToday ? 'ДНЕС!' :
+                     isTomorrow ? 'УТРЕ' :
+                     `${event.daysUntil}д`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {upcomingEvents.some(e => e.daysUntil <= 3) && (
+            <div className="mt-3 text-xs text-red-400 font-mono flex items-center gap-2">
+              <AlertTriangle size={12} />
+              Имаш събития в следващите 3 дни! Фокусирай се върху тях.
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Syllabus Progress Widget */}
       {syllabusProgress.bySubject.length > 0 && (
         <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
@@ -531,8 +617,9 @@ export default function TodayPage() {
             {syllabusProgress.bySubject.map(subject => {
               const subjectData = activeSubjects.find(s => s.id === subject.subjectId);
               const totalTopics = subjectData?.topics.length || 0;
+              const studiedTopics = subjectData?.topics.filter(t => t.status !== 'gray').length || 0;
               const greenTopics = subjectData?.topics.filter(t => t.status === 'green').length || 0;
-              const progressPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
+              const progressPercent = totalTopics > 0 ? Math.round((studiedTopics / totalTopics) * 100) : 0;
 
               return (
                 <div key={subject.subjectId} className="bg-slate-800/30 rounded-lg p-3">
@@ -574,8 +661,8 @@ export default function TodayPage() {
                   </div>
 
                   <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <span>
-                      {greenTopics}/{totalTopics} готови ({progressPercent}%)
+                    <span title={`${greenTopics} зелени, ${studiedTopics - greenTopics} в процес`}>
+                      {studiedTopics}/{totalTopics} изучени ({progressPercent}%)
                     </span>
                     <span className="flex items-center gap-3">
                       <span>{subject.remaining} остават</span>

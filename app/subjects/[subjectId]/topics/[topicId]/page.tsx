@@ -28,6 +28,24 @@ export default function TopicDetailPage() {
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
 
+  // Topic navigation
+  const topicIndex = subject?.topics.findIndex(t => t.id === topicId) ?? -1;
+  const totalTopics = subject?.topics.length ?? 0;
+  const prevTopic = topicIndex > 0 ? subject?.topics[topicIndex - 1] : null;
+  const nextTopic = topicIndex < totalTopics - 1 ? subject?.topics[topicIndex + 1] : null;
+
+  const navigateToPrevTopic = () => {
+    if (prevTopic) {
+      router.push(`/subjects/${subjectId}/topics/${prevTopic.id}?reader=true`);
+    }
+  };
+
+  const navigateToNextTopic = () => {
+    if (nextTopic) {
+      router.push(`/subjects/${subjectId}/topics/${nextTopic.id}?reader=true`);
+    }
+  };
+
   const [gradeInput, setGradeInput] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [material, setMaterial] = useState('');
@@ -336,6 +354,12 @@ export default function TopicDetailPage() {
           onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
           onSaveMaterial={handleSaveMaterialFromReader}
+          onPrevTopic={prevTopic ? navigateToPrevTopic : undefined}
+          onNextTopic={nextTopic ? navigateToNextTopic : undefined}
+          hasPrevTopic={!!prevTopic}
+          hasNextTopic={!!nextTopic}
+          topicIndex={topicIndex}
+          totalTopics={totalTopics}
         />
       )}
 

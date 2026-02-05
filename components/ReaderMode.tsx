@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeViewRenderer } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
@@ -20,13 +20,14 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight';
 import { common, createLowlight } from 'lowlight';
 import {
-  X, Minus, Plus, BookOpen, ChevronUp, ChevronLeft, PanelRightClose, PanelRight,
+  X, Minus, Plus, BookOpen, ChevronUp, ChevronLeft, ChevronRight, PanelRightClose, PanelRight,
   Type, Loader2, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
   Heading1, Heading2, Heading3, Highlighter, Undo, Redo, Quote, Wand2,
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
-  Calculator, GitBranch, Check, Network
+  Calculator, Check, Search, Sun, Moon, Coffee, Eye, Edit3, Clock,
+  FileText, Hash, ArrowUp, ArrowDown, Palette
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -35,6 +36,67 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
 const lowlight = createLowlight(common);
+
+// Reading themes
+type ReadingTheme = 'light' | 'sepia' | 'dark';
+
+const READING_THEMES: Record<ReadingTheme, {
+  name: string;
+  icon: typeof Sun;
+  bg: string;
+  text: string;
+  heading: string;
+  secondary: string;
+  border: string;
+  highlight: string;
+  selection: string;
+  toolbar: string;
+  toolbarText: string;
+  sidebar: string;
+}> = {
+  light: {
+    name: 'Светла',
+    icon: Sun,
+    bg: '#fafaf9',
+    text: '#292524',
+    heading: '#1c1917',
+    secondary: '#78716c',
+    border: '#e7e5e4',
+    highlight: '#fef08a',
+    selection: '#fde68a',
+    toolbar: '#ffffff',
+    toolbarText: '#57534e',
+    sidebar: '#ffffff',
+  },
+  sepia: {
+    name: 'Сепия',
+    icon: Coffee,
+    bg: '#f5f0e6',
+    text: '#5c4b37',
+    heading: '#3d3229',
+    secondary: '#8b7355',
+    border: '#d4c4a8',
+    highlight: '#f0e6c8',
+    selection: '#e6d9b8',
+    toolbar: '#ebe3d3',
+    toolbarText: '#5c4b37',
+    sidebar: '#ebe3d3',
+  },
+  dark: {
+    name: 'Тъмна',
+    icon: Moon,
+    bg: '#1c1917',
+    text: '#e7e5e4',
+    heading: '#fafaf9',
+    secondary: '#a8a29e',
+    border: '#44403c',
+    highlight: '#854d0e',
+    selection: '#713f12',
+    toolbar: '#292524',
+    toolbarText: '#d6d3d1',
+    sidebar: '#292524',
+  },
+};
 
 // Highlight colors
 const HIGHLIGHT_COLORS = [
@@ -301,313 +363,6 @@ function FormulaModal({ isOpen, onClose, onInsert }: {
   );
 }
 
-// Mermaid Diagram Modal
-function MermaidModal({ isOpen, onClose, onInsert }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onInsert: (code: string) => void;
-}) {
-  const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<string>('');
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!code || !isOpen) return;
-
-    const renderMermaid = async () => {
-      try {
-        const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'default',
-          securityLevel: 'loose'
-        });
-
-        const { svg } = await mermaid.render('mermaid-preview-reader', code);
-        setPreview(svg);
-        setError('');
-      } catch (e) {
-        setError((e as Error).message || 'Грешка в диаграмата');
-        setPreview('');
-      }
-    };
-
-    const timer = setTimeout(renderMermaid, 500);
-    return () => clearTimeout(timer);
-  }, [code, isOpen]);
-
-  const handleInsert = () => {
-    if (code && !error) {
-      onInsert(code);
-      setCode('');
-      onClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  const examples = [
-    {
-      label: 'Flowchart',
-      code: `flowchart TD
-    A[Глюкоза] --> B[Гликолиза]
-    B --> C[Пируват]
-    C --> D{Аеробно?}
-    D -->|Да| E[Цикъл на Кребс]
-    D -->|Не| F[Лактат]`
-    },
-    {
-      label: 'Sequence',
-      code: `sequenceDiagram
-    participant R as Рецептор
-    participant G as G-protein
-    participant E as Ефектор
-    R->>G: Активиране
-    G->>E: Сигнал
-    E->>E: Отговор`
-    },
-    {
-      label: 'Krebs Cycle',
-      code: `flowchart LR
-    A[Acetyl-CoA] --> B[Цитрат]
-    B --> C[Изоцитрат]
-    C --> D[α-кетоглутарат]
-    D --> E[Сукцинил-CoA]
-    E --> F[Сукцинат]
-    F --> G[Фумарат]
-    G --> H[Малат]
-    H --> I[Оксалоацетат]
-    I --> A`
-    }
-  ];
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-white border border-stone-300 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-stone-200">
-          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
-            <GitBranch size={20} className="text-green-600" />
-            Вмъкни диаграма (Mermaid)
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
-            <X size={20} className="text-stone-500" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4">
-          <div>
-            <label className="text-xs text-stone-500 font-medium mb-2 block">Шаблони:</label>
-            <div className="flex flex-wrap gap-2">
-              {examples.map(ex => (
-                <button
-                  key={ex.label}
-                  onClick={() => setCode(ex.code)}
-                  className="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded"
-                >
-                  {ex.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-stone-500 font-medium mb-1 block">Mermaid код:</label>
-              <textarea
-                value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="flowchart TD&#10;    A[Start] --> B[End]"
-                className="w-full h-64 bg-stone-50 border border-stone-300 rounded-lg p-3 text-stone-800 font-mono text-sm focus:outline-none focus:border-green-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-stone-500 font-medium mb-1 block">Преглед:</label>
-              <div className="h-64 bg-stone-50 border border-stone-200 rounded-lg p-4 overflow-auto flex items-center justify-center">
-                {error ? (
-                  <span className="text-red-500 text-sm">{error}</span>
-                ) : preview ? (
-                  <div dangerouslySetInnerHTML={{ __html: preview }} />
-                ) : (
-                  <span className="text-stone-400 text-sm">Въведи код...</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
-            >
-              Отказ
-            </button>
-            <button
-              onClick={handleInsert}
-              disabled={!code || !!error}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
-            >
-              <Check size={16} />
-              Вмъкни
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Markmap Modal Component
-function MarkmapModal({ isOpen, onClose, onSave }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (imageData: string) => void;
-}) {
-  const [markdown, setMarkdown] = useState(`# Тема
-## Подтема 1
-### Детайл A
-### Детайл B
-## Подтема 2
-### Детайл C
-### Детайл D`);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [markmapInstance, setMarkmapInstance] = useState<any>(null);
-
-  useEffect(() => {
-    if (!isOpen || !svgRef.current) return;
-
-    const loadMarkmap = async () => {
-      try {
-        const { Transformer } = await import('markmap-lib');
-        const { Markmap } = await import('markmap-view');
-
-        const transformer = new Transformer();
-        const { root } = transformer.transform(markdown);
-
-        // Clear previous content
-        svgRef.current!.innerHTML = '';
-
-        // Create markmap
-        const mm = Markmap.create(svgRef.current!, {
-          autoFit: true,
-          color: (node: any) => {
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-            return colors[node.state?.depth % colors.length] || colors[0];
-          },
-          paddingX: 20,
-          duration: 300,
-        }, root);
-
-        setMarkmapInstance(mm);
-      } catch (error) {
-        console.error('Error loading markmap:', error);
-      }
-    };
-
-    loadMarkmap();
-  }, [isOpen, markdown]);
-
-  const handleSave = async () => {
-    if (!svgRef.current) return;
-
-    try {
-      // Clone SVG and prepare for export
-      const svgElement = svgRef.current.cloneNode(true) as SVGSVGElement;
-      const bbox = svgRef.current.getBBox();
-
-      // Set proper dimensions
-      svgElement.setAttribute('width', String(bbox.width + 40));
-      svgElement.setAttribute('height', String(bbox.height + 40));
-      svgElement.setAttribute('viewBox', `${bbox.x - 20} ${bbox.y - 20} ${bbox.width + 40} ${bbox.height + 40}`);
-
-      // Add white background
-      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      bg.setAttribute('x', String(bbox.x - 20));
-      bg.setAttribute('y', String(bbox.y - 20));
-      bg.setAttribute('width', String(bbox.width + 40));
-      bg.setAttribute('height', String(bbox.height + 40));
-      bg.setAttribute('fill', 'white');
-      svgElement.insertBefore(bg, svgElement.firstChild);
-
-      // Convert to data URL
-      const svgData = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-
-      // Convert SVG to PNG using canvas
-      const img = new window.Image();
-      const url = URL.createObjectURL(svgBlob);
-
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = 2; // Higher resolution
-        canvas.width = (bbox.width + 40) * scale;
-        canvas.height = (bbox.height + 40) * scale;
-        const ctx = canvas.getContext('2d')!;
-        ctx.scale(scale, scale);
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-
-        const pngData = canvas.toDataURL('image/png');
-        onSave(pngData);
-        onClose();
-        URL.revokeObjectURL(url);
-      };
-
-      img.src = url;
-    } catch (error) {
-      console.error('Error saving markmap:', error);
-      alert('Грешка при запазване на mind map');
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
-      <div className="flex items-center justify-between p-3 bg-stone-100 border-b">
-        <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
-          <GitBranch size={20} className="text-blue-600" />
-          Mind Map (Markmap)
-        </h3>
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
-          >
-            Отказ
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
-          >
-            <Check size={16} />
-            Запази като изображение
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 flex" style={{ height: 'calc(100vh - 60px)' }}>
-        {/* Markdown Editor */}
-        <div className="w-1/3 border-r border-stone-200 flex flex-col">
-          <div className="p-2 bg-stone-50 border-b text-sm text-stone-600 font-medium">
-            Markdown (йерархия с #)
-          </div>
-          <textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none"
-            placeholder="# Главна тема&#10;## Подтема 1&#10;### Детайл&#10;## Подтема 2"
-          />
-        </div>
-        {/* Markmap Preview */}
-        <div className="flex-1 bg-stone-50 overflow-hidden">
-          <svg ref={svgRef} className="w-full h-full" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Toolbar button component - defined outside to prevent re-renders
 function ToolbarButton({ onClick, active, disabled, children, title }: {
   onClick: () => void;
@@ -638,6 +393,13 @@ interface ReaderModeProps {
   onClose: () => void;
   onSaveHighlights: (highlights: TextHighlight[]) => void;
   onSaveMaterial: (material: string) => void;
+  // Navigation
+  onPrevTopic?: () => void;
+  onNextTopic?: () => void;
+  hasPrevTopic?: boolean;
+  hasNextTopic?: boolean;
+  topicIndex?: number;
+  totalTopics?: number;
 }
 
 // Parse formula and image markers
@@ -1005,26 +767,66 @@ function htmlToMarkdown(html: string): string {
   return md;
 }
 
-export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveMaterial }: ReaderModeProps) {
-  const [fontSize, setFontSize] = useState(18);
+export default function ReaderMode({
+  topic,
+  subjectName,
+  onClose,
+  onSaveHighlights,
+  onSaveMaterial,
+  onPrevTopic,
+  onNextTopic,
+  hasPrevTopic = false,
+  hasNextTopic = false,
+  topicIndex,
+  totalTopics,
+}: ReaderModeProps) {
+  // Core state
+  const [fontSize, setFontSize] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return parseInt(localStorage.getItem('reader-font-size') || '20');
+    }
+    return 20;
+  });
   const [scrollProgress, setScrollProgress] = useState(0);
-  const [showSidebar, setShowSidebar] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
+
+  // UI state
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [sidebarTab, setSidebarTab] = useState<'info' | 'toc' | 'highlights'>('toc');
   const [showHighlightPicker, setShowHighlightPicker] = useState(false);
   const [showTableMenu, setShowTableMenu] = useState(false);
   const [showTableGridPicker, setShowTableGridPicker] = useState(false);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
-  const [showMermaidModal, setShowMermaidModal] = useState(false);
-  const [showMarkmapModal, setShowMarkmapModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [showThemePicker, setShowThemePicker] = useState(false);
 
+  // Reading experience state
+  const [theme, setTheme] = useState<ReadingTheme>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('reader-theme') as ReadingTheme) || 'sepia';
+    }
+    return 'sepia';
+  });
+  const [toolbarVisible, setToolbarVisible] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<{ index: number; total: number }>({ index: 0, total: 0 });
+  const [showSearch, setShowSearch] = useState(false);
+
+  // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const highlightPickerRef = useRef<HTMLDivElement>(null);
   const tableMenuRef = useRef<HTMLDivElement>(null);
   const tableGridPickerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Get current theme config
+  const themeConfig = READING_THEMES[theme];
 
   // Initialize TipTap editor
   const editor = useEditor({
@@ -1354,50 +1156,168 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
     }
   };
 
-  // Insert mermaid diagram into editor
-  const handleInsertMermaid = async (code: string) => {
-    if (!editor) return;
-    try {
-      const mermaid = (await import('mermaid')).default;
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'loose'
-      });
-      const uniqueId = `mermaid-${Date.now()}`;
-      const { svg } = await mermaid.render(uniqueId, code);
-      // Convert SVG to data URL for embedding
-      const svgBase64 = btoa(unescape(encodeURIComponent(svg)));
-      const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
-      editor.chain().focus().setImage({ src: dataUrl, alt: 'Mermaid Diagram' }).run();
-    } catch (error) {
-      console.error('Mermaid error:', error);
-      alert('Грешка при създаване на диаграмата');
-    }
-  };
-
-  // Insert markmap mind map into editor
-  const handleInsertMarkmap = (imageData: string) => {
-    if (!editor) return;
-    editor.chain().focus().setImage({ src: imageData, alt: 'Mind Map' }).run();
-  };
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Escape - close
       if (e.key === 'Escape') {
-        forceSave();
-        onClose();
+        if (showSearch) {
+          setShowSearch(false);
+          setSearchQuery('');
+        } else {
+          forceSave();
+          onClose();
+        }
       }
+      // Ctrl+S - save
       if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         forceSave();
+      }
+      // Ctrl+F - search
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        setShowSearch(true);
+        setTimeout(() => searchInputRef.current?.focus(), 100);
+      }
+      // Arrow left/right for navigation (when search is closed)
+      if (!showSearch) {
+        if (e.key === 'ArrowLeft' && e.altKey && hasPrevTopic && onPrevTopic) {
+          e.preventDefault();
+          forceSave();
+          onPrevTopic();
+        }
+        if (e.key === 'ArrowRight' && e.altKey && hasNextTopic && onNextTopic) {
+          e.preventDefault();
+          forceSave();
+          onNextTopic();
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose, forceSave]);
+  }, [onClose, forceSave, showSearch, hasPrevTopic, hasNextTopic, onPrevTopic, onNextTopic]);
+
+  // Save theme preference
+  useEffect(() => {
+    localStorage.setItem('reader-theme', theme);
+  }, [theme]);
+
+  // Save font size preference
+  useEffect(() => {
+    localStorage.setItem('reader-font-size', fontSize.toString());
+  }, [fontSize]);
+
+  // Auto-hide toolbar on scroll down, show on scroll up (but always editable!)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const currentScrollY = container.scrollTop;
+      // Hide toolbar when scrolling down past 150px
+      if (currentScrollY > lastScrollY && currentScrollY > 150) {
+        setToolbarVisible(false);
+      } else {
+        setToolbarVisible(true);
+      }
+      setLastScrollY(currentScrollY);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [lastScrollY]);
+
+  // Computed: Word count and reading time
+  const { wordCount, readingTime } = useMemo(() => {
+    if (!editor) return { wordCount: 0, readingTime: 0 };
+    const text = editor.getText();
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0).length;
+    const minutes = Math.ceil(words / 200); // 200 words per minute
+    return { wordCount: words, readingTime: minutes };
+  }, [editor?.getText()]);
+
+  // Computed: Table of contents from headings
+  const tableOfContents = useMemo(() => {
+    if (!editor) return [];
+    const headings: { level: number; text: string; id: string }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading') {
+        const text = node.textContent;
+        const id = `heading-${pos}`;
+        headings.push({ level: node.attrs.level, text, id });
+      }
+    });
+    return headings;
+  }, [editor?.state.doc]);
+
+  // Jump to heading
+  const scrollToHeading = (pos: number) => {
+    if (!editor) return;
+    editor.chain().focus().setTextSelection(pos).run();
+    // Scroll the container to show the heading
+    setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        containerRef.current?.scrollTo({
+          top: containerRef.current.scrollTop + rect.top - 150,
+          behavior: 'smooth'
+        });
+      }
+    }, 50);
+  };
+
+  // Search functionality
+  const performSearch = useCallback((query: string) => {
+    if (!editor || !query.trim()) {
+      setSearchResults({ index: 0, total: 0 });
+      return;
+    }
+
+    const text = editor.getText().toLowerCase();
+    const searchTerm = query.toLowerCase();
+    let count = 0;
+    let pos = 0;
+    while ((pos = text.indexOf(searchTerm, pos)) !== -1) {
+      count++;
+      pos += searchTerm.length;
+    }
+    setSearchResults({ index: count > 0 ? 1 : 0, total: count });
+
+    // Highlight first match
+    if (count > 0) {
+      const firstPos = text.indexOf(searchTerm);
+      if (firstPos !== -1) {
+        // Find the position in the document
+        let currentPos = 0;
+        editor.state.doc.descendants((node, nodePos) => {
+          if (node.isText && currentPos <= firstPos) {
+            const nodeText = node.text?.toLowerCase() || '';
+            const matchPos = nodeText.indexOf(searchTerm);
+            if (matchPos !== -1 && currentPos + matchPos >= firstPos - node.nodeSize) {
+              editor.chain().focus().setTextSelection({
+                from: nodePos + matchPos,
+                to: nodePos + matchPos + query.length
+              }).run();
+              return false;
+            }
+          }
+          if (node.isText) currentPos += node.nodeSize;
+        });
+      }
+    }
+  }, [editor]);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      performSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, performSearch]);
 
   // Warn about unsaved changes before page unload
   useEffect(() => {
@@ -1477,68 +1397,202 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
 
   if (!editor) {
     return (
-      <div className="fixed inset-0 z-50 bg-stone-100 flex items-center justify-center">
-        <Loader2 className="animate-spin text-stone-400" size={32} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: themeConfig.bg }}>
+        <Loader2 className="animate-spin" style={{ color: themeConfig.secondary }} size={32} />
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-stone-50 flex flex-col">
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: themeConfig.bg }}>
       {/* Progress bar */}
-      <div className="fixed top-0 left-0 right-0 h-1 bg-stone-200 z-50">
-        <div className="h-full bg-amber-500" style={{ width: `${scrollProgress}%` }} />
+      <div className="fixed top-0 left-0 right-0 h-1 z-[60]" style={{ backgroundColor: themeConfig.border }}>
+        <div className="h-full bg-amber-500 transition-all duration-150" style={{ width: `${scrollProgress}%` }} />
       </div>
 
+      {/* Search bar - slides down when active */}
+      {showSearch && (
+        <div
+          className="fixed top-1 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 px-4 py-2 rounded-full shadow-lg"
+          style={{ backgroundColor: themeConfig.toolbar, border: `1px solid ${themeConfig.border}` }}
+        >
+          <Search size={16} style={{ color: themeConfig.secondary }} />
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Търси в текста..."
+            className="bg-transparent border-none outline-none text-sm w-48"
+            style={{ color: themeConfig.text }}
+          />
+          {searchResults.total > 0 && (
+            <span className="text-xs" style={{ color: themeConfig.secondary }}>
+              {searchResults.index}/{searchResults.total}
+            </span>
+          )}
+          <button
+            onClick={() => { setShowSearch(false); setSearchQuery(''); }}
+            className="p-1 rounded hover:opacity-70"
+          >
+            <X size={14} style={{ color: themeConfig.secondary }} />
+          </button>
+        </div>
+      )}
+
       {/* Header */}
-      <header className="flex-shrink-0 bg-white border-b border-stone-200 shadow-sm">
+      <header
+        className={`flex-shrink-0 shadow-sm transition-transform duration-300 ${!toolbarVisible ? '-translate-y-full' : ''}`}
+        style={{ backgroundColor: themeConfig.toolbar, borderBottom: `1px solid ${themeConfig.border}` }}
+      >
         <div className="px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Navigation */}
+            {hasPrevTopic && (
+              <button
+                onClick={() => { forceSave(); onPrevTopic?.(); }}
+                className="p-2 rounded-lg transition-colors hover:opacity-70"
+                style={{ color: themeConfig.toolbarText }}
+                title="Предишна тема (←)"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+
             <button
               onClick={() => { forceSave(); onClose(); }}
-              className="flex items-center gap-2 text-stone-600 hover:text-stone-900 transition-colors"
+              className="flex items-center gap-2 transition-colors hover:opacity-70"
+              style={{ color: themeConfig.toolbarText }}
             >
-              <ChevronLeft size={20} />
-              <span className="font-medium hidden sm:inline">Назад</span>
+              <X size={18} />
+              <span className="font-medium hidden sm:inline">Затвори</span>
             </button>
-            <div className="h-6 w-px bg-stone-300 hidden sm:block" />
+
+            {hasNextTopic && (
+              <button
+                onClick={() => { forceSave(); onNextTopic?.(); }}
+                className="p-2 rounded-lg transition-colors hover:opacity-70"
+                style={{ color: themeConfig.toolbarText }}
+                title="Следваща тема (→)"
+              >
+                <ChevronRight size={20} />
+              </button>
+            )}
+
+            <div className="h-6 w-px hidden sm:block" style={{ backgroundColor: themeConfig.border }} />
+
+            {/* Topic info */}
             <div className="flex items-center gap-2">
-              <BookOpen size={18} className="text-stone-500" />
-              <h1 className="font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-[400px]">{topic.name}</h1>
+              <BookOpen size={18} style={{ color: themeConfig.secondary }} />
+              <div className="flex flex-col">
+                <h1
+                  className="font-semibold truncate max-w-[150px] sm:max-w-[300px] text-sm"
+                  style={{ color: themeConfig.heading }}
+                >
+                  {topic.name}
+                </h1>
+                {topicIndex !== undefined && totalTopics !== undefined && (
+                  <span className="text-xs" style={{ color: themeConfig.secondary }}>
+                    {topicIndex + 1} / {totalTopics}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {/* Save status */}
-            <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400 mr-2">
+            <div className="hidden sm:flex items-center gap-2 text-xs mr-2" style={{ color: themeConfig.secondary }}>
               {isSaving ? (
-                <span className="text-amber-600">Записване...</span>
+                <span className="text-amber-500">Записва...</span>
               ) : hasUnsavedChanges ? (
-                <span className="text-amber-500">Несъхранено</span>
+                <span className="text-amber-500">●</span>
               ) : lastSaved ? (
-                <span className="text-green-600">Запазено</span>
+                <span className="text-green-500">✓</span>
               ) : null}
             </div>
 
+            {/* Search toggle */}
+            <button
+              onClick={() => { setShowSearch(!showSearch); setTimeout(() => searchInputRef.current?.focus(), 100); }}
+              className="p-2 rounded-lg transition-colors hover:opacity-70"
+              style={{ color: themeConfig.toolbarText }}
+              title="Търси (Ctrl+F)"
+            >
+              <Search size={18} />
+            </button>
+
+            {/* Theme picker */}
+            <div className="relative">
+              <button
+                onClick={() => setShowThemePicker(!showThemePicker)}
+                className="p-2 rounded-lg transition-colors hover:opacity-70"
+                style={{ color: themeConfig.toolbarText }}
+                title="Смени тема"
+              >
+                <Palette size={18} />
+              </button>
+              {showThemePicker && (
+                <div
+                  className="absolute top-full right-0 mt-1 p-2 rounded-lg shadow-lg z-50 flex gap-1"
+                  style={{ backgroundColor: themeConfig.toolbar, border: `1px solid ${themeConfig.border}` }}
+                >
+                  {(Object.keys(READING_THEMES) as ReadingTheme[]).map((t) => {
+                    const ThemeIcon = READING_THEMES[t].icon;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => { setTheme(t); setShowThemePicker(false); }}
+                        className={`p-2 rounded-lg transition-all ${theme === t ? 'ring-2 ring-amber-500' : ''}`}
+                        style={{ backgroundColor: READING_THEMES[t].bg, color: READING_THEMES[t].text }}
+                        title={READING_THEMES[t].name}
+                      >
+                        <ThemeIcon size={16} />
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Font size */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setFontSize(Math.max(14, fontSize - 2))}
+                className="p-1.5 rounded transition-colors hover:opacity-70"
+                style={{ color: themeConfig.toolbarText }}
+                title="По-малък шрифт"
+              >
+                <Minus size={14} />
+              </button>
+              <span className="text-xs w-5 text-center" style={{ color: themeConfig.secondary }}>{fontSize}</span>
+              <button
+                onClick={() => setFontSize(Math.min(28, fontSize + 2))}
+                className="p-1.5 rounded transition-colors hover:opacity-70"
+                style={{ color: themeConfig.toolbarText }}
+                title="По-голям шрифт"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+
+            {/* Sidebar toggle */}
             <button
               onClick={() => setShowSidebar(!showSidebar)}
-              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
+              className="p-2 rounded-lg transition-colors hover:opacity-70"
+              style={{ color: themeConfig.toolbarText }}
               title={showSidebar ? 'Скрий панела' : 'Покажи панела'}
             >
-              {showSidebar ? <PanelRightClose size={20} /> : <PanelRight size={20} />}
-            </button>
-            <button
-              onClick={() => { forceSave(); onClose(); }}
-              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition-colors"
-              title="Затвори (Esc)"
-            >
-              <X size={20} />
+              {showSidebar ? <PanelRightClose size={18} /> : <PanelRight size={18} />}
             </button>
           </div>
         </div>
 
-        {/* Formatting Toolbar */}
-        <div className="px-4 py-2 border-t border-stone-100 flex items-center gap-1 flex-wrap bg-stone-50/50">
+        {/* Formatting Toolbar - always available, slides with header */}
+        <div
+          className="px-4 py-2 flex items-center gap-1 flex-wrap"
+          style={{ backgroundColor: themeConfig.toolbar, borderTop: `1px solid ${themeConfig.border}` }}
+        >
           {/* Undo/Redo */}
           <ToolbarButton
             onClick={() => editor.chain().focus().undo().run()}
@@ -1837,18 +1891,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           >
             <Calculator size={18} />
           </ToolbarButton>
-          <ToolbarButton
-            onClick={() => setShowMermaidModal(true)}
-            title="Вмъкни диаграма (Mermaid)"
-          >
-            <GitBranch size={18} />
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => setShowMarkmapModal(true)}
-            title="Mind Map (Markmap)"
-          >
-            <Network size={18} />
-          </ToolbarButton>
 
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
@@ -1909,44 +1951,48 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           )}
 
           {/* Editor */}
-          <article className="px-6 py-6 max-w-none">
+          <article className="px-6 py-6 max-w-3xl mx-auto">
             <style jsx global>{`
               .ProseMirror {
-                font-family: 'Georgia', 'Charter', serif;
+                font-family: 'Georgia', 'Charter', 'Cambria', serif;
                 font-size: ${fontSize}px;
-                line-height: 1.8;
-                color: #292524;
+                line-height: 1.85;
+                color: ${themeConfig.text};
+                max-width: 70ch;
+                margin: 0 auto;
               }
               .ProseMirror:focus {
                 outline: none;
               }
               .ProseMirror p {
-                margin-bottom: 1em;
+                margin-bottom: 1.2em;
               }
               .ProseMirror h1 {
                 font-size: 1.875em;
                 font-weight: 700;
-                margin-top: 1.5em;
-                margin-bottom: 0.5em;
-                color: #1c1917;
+                margin-top: 1.8em;
+                margin-bottom: 0.6em;
+                color: ${themeConfig.heading};
+                letter-spacing: -0.02em;
               }
               .ProseMirror h2 {
                 font-size: 1.5em;
                 font-weight: 700;
-                margin-top: 1.25em;
+                margin-top: 1.5em;
                 margin-bottom: 0.5em;
-                color: #1c1917;
+                color: ${themeConfig.heading};
+                letter-spacing: -0.01em;
               }
               .ProseMirror h3 {
                 font-size: 1.25em;
                 font-weight: 600;
-                margin-top: 1em;
-                margin-bottom: 0.5em;
-                color: #1c1917;
+                margin-top: 1.3em;
+                margin-bottom: 0.4em;
+                color: ${themeConfig.heading};
               }
               .ProseMirror strong {
                 font-weight: 700;
-                color: #1c1917;
+                color: ${themeConfig.heading};
               }
               .ProseMirror em {
                 font-style: italic;
@@ -1956,6 +2002,7 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               }
               .ProseMirror s {
                 text-decoration: line-through;
+                opacity: 0.7;
               }
               .ProseMirror mark {
                 padding: 0.125em 0.25em;
@@ -1964,33 +2011,33 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               .ProseMirror ul {
                 list-style-type: disc;
                 padding-left: 1.5em;
-                margin-bottom: 1em;
+                margin-bottom: 1.2em;
               }
               .ProseMirror ol {
                 list-style-type: decimal;
                 padding-left: 1.5em;
-                margin-bottom: 1em;
+                margin-bottom: 1.2em;
               }
               .ProseMirror li {
-                margin-bottom: 0.25em;
+                margin-bottom: 0.4em;
               }
               .ProseMirror blockquote {
-                border-left: 4px solid #d6d3d1;
+                border-left: 4px solid ${themeConfig.border};
                 padding-left: 1em;
                 margin-left: 0;
                 margin-right: 0;
-                color: #57534e;
+                color: ${themeConfig.secondary};
                 font-style: italic;
               }
               .ProseMirror p.is-editor-empty:first-child::before {
                 content: attr(data-placeholder);
                 float: left;
-                color: #a8a29e;
+                color: ${themeConfig.secondary};
                 pointer-events: none;
                 height: 0;
               }
               .ProseMirror ::selection {
-                background-color: #fde68a;
+                background-color: ${themeConfig.selection};
               }
 
               /* Tables */
@@ -2003,16 +2050,17 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               }
               .ProseMirror th,
               .ProseMirror td {
-                border: 1px solid #d6d3d1;
+                border: 1px solid ${themeConfig.border};
                 padding: 0.5em 0.75em;
                 vertical-align: top;
                 box-sizing: border-box;
                 position: relative;
               }
               .ProseMirror th {
-                background-color: #f5f5f4;
+                background-color: ${themeConfig.toolbar};
                 font-weight: 600;
                 text-align: left;
+                color: ${themeConfig.heading};
               }
               .ProseMirror td > *,
               .ProseMirror th > * {
@@ -2151,55 +2199,181 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           </article>
         </div>
 
-        {/* Right Sidebar */}
+        {/* Right Sidebar - Enhanced */}
         {showSidebar && (
-          <aside className="w-72 flex-shrink-0 bg-white border-l border-stone-200 p-4 overflow-y-auto">
-            <h3 className="text-sm font-medium text-stone-700 mb-3">Клавишни комбинации</h3>
-            <div className="space-y-2 text-xs text-stone-500">
-              <div className="flex justify-between">
-                <span>Удебелен</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+B</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Курсив</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+I</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Подчертан</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+U</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Заглавие 1</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Alt+1</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Заглавие 2</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Alt+2</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Списък</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+Shift+8</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Запази</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Ctrl+S</kbd>
-              </div>
-              <div className="flex justify-between">
-                <span>Затвори</span>
-                <kbd className="px-1.5 py-0.5 bg-stone-100 rounded text-stone-600">Esc</kbd>
-              </div>
+          <aside
+            className="w-72 flex-shrink-0 flex flex-col overflow-hidden"
+            style={{ backgroundColor: themeConfig.sidebar, borderLeft: `1px solid ${themeConfig.border}` }}
+          >
+            {/* Sidebar tabs */}
+            <div className="flex border-b" style={{ borderColor: themeConfig.border }}>
+              {[
+                { id: 'toc' as const, label: 'Съдържание', icon: FileText },
+                { id: 'info' as const, label: 'Инфо', icon: Hash },
+                { id: 'highlights' as const, label: 'Маркери', icon: Highlighter },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSidebarTab(tab.id)}
+                  className={`flex-1 py-2 px-2 text-xs font-medium transition-colors ${
+                    sidebarTab === tab.id ? 'border-b-2 border-amber-500' : ''
+                  }`}
+                  style={{ color: sidebarTab === tab.id ? themeConfig.heading : themeConfig.secondary }}
+                  title={tab.label}
+                >
+                  <tab.icon size={14} className="mx-auto" />
+                </button>
+              ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-stone-200">
-              <h3 className="text-sm font-medium text-stone-700 mb-2">Markdown shortcuts</h3>
-              <div className="space-y-1 text-xs text-stone-500">
-                <p><code className="bg-stone-100 px-1 rounded"># </code> Заглавие 1</p>
-                <p><code className="bg-stone-100 px-1 rounded">## </code> Заглавие 2</p>
-                <p><code className="bg-stone-100 px-1 rounded">### </code> Заглавие 3</p>
-                <p><code className="bg-stone-100 px-1 rounded">- </code> Списък</p>
-                <p><code className="bg-stone-100 px-1 rounded">1. </code> Номериран списък</p>
-                <p><code className="bg-stone-100 px-1 rounded">&gt; </code> Цитат</p>
-              </div>
+            {/* Sidebar content */}
+            <div className="flex-1 overflow-y-auto p-3">
+              {/* TOC Tab */}
+              {sidebarTab === 'toc' && (
+                <div className="space-y-1">
+                  <h4 className="text-xs font-semibold mb-2" style={{ color: themeConfig.secondary }}>
+                    СЪДЪРЖАНИЕ
+                  </h4>
+                  {tableOfContents.length > 0 ? (
+                    tableOfContents.map((heading, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          // Find position and scroll to it
+                          let pos = 0;
+                          let found = false;
+                          editor?.state.doc.descendants((node, nodePos) => {
+                            if (!found && node.type.name === 'heading' && node.textContent === heading.text) {
+                              pos = nodePos;
+                              found = true;
+                              return false;
+                            }
+                          });
+                          if (found) {
+                            editor?.chain().focus().setTextSelection(pos + 1).run();
+                            setTimeout(() => {
+                              const selection = window.getSelection();
+                              if (selection?.rangeCount) {
+                                const el = selection.anchorNode?.parentElement;
+                                el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              }
+                            }, 50);
+                          }
+                        }}
+                        className="w-full text-left py-1 px-2 rounded text-sm hover:opacity-70 transition-opacity truncate"
+                        style={{
+                          color: themeConfig.text,
+                          paddingLeft: `${(heading.level - 1) * 12 + 8}px`,
+                          fontSize: heading.level === 1 ? '13px' : '12px',
+                          fontWeight: heading.level === 1 ? 600 : 400,
+                        }}
+                      >
+                        {heading.text}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-xs italic" style={{ color: themeConfig.secondary }}>
+                      Няма заглавия. Използвай H1, H2, H3 за структура.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Info Tab */}
+              {sidebarTab === 'info' && (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="text-xs font-semibold mb-2" style={{ color: themeConfig.secondary }}>
+                      СТАТИСТИКА
+                    </h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 rounded" style={{ backgroundColor: themeConfig.bg }}>
+                        <div className="text-lg font-bold" style={{ color: themeConfig.heading }}>{wordCount}</div>
+                        <div className="text-xs" style={{ color: themeConfig.secondary }}>думи</div>
+                      </div>
+                      <div className="p-2 rounded" style={{ backgroundColor: themeConfig.bg }}>
+                        <div className="text-lg font-bold" style={{ color: themeConfig.heading }}>{readingTime}</div>
+                        <div className="text-xs" style={{ color: themeConfig.secondary }}>мин четене</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-semibold mb-2" style={{ color: themeConfig.secondary }}>
+                      КЛАВИШИ
+                    </h4>
+                    <div className="space-y-1 text-xs" style={{ color: themeConfig.text }}>
+                      <div className="flex justify-between">
+                        <span>Търси</span>
+                        <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: themeConfig.bg }}>Ctrl+F</kbd>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Запази</span>
+                        <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: themeConfig.bg }}>Ctrl+S</kbd>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Затвори</span>
+                        <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: themeConfig.bg }}>Esc</kbd>
+                      </div>
+                      {(hasPrevTopic || hasNextTopic) && (
+                        <div className="flex justify-between">
+                          <span>Навигация</span>
+                          <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: themeConfig.bg }}>Alt+←/→</kbd>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {subjectName && (
+                    <div>
+                      <h4 className="text-xs font-semibold mb-1" style={{ color: themeConfig.secondary }}>
+                        ПРЕДМЕТ
+                      </h4>
+                      <p className="text-sm" style={{ color: themeConfig.text }}>{subjectName}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Highlights Tab */}
+              {sidebarTab === 'highlights' && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-semibold mb-2" style={{ color: themeConfig.secondary }}>
+                    МАРКИРАНИ ({topic.highlights?.length || 0})
+                  </h4>
+                  {topic.highlights && topic.highlights.length > 0 ? (
+                    topic.highlights.map((h, idx) => (
+                      <div
+                        key={h.id || idx}
+                        className="p-2 rounded text-xs cursor-pointer hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: h.color, color: '#1c1917' }}
+                        onClick={() => {
+                          // Try to find and scroll to highlight
+                          const text = h.text.substring(0, 30);
+                          const content = editor?.getText() || '';
+                          const pos = content.indexOf(text);
+                          if (pos !== -1) {
+                            // Rough scroll
+                            containerRef.current?.scrollTo({
+                              top: (pos / content.length) * (containerRef.current?.scrollHeight || 0),
+                              behavior: 'smooth'
+                            });
+                          }
+                        }}
+                      >
+                        <p className="line-clamp-2">{h.text}</p>
+                        {h.note && (
+                          <p className="mt-1 italic opacity-70 text-xs">{h.note}</p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs italic" style={{ color: themeConfig.secondary }}>
+                      Няма маркирания. Селектирай текст и използвай маркера от toolbar-а.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </aside>
         )}
@@ -2209,9 +2383,15 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       {scrollProgress > 20 && (
         <button
           onClick={() => containerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="fixed bottom-6 right-6 p-3 bg-white rounded-full shadow-lg border border-stone-200 text-stone-600 hover:text-stone-900 hover:scale-110 transition-all z-40"
+          className="fixed bottom-6 p-3 rounded-full shadow-lg hover:scale-110 transition-all z-40"
+          style={{
+            right: showSidebar ? '19rem' : '1.5rem',
+            backgroundColor: themeConfig.toolbar,
+            border: `1px solid ${themeConfig.border}`,
+            color: themeConfig.toolbarText
+          }}
         >
-          <ChevronUp size={24} />
+          <ChevronUp size={20} />
         </button>
       )}
 
@@ -2220,20 +2400,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         isOpen={showFormulaModal}
         onClose={() => setShowFormulaModal(false)}
         onInsert={handleInsertFormula}
-      />
-
-      {/* Mermaid Modal */}
-      <MermaidModal
-        isOpen={showMermaidModal}
-        onClose={() => setShowMermaidModal(false)}
-        onInsert={handleInsertMermaid}
-      />
-
-      {/* Markmap Modal */}
-      <MarkmapModal
-        isOpen={showMarkmapModal}
-        onClose={() => setShowMarkmapModal(false)}
-        onSave={handleInsertMarkmap}
       />
 
     </div>

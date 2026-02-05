@@ -46,8 +46,9 @@ export default function SchedulePage() {
         examDate.setHours(0, 0, 0, 0);
         const daysUntil = Math.ceil((examDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
         const totalTopics = s.topics.length;
+        const studiedTopics = s.topics.filter(t => t.status !== 'gray').length;
         const greenTopics = s.topics.filter(t => t.status === 'green').length;
-        const remaining = totalTopics - greenTopics;
+        const remaining = totalTopics - studiedTopics;
         const topicsPerDay = daysUntil > 0 ? remaining / daysUntil : remaining;
 
         return {
@@ -55,10 +56,11 @@ export default function SchedulePage() {
           examDate: s.examDate!,
           daysUntil,
           totalTopics,
+          studiedTopics,
           greenTopics,
           remaining,
           topicsPerDay,
-          progress: totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0
+          progress: totalTopics > 0 ? Math.round((studiedTopics / totalTopics) * 100) : 0
         };
       })
       .filter(e => e.daysUntil >= 0)
@@ -459,11 +461,11 @@ export default function SchedulePage() {
 
                   {/* Stats */}
                   <div className="flex items-center gap-4 mt-2 text-xs font-mono">
-                    <span className="text-slate-500">
-                      {exam.greenTopics}/{exam.totalTopics} готови
+                    <span className="text-slate-500" title={`${exam.greenTopics} зелени`}>
+                      {exam.studiedTopics}/{exam.totalTopics} изучени
                     </span>
                     <span className="text-slate-500">
-                      {exam.remaining} остават
+                      {exam.remaining} нови
                     </span>
                     <span className={
                       workloadHeavy ? 'text-red-400' :

@@ -1302,32 +1302,28 @@ export default function ReaderMode({
     setSaveToast({ show: true, message, type });
   }, []);
 
-  // Force save
+  // Force save - ALWAYS saves to prevent data loss on navigation
   const forceSave = useCallback(() => {
-    if (editor && !isSavingRef.current) {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      isSavingRef.current = true;
-      setIsSaving(true);
-      try {
-        const markdown = htmlToMarkdown(editor.getHTML());
-        onSaveMaterialRef.current(markdown);
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false);
-        showToast('Запазено успешно', 'success');
-      } catch (error) {
-        console.error('Force save error:', error);
-        showToast('Грешка при запазване', 'error');
-        setHasUnsavedChanges(false);
-      } finally {
-        setTimeout(() => {
-          isSavingRef.current = false;
-          setIsSaving(false);
-        }, 100);
-      }
+    if (!editor) return;
+
+    // Clear any pending auto-save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = null;
     }
-  }, [editor, showToast]);
+
+    // ALWAYS save - ignore isSaving state to prevent data loss
+    try {
+      const markdown = htmlToMarkdown(editor.getHTML());
+      onSaveMaterialRef.current(markdown);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
+      isSavingRef.current = false;
+      setIsSaving(false);
+    } catch (error) {
+      console.error('Force save error:', error);
+    }
+  }, [editor]);
 
   // Insert formula into editor
   const handleInsertFormula = (formula: string) => {

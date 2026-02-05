@@ -26,7 +26,7 @@ import {
   ImagePlus, Table as TableIcon, Link2, Unlink, Code2, CheckSquare,
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
-  Calculator, GitBranch, Check, Network
+  Calculator, Check
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -295,313 +295,6 @@ function FormulaModal({ isOpen, onClose, onInsert }: {
               Вмъкни
             </button>
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Mermaid Diagram Modal
-function MermaidModal({ isOpen, onClose, onInsert }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onInsert: (code: string) => void;
-}) {
-  const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<string>('');
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!code || !isOpen) return;
-
-    const renderMermaid = async () => {
-      try {
-        const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'default',
-          securityLevel: 'loose'
-        });
-
-        const { svg } = await mermaid.render('mermaid-preview-reader', code);
-        setPreview(svg);
-        setError('');
-      } catch (e) {
-        setError((e as Error).message || 'Грешка в диаграмата');
-        setPreview('');
-      }
-    };
-
-    const timer = setTimeout(renderMermaid, 500);
-    return () => clearTimeout(timer);
-  }, [code, isOpen]);
-
-  const handleInsert = () => {
-    if (code && !error) {
-      onInsert(code);
-      setCode('');
-      onClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  const examples = [
-    {
-      label: 'Flowchart',
-      code: `flowchart TD
-    A[Глюкоза] --> B[Гликолиза]
-    B --> C[Пируват]
-    C --> D{Аеробно?}
-    D -->|Да| E[Цикъл на Кребс]
-    D -->|Не| F[Лактат]`
-    },
-    {
-      label: 'Sequence',
-      code: `sequenceDiagram
-    participant R as Рецептор
-    participant G as G-protein
-    participant E as Ефектор
-    R->>G: Активиране
-    G->>E: Сигнал
-    E->>E: Отговор`
-    },
-    {
-      label: 'Krebs Cycle',
-      code: `flowchart LR
-    A[Acetyl-CoA] --> B[Цитрат]
-    B --> C[Изоцитрат]
-    C --> D[α-кетоглутарат]
-    D --> E[Сукцинил-CoA]
-    E --> F[Сукцинат]
-    F --> G[Фумарат]
-    G --> H[Малат]
-    H --> I[Оксалоацетат]
-    I --> A`
-    }
-  ];
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-white border border-stone-300 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between p-4 border-b border-stone-200">
-          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
-            <GitBranch size={20} className="text-green-600" />
-            Вмъкни диаграма (Mermaid)
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-stone-100 rounded">
-            <X size={20} className="text-stone-500" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4">
-          <div>
-            <label className="text-xs text-stone-500 font-medium mb-2 block">Шаблони:</label>
-            <div className="flex flex-wrap gap-2">
-              {examples.map(ex => (
-                <button
-                  key={ex.label}
-                  onClick={() => setCode(ex.code)}
-                  className="px-2 py-1 text-xs bg-stone-100 hover:bg-stone-200 text-stone-700 rounded"
-                >
-                  {ex.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs text-stone-500 font-medium mb-1 block">Mermaid код:</label>
-              <textarea
-                value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="flowchart TD&#10;    A[Start] --> B[End]"
-                className="w-full h-64 bg-stone-50 border border-stone-300 rounded-lg p-3 text-stone-800 font-mono text-sm focus:outline-none focus:border-green-500"
-              />
-            </div>
-
-            <div>
-              <label className="text-xs text-stone-500 font-medium mb-1 block">Преглед:</label>
-              <div className="h-64 bg-stone-50 border border-stone-200 rounded-lg p-4 overflow-auto flex items-center justify-center">
-                {error ? (
-                  <span className="text-red-500 text-sm">{error}</span>
-                ) : preview ? (
-                  <div dangerouslySetInnerHTML={{ __html: preview }} />
-                ) : (
-                  <span className="text-stone-400 text-sm">Въведи код...</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
-            >
-              Отказ
-            </button>
-            <button
-              onClick={handleInsert}
-              disabled={!code || !!error}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm flex items-center gap-2 disabled:opacity-50"
-            >
-              <Check size={16} />
-              Вмъкни
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Markmap Modal Component
-function MarkmapModal({ isOpen, onClose, onSave }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (imageData: string) => void;
-}) {
-  const [markdown, setMarkdown] = useState(`# Тема
-## Подтема 1
-### Детайл A
-### Детайл B
-## Подтема 2
-### Детайл C
-### Детайл D`);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [markmapInstance, setMarkmapInstance] = useState<any>(null);
-
-  useEffect(() => {
-    if (!isOpen || !svgRef.current) return;
-
-    const loadMarkmap = async () => {
-      try {
-        const { Transformer } = await import('markmap-lib');
-        const { Markmap } = await import('markmap-view');
-
-        const transformer = new Transformer();
-        const { root } = transformer.transform(markdown);
-
-        // Clear previous content
-        svgRef.current!.innerHTML = '';
-
-        // Create markmap
-        const mm = Markmap.create(svgRef.current!, {
-          autoFit: true,
-          color: (node: any) => {
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-            return colors[node.state?.depth % colors.length] || colors[0];
-          },
-          paddingX: 20,
-          duration: 300,
-        }, root);
-
-        setMarkmapInstance(mm);
-      } catch (error) {
-        console.error('Error loading markmap:', error);
-      }
-    };
-
-    loadMarkmap();
-  }, [isOpen, markdown]);
-
-  const handleSave = async () => {
-    if (!svgRef.current) return;
-
-    try {
-      // Clone SVG and prepare for export
-      const svgElement = svgRef.current.cloneNode(true) as SVGSVGElement;
-      const bbox = svgRef.current.getBBox();
-
-      // Set proper dimensions
-      svgElement.setAttribute('width', String(bbox.width + 40));
-      svgElement.setAttribute('height', String(bbox.height + 40));
-      svgElement.setAttribute('viewBox', `${bbox.x - 20} ${bbox.y - 20} ${bbox.width + 40} ${bbox.height + 40}`);
-
-      // Add white background
-      const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      bg.setAttribute('x', String(bbox.x - 20));
-      bg.setAttribute('y', String(bbox.y - 20));
-      bg.setAttribute('width', String(bbox.width + 40));
-      bg.setAttribute('height', String(bbox.height + 40));
-      bg.setAttribute('fill', 'white');
-      svgElement.insertBefore(bg, svgElement.firstChild);
-
-      // Convert to data URL
-      const svgData = new XMLSerializer().serializeToString(svgElement);
-      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-
-      // Convert SVG to PNG using canvas
-      const img = new window.Image();
-      const url = URL.createObjectURL(svgBlob);
-
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const scale = 2; // Higher resolution
-        canvas.width = (bbox.width + 40) * scale;
-        canvas.height = (bbox.height + 40) * scale;
-        const ctx = canvas.getContext('2d')!;
-        ctx.scale(scale, scale);
-        ctx.fillStyle = 'white';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0);
-
-        const pngData = canvas.toDataURL('image/png');
-        onSave(pngData);
-        onClose();
-        URL.revokeObjectURL(url);
-      };
-
-      img.src = url;
-    } catch (error) {
-      console.error('Error saving markmap:', error);
-      alert('Грешка при запазване на mind map');
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-white">
-      <div className="flex items-center justify-between p-3 bg-stone-100 border-b">
-        <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
-          <GitBranch size={20} className="text-blue-600" />
-          Mind Map (Markmap)
-        </h3>
-        <div className="flex gap-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-stone-200 hover:bg-stone-300 text-stone-700 rounded-lg text-sm"
-          >
-            Отказ
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm flex items-center gap-2"
-          >
-            <Check size={16} />
-            Запази като изображение
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 flex" style={{ height: 'calc(100vh - 60px)' }}>
-        {/* Markdown Editor */}
-        <div className="w-1/3 border-r border-stone-200 flex flex-col">
-          <div className="p-2 bg-stone-50 border-b text-sm text-stone-600 font-medium">
-            Markdown (йерархия с #)
-          </div>
-          <textarea
-            value={markdown}
-            onChange={(e) => setMarkdown(e.target.value)}
-            className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none"
-            placeholder="# Главна тема&#10;## Подтема 1&#10;### Детайл&#10;## Подтема 2"
-          />
-        </div>
-        {/* Markmap Preview */}
-        <div className="flex-1 bg-stone-50 overflow-hidden">
-          <svg ref={svgRef} className="w-full h-full" />
         </div>
       </div>
     </div>
@@ -1016,8 +709,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
   const [showTableMenu, setShowTableMenu] = useState(false);
   const [showTableGridPicker, setShowTableGridPicker] = useState(false);
   const [showFormulaModal, setShowFormulaModal] = useState(false);
-  const [showMermaidModal, setShowMermaidModal] = useState(false);
-  const [showMarkmapModal, setShowMarkmapModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1352,34 +1043,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
       // Fallback - insert as marker
       editor.chain().focus().insertContent(`[FORMULA:${encodedFormula}]`).run();
     }
-  };
-
-  // Insert mermaid diagram into editor
-  const handleInsertMermaid = async (code: string) => {
-    if (!editor) return;
-    try {
-      const mermaid = (await import('mermaid')).default;
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'loose'
-      });
-      const uniqueId = `mermaid-${Date.now()}`;
-      const { svg } = await mermaid.render(uniqueId, code);
-      // Convert SVG to data URL for embedding
-      const svgBase64 = btoa(unescape(encodeURIComponent(svg)));
-      const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
-      editor.chain().focus().setImage({ src: dataUrl, alt: 'Mermaid Diagram' }).run();
-    } catch (error) {
-      console.error('Mermaid error:', error);
-      alert('Грешка при създаване на диаграмата');
-    }
-  };
-
-  // Insert markmap mind map into editor
-  const handleInsertMarkmap = (imageData: string) => {
-    if (!editor) return;
-    editor.chain().focus().setImage({ src: imageData, alt: 'Mind Map' }).run();
   };
 
   // Keyboard shortcuts
@@ -1837,19 +1500,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           >
             <Calculator size={18} />
           </ToolbarButton>
-          <ToolbarButton
-            onClick={() => setShowMermaidModal(true)}
-            title="Вмъкни диаграма (Mermaid)"
-          >
-            <GitBranch size={18} />
-          </ToolbarButton>
-          <ToolbarButton
-            onClick={() => setShowMarkmapModal(true)}
-            title="Mind Map (Markmap)"
-          >
-            <Network size={18} />
-          </ToolbarButton>
-
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
           {/* Font size */}
@@ -2220,20 +1870,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
         isOpen={showFormulaModal}
         onClose={() => setShowFormulaModal(false)}
         onInsert={handleInsertFormula}
-      />
-
-      {/* Mermaid Modal */}
-      <MermaidModal
-        isOpen={showMermaidModal}
-        onClose={() => setShowMermaidModal(false)}
-        onInsert={handleInsertMermaid}
-      />
-
-      {/* Markmap Modal */}
-      <MarkmapModal
-        isOpen={showMarkmapModal}
-        onClose={() => setShowMarkmapModal(false)}
-        onSave={handleInsertMarkmap}
       />
 
     </div>

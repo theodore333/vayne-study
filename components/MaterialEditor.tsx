@@ -11,7 +11,7 @@ import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ImagePlus, Calculator, GitBranch, Pencil, X, Check } from 'lucide-react';
+import { ImagePlus, Calculator, Pencil, X, Check } from 'lucide-react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
@@ -328,170 +328,6 @@ function FormulaModal({ isOpen, onClose, onInsert }: {
   );
 }
 
-// Mermaid Diagram Modal
-function MermaidModal({ isOpen, onClose, onInsert }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onInsert: (code: string) => void;
-}) {
-  const [code, setCode] = useState('');
-  const [preview, setPreview] = useState<string>('');
-  const [error, setError] = useState('');
-  const previewRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!code || !isOpen) return;
-
-    const renderMermaid = async () => {
-      try {
-        const mermaid = (await import('mermaid')).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'dark',
-          securityLevel: 'loose'
-        });
-
-        const { svg } = await mermaid.render('mermaid-preview', code);
-        setPreview(svg);
-        setError('');
-      } catch (e) {
-        setError((e as Error).message || 'Грешка в диаграмата');
-        setPreview('');
-      }
-    };
-
-    const timer = setTimeout(renderMermaid, 500);
-    return () => clearTimeout(timer);
-  }, [code, isOpen]);
-
-  const handleInsert = () => {
-    if (code && !error) {
-      onInsert(code);
-      setCode('');
-      onClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
-  const examples = [
-    {
-      label: 'Flowchart',
-      code: `flowchart TD
-    A[Глюкоза] --> B[Гликолиза]
-    B --> C[Пируват]
-    C --> D{Аеробно?}
-    D -->|Да| E[Цикъл на Кребс]
-    D -->|Не| F[Лактат]`
-    },
-    {
-      label: 'Sequence',
-      code: `sequenceDiagram
-    participant R as Рецептор
-    participant G as G-protein
-    participant E as Ефектор
-    R->>G: Активиране
-    G->>E: Сигнал
-    E->>E: Отговор`
-    },
-    {
-      label: 'Cycle',
-      code: `flowchart LR
-    A[Acetyl-CoA] --> B[Цитрат]
-    B --> C[Изоцитрат]
-    C --> D[α-кетоглутарат]
-    D --> E[Сукцинил-CoA]
-    E --> F[Сукцинат]
-    F --> G[Фумарат]
-    G --> H[Малат]
-    H --> I[Оксалоацетат]
-    I --> A`
-    }
-  ];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <GitBranch size={20} className="text-green-400" />
-            Вмъкни диаграма (Mermaid)
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-800 rounded">
-            <X size={20} className="text-slate-400" />
-          </button>
-        </div>
-
-        <div className="p-4 space-y-4">
-          {/* Quick examples */}
-          <div>
-            <label className="text-xs text-slate-500 font-mono mb-2 block">Шаблони:</label>
-            <div className="flex flex-wrap gap-2">
-              {examples.map(ex => (
-                <button
-                  key={ex.label}
-                  onClick={() => setCode(ex.code)}
-                  className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-mono"
-                >
-                  {ex.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Input */}
-            <div>
-              <label className="text-xs text-slate-500 font-mono mb-1 block">Mermaid код:</label>
-              <textarea
-                value={code}
-                onChange={e => setCode(e.target.value)}
-                placeholder="flowchart TD&#10;    A[Start] --> B[End]"
-                className="w-full h-64 bg-slate-800 border border-slate-700 rounded-lg p-3 text-white font-mono text-sm focus:outline-none focus:border-green-500"
-              />
-            </div>
-
-            {/* Preview */}
-            <div>
-              <label className="text-xs text-slate-500 font-mono mb-1 block">Преглед:</label>
-              <div
-                ref={previewRef}
-                className="h-64 bg-slate-800 rounded-lg p-4 overflow-auto flex items-center justify-center"
-              >
-                {error ? (
-                  <span className="text-red-400 text-sm font-mono">{error}</span>
-                ) : preview ? (
-                  <div dangerouslySetInnerHTML={{ __html: preview }} />
-                ) : (
-                  <span className="text-slate-500 text-sm">Въведи код...</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-2 justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-mono text-sm"
-            >
-              Отказ
-            </button>
-            <button
-              onClick={handleInsert}
-              disabled={!code || !!error}
-              className="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-mono text-sm flex items-center gap-2 disabled:opacity-50"
-            >
-              <Check size={16} />
-              Вмъкни
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Drawing Modal with Excalidraw
 function DrawingModal({ isOpen, onClose, onSave, initialData }: {
   isOpen: boolean;
@@ -578,7 +414,6 @@ function DrawingModal({ isOpen, onClose, onSave, initialData }: {
 
 export default function MaterialEditor({ value, onChange, placeholder, className }: Props) {
   const [showFormulaModal, setShowFormulaModal] = useState(false);
-  const [showMermaidModal, setShowMermaidModal] = useState(false);
   const [showDrawingModal, setShowDrawingModal] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -731,29 +566,6 @@ export default function MaterialEditor({ value, onChange, placeholder, className
     }
   };
 
-  // Insert mermaid diagram as SVG image
-  const handleInsertMermaid = async (code: string) => {
-    if (!editor) return;
-
-    try {
-      const mermaid = (await import('mermaid')).default;
-      mermaid.initialize({ startOnLoad: false, theme: 'neutral' });
-
-      const { svg } = await mermaid.render(`mermaid-${Date.now()}`, code);
-
-      // Convert SVG to base64 image
-      const svgBlob = new Blob([svg], { type: 'image/svg+xml' });
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string;
-        editor.chain().focus().setImage({ src: base64, alt: 'Mermaid diagram' }).run();
-      };
-      reader.readAsDataURL(svgBlob);
-    } catch (e) {
-      console.error('Mermaid error:', e);
-    }
-  };
-
   // Insert drawing as image
   const handleInsertDrawing = (imageData: string) => {
     if (!editor) return;
@@ -854,13 +666,6 @@ export default function MaterialEditor({ value, onChange, placeholder, className
           <Calculator size={16} />
         </button>
         <button
-          onClick={() => setShowMermaidModal(true)}
-          className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-green-400"
-          title="Вмъкни диаграма (Mermaid)"
-        >
-          <GitBranch size={16} />
-        </button>
-        <button
           onClick={() => setShowDrawingModal(true)}
           className="p-1.5 rounded hover:bg-slate-700 text-slate-400 hover:text-purple-400"
           title="Рисувай / Скицирай"
@@ -884,11 +689,6 @@ export default function MaterialEditor({ value, onChange, placeholder, className
         isOpen={showFormulaModal}
         onClose={() => setShowFormulaModal(false)}
         onInsert={handleInsertFormula}
-      />
-      <MermaidModal
-        isOpen={showMermaidModal}
-        onClose={() => setShowMermaidModal(false)}
-        onInsert={handleInsertMermaid}
       />
       <DrawingModal
         isOpen={showDrawingModal}

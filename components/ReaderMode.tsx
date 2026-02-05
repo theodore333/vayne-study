@@ -996,6 +996,8 @@ export default function ReaderMode({
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
   const [showTutor, setShowTutor] = useState(false);
+  const [tutorWidth, setTutorWidth] = useState(384); // default w-96 = 384px
+  const tutorResizeRef = useRef<{ startX: number; startW: number } | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [isFormatting, setIsFormatting] = useState(false);
@@ -2451,13 +2453,39 @@ export default function ReaderMode({
 
         {/* AI Tutor Panel */}
         {showTutor && (
-          <aside className="w-96 flex-shrink-0 bg-[rgb(15,15,25)] border-l border-slate-700/50 flex flex-col overflow-hidden">
-            <TutorChat
-              topic={topic}
-              subjectName={subjectName || ''}
-              subjectTopics={subjectTopics}
-              onClose={() => setShowTutor(false)}
+          <aside
+            className="flex-shrink-0 bg-[rgb(15,15,25)] border-l border-slate-700/50 flex overflow-hidden relative"
+            style={{ width: tutorWidth }}
+          >
+            {/* Resize handle */}
+            <div
+              className="absolute left-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-purple-500/30 active:bg-purple-500/50 z-10"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                tutorResizeRef.current = { startX: e.clientX, startW: tutorWidth };
+                const onMove = (ev: MouseEvent) => {
+                  if (!tutorResizeRef.current) return;
+                  const diff = tutorResizeRef.current.startX - ev.clientX;
+                  const newW = Math.max(300, Math.min(800, tutorResizeRef.current.startW + diff));
+                  setTutorWidth(newW);
+                };
+                const onUp = () => {
+                  tutorResizeRef.current = null;
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              }}
             />
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <TutorChat
+                topic={topic}
+                subjectName={subjectName || ''}
+                subjectTopics={subjectTopics}
+                onClose={() => setShowTutor(false)}
+              />
+            </div>
           </aside>
         )}
       </div>

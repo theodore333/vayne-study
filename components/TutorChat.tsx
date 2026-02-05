@@ -17,6 +17,35 @@ interface TutorMessage {
   content: string;
 }
 
+// Render basic markdown: **bold**, *italic*, and line breaks
+function renderMarkdown(text: string): React.ReactNode[] {
+  const parts: React.ReactNode[] = [];
+  // Split by **bold** first, then *italic*
+  const regex = /(\*\*(.+?)\*\*|\*(.+?)\*)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    // Add text before match
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    if (match[2]) {
+      // **bold**
+      parts.push(<strong key={match.index} className="font-semibold">{match[2]}</strong>);
+    } else if (match[3]) {
+      // *italic*
+      parts.push(<em key={match.index}>{match[3]}</em>);
+    }
+    lastIndex = match.index + match[0].length;
+  }
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts.length > 0 ? parts : [text];
+}
+
 interface TutorChatProps {
   topic: Topic;
   subjectName: string;
@@ -291,7 +320,7 @@ export default function TutorChat({ topic, subjectName, subjectTopics, onClose }
                   : 'bg-slate-800/80 border border-slate-700/50 text-slate-200'
               }`}
             >
-              {msg.content}
+              {msg.role === 'tutor' ? renderMarkdown(msg.content) : msg.content}
             </div>
           </div>
         ))}
@@ -320,15 +349,15 @@ export default function TutorChat({ topic, subjectName, subjectTopics, onClose }
       </div>
 
       {/* Input */}
-      <div className="p-2 border-t border-slate-700/50">
-        <div className="flex gap-2">
+      <div className="flex-shrink-0 p-2 pb-3 border-t border-slate-700/50">
+        <div className="flex gap-2 items-end">
           <textarea
             ref={inputRef}
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Напиши отговор..."
-            rows={2}
+            rows={1}
             className="flex-1 px-3 py-2 bg-slate-800/60 border border-slate-700/50 rounded-lg
               text-sm text-slate-200 placeholder-slate-500 resize-none
               focus:outline-none focus:border-purple-600/50"
@@ -336,8 +365,8 @@ export default function TutorChat({ topic, subjectName, subjectTopics, onClose }
           <button
             onClick={sendMessage}
             disabled={!inputValue.trim() || isTyping}
-            className="px-3 self-end bg-purple-600 hover:bg-purple-500 disabled:opacity-40
-              disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+            className="p-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40
+              disabled:cursor-not-allowed text-white rounded-lg transition-colors flex-shrink-0"
           >
             <Send size={16} />
           </button>

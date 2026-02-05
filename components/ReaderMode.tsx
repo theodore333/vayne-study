@@ -1212,32 +1212,30 @@ export default function ReaderMode({
       },
     },
     onUpdate: ({ editor }) => {
-      // Don't trigger save if we're already saving (use ref for current value)
-      if (isSavingRef.current) return;
-
       setHasUnsavedChanges(true);
 
+      // Always clear and reschedule - don't skip saves
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
 
       saveTimeoutRef.current = setTimeout(() => {
+        // Double-check we have content before saving
+        const html = editor.getHTML();
+        if (!html || html === '<p></p>') return;
+
         isSavingRef.current = true;
         setIsSaving(true);
         try {
-          const markdown = htmlToMarkdown(editor.getHTML());
-          onSaveMaterialRef.current(markdown); // Use ref for stable callback
+          const markdown = htmlToMarkdown(html);
+          onSaveMaterialRef.current(markdown);
           setLastSaved(new Date());
           setHasUnsavedChanges(false);
         } catch (error) {
           console.error('Save error:', error);
-          // Don't clear hasUnsavedChanges on error - keep showing "unsaved" state
         } finally {
-          // Small delay before allowing new saves
-          setTimeout(() => {
-            isSavingRef.current = false;
-            setIsSaving(false);
-          }, 100);
+          isSavingRef.current = false;
+          setIsSaving(false);
         }
       }, 1000);
     },
@@ -1510,16 +1508,14 @@ export default function ReaderMode({
       const formattedHtml = markdownToHtml(data.formattedText);
       editor.commands.setContent(formattedHtml);
 
-      // Trigger save
-      setHasUnsavedChanges(true);
+      // Save IMMEDIATELY - don't use timeout, don't risk losing AI-formatted content
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
       }
-      saveTimeoutRef.current = setTimeout(() => {
-        onSaveMaterial(data.formattedText);
-        setLastSaved(new Date());
-        setHasUnsavedChanges(false);
-      }, 500);
+      onSaveMaterialRef.current(data.formattedText);
+      setLastSaved(new Date());
+      setHasUnsavedChanges(false);
 
     } catch (error) {
       console.error('Format error:', error);

@@ -118,9 +118,24 @@ export default function Dashboard() {
   const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsTargetRetention || 0.85), [activeSubjects, data.studyGoals.fsrsTargetRetention]);
   const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
 
-  // New dashboard algorithms
-  const subjectHealthStatuses = useMemo(() => getSubjectHealth(activeSubjects), [activeSubjects]);
-  const nextExamReadiness = useMemo(() => getNextExamReadiness(activeSubjects, data.questionBanks), [activeSubjects, data.questionBanks]);
+  // New dashboard algorithms - wrapped in try-catch for safety
+  const subjectHealthStatuses = useMemo(() => {
+    try {
+      return getSubjectHealth(activeSubjects);
+    } catch (e) {
+      console.error('getSubjectHealth error:', e);
+      return [];
+    }
+  }, [activeSubjects]);
+
+  const nextExamReadiness = useMemo(() => {
+    try {
+      return getNextExamReadiness(activeSubjects, data.questionBanks || []);
+    } catch (e) {
+      console.error('getNextExamReadiness error:', e);
+      return null;
+    }
+  }, [activeSubjects, data.questionBanks]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -151,12 +166,12 @@ export default function Dashboard() {
       {/* WIDGETS ROW: Academic Events + Subject Health + Daily Goals */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <AcademicEventsWidget
-          events={data.academicEvents}
+          events={data.academicEvents || []}
           subjects={activeSubjects}
           maxEvents={4}
         />
         <SubjectHealthIndicator
-          healthStatuses={subjectHealthStatuses}
+          healthStatuses={subjectHealthStatuses || []}
           maxItems={3}
         />
         <DailyGoalsChecklist

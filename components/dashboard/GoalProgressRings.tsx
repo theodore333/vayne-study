@@ -78,47 +78,58 @@ function ProgressRing({ percentage, size, strokeWidth, color, label, current, go
 }
 
 export default function GoalProgressRings({ timerSessions, studyGoals }: GoalProgressRingsProps) {
+  const safeSessions = timerSessions || [];
+  const safeGoals = {
+    dailyMinutes: studyGoals?.dailyMinutes || 120,
+    weeklyMinutes: studyGoals?.weeklyMinutes || 600,
+    monthlyMinutes: studyGoals?.monthlyMinutes || 2400
+  };
+
   const progress = useMemo(() => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
 
     // Daily
-    const dailyMinutes = timerSessions
+    const dailyMinutes = safeSessions
       .filter(s => s.startTime?.startsWith(todayStr))
-      .reduce((sum, s) => sum + s.duration, 0);
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
 
     // Weekly (Monday start)
     const weekStart = new Date(now);
     weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7));
     weekStart.setHours(0, 0, 0, 0);
-    const weeklyMinutes = timerSessions
+    const weeklyMinutes = safeSessions
       .filter(s => s.startTime && new Date(s.startTime) >= weekStart)
-      .reduce((sum, s) => sum + s.duration, 0);
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
 
     // Monthly
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthlyMinutes = timerSessions
+    const monthlyMinutes = safeSessions
       .filter(s => s.startTime && new Date(s.startTime) >= monthStart)
-      .reduce((sum, s) => sum + s.duration, 0);
+      .reduce((sum, s) => sum + (s.duration || 0), 0);
+
+    const dailyGoal = safeGoals.dailyMinutes || 1;
+    const weeklyGoal = safeGoals.weeklyMinutes || 1;
+    const monthlyGoal = safeGoals.monthlyMinutes || 1;
 
     return {
       daily: {
         current: dailyMinutes,
-        goal: studyGoals.dailyMinutes,
-        percentage: Math.min(100, (dailyMinutes / studyGoals.dailyMinutes) * 100)
+        goal: safeGoals.dailyMinutes,
+        percentage: Math.min(100, (dailyMinutes / dailyGoal) * 100) || 0
       },
       weekly: {
         current: weeklyMinutes,
-        goal: studyGoals.weeklyMinutes,
-        percentage: Math.min(100, (weeklyMinutes / studyGoals.weeklyMinutes) * 100)
+        goal: safeGoals.weeklyMinutes,
+        percentage: Math.min(100, (weeklyMinutes / weeklyGoal) * 100) || 0
       },
       monthly: {
         current: monthlyMinutes,
-        goal: studyGoals.monthlyMinutes,
-        percentage: Math.min(100, (monthlyMinutes / studyGoals.monthlyMinutes) * 100)
+        goal: safeGoals.monthlyMinutes,
+        percentage: Math.min(100, (monthlyMinutes / monthlyGoal) * 100) || 0
       }
     };
-  }, [timerSessions, studyGoals]);
+  }, [safeSessions, safeGoals]);
 
   return (
     <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">

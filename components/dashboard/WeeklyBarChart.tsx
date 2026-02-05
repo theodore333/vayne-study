@@ -18,6 +18,9 @@ interface WeeklyBarChartProps {
 const DAY_NAMES = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
 export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarChartProps) {
+  const safeSessions = timerSessions || [];
+  const safeGoal = dailyGoal || 120;
+
   const weekData = useMemo(() => {
     const result: DayData[] = [];
     const now = new Date();
@@ -27,9 +30,9 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
 
-      const dayMinutes = timerSessions
+      const dayMinutes = safeSessions
         .filter(s => s.startTime?.startsWith(dateStr))
-        .reduce((sum, s) => sum + s.duration, 0);
+        .reduce((sum, s) => sum + (s.duration || 0), 0);
 
       result.push({
         date: dateStr,
@@ -40,9 +43,9 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
     }
 
     return result;
-  }, [timerSessions]);
+  }, [safeSessions]);
 
-  const maxMinutes = Math.max(...weekData.map(d => d.minutes), dailyGoal);
+  const maxMinutes = Math.max(...weekData.map(d => d.minutes), safeGoal) || 1;
   const totalMinutes = weekData.reduce((sum, d) => sum + d.minutes, 0);
 
   const formatTime = (mins: number) => {
@@ -67,7 +70,7 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
       <div className="flex items-end gap-2 h-32">
         {weekData.map((day) => {
           const height = maxMinutes > 0 ? (day.minutes / maxMinutes) * 100 : 0;
-          const reachedGoal = day.minutes >= dailyGoal;
+          const reachedGoal = day.minutes >= safeGoal;
 
           return (
             <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
@@ -76,10 +79,10 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
               </span>
               <div className="relative w-full flex-1 flex items-end">
                 {/* Goal line indicator */}
-                {dailyGoal > 0 && (
+                {safeGoal > 0 && (
                   <div
                     className="absolute w-full border-t border-dashed border-slate-600 z-10"
-                    style={{ bottom: `${(dailyGoal / maxMinutes) * 100}%` }}
+                    style={{ bottom: `${(safeGoal / maxMinutes) * 100}%` }}
                   />
                 )}
                 <div

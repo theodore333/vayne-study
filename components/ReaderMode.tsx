@@ -2367,7 +2367,6 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <span>{Math.round(scrollProgress)}% прочетено</span>
           {focusMode && <span className="text-indigo-600 font-medium">Режим фокус</span>}
         </div>
       </div>

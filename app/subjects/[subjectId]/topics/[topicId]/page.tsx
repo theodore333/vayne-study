@@ -28,6 +28,12 @@ export default function TopicDetailPage() {
   const subject = data.subjects.find(s => s.id === subjectId);
   const topic = subject?.topics.find(t => t.id === topicId);
 
+  // Calculate prev/next topics for navigation
+  const sortedTopics = subject?.topics.slice().sort((a, b) => a.number - b.number) || [];
+  const currentIndex = sortedTopics.findIndex(t => t.id === topicId);
+  const prevTopic = currentIndex > 0 ? sortedTopics[currentIndex - 1] : null;
+  const nextTopic = currentIndex < sortedTopics.length - 1 ? sortedTopics[currentIndex + 1] : null;
+
   const [gradeInput, setGradeInput] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [material, setMaterial] = useState('');
@@ -51,6 +57,18 @@ export default function TopicDetailPage() {
   };
   const closeReaderMode = () => {
     router.push(`/subjects/${subjectId}/topics/${topicId}`);
+  };
+
+  // Navigate to prev/next topic in reader mode
+  const goToPrevTopic = () => {
+    if (prevTopic) {
+      router.push(`/subjects/${subjectId}/topics/${prevTopic.id}?reader=true`);
+    }
+  };
+  const goToNextTopic = () => {
+    if (nextTopic) {
+      router.push(`/subjects/${subjectId}/topics/${nextTopic.id}?reader=true`);
+    }
   };
 
   // Load API key
@@ -340,6 +358,12 @@ export default function TopicDetailPage() {
           onClose={closeReaderMode}
           onSaveHighlights={handleSaveHighlights}
           onSaveMaterial={handleSaveMaterialFromReader}
+          onPrevTopic={goToPrevTopic}
+          onNextTopic={goToNextTopic}
+          hasPrevTopic={!!prevTopic}
+          hasNextTopic={!!nextTopic}
+          prevTopicName={prevTopic?.name}
+          nextTopicName={nextTopic?.name}
         />
       )}
 

@@ -27,7 +27,7 @@ import {
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
   Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
-  ChevronRight, Eye
+  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes } from '@tiptap/core';
@@ -350,6 +350,13 @@ interface ReaderModeProps {
   onClose: () => void;
   onSaveHighlights: (highlights: TextHighlight[]) => void;
   onSaveMaterial: (material: string) => void;
+  // Navigation
+  onPrevTopic?: () => void;
+  onNextTopic?: () => void;
+  hasPrevTopic?: boolean;
+  hasNextTopic?: boolean;
+  prevTopicName?: string;
+  nextTopicName?: string;
 }
 
 // Parse formula and image markers
@@ -947,7 +954,19 @@ function TableOfContents({
   );
 }
 
-export default function ReaderMode({ topic, subjectName, onClose, onSaveHighlights, onSaveMaterial }: ReaderModeProps) {
+export default function ReaderMode({
+  topic,
+  subjectName,
+  onClose,
+  onSaveHighlights,
+  onSaveMaterial,
+  onPrevTopic,
+  onNextTopic,
+  hasPrevTopic,
+  hasNextTopic,
+  prevTopicName,
+  nextTopicName
+}: ReaderModeProps) {
   const [fontSize, setFontSize] = useState(18);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -1528,6 +1547,38 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
               <span className="font-medium hidden sm:inline">Назад</span>
             </button>
             <div className="h-6 w-px bg-stone-300 hidden sm:block" />
+
+            {/* Prev/Next Topic Navigation */}
+            {(hasPrevTopic || hasNextTopic) && (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => { if (onPrevTopic) { forceSave(); onPrevTopic(); } }}
+                  disabled={!hasPrevTopic}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    hasPrevTopic
+                      ? 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                      : 'text-stone-300 cursor-not-allowed'
+                  }`}
+                  title={prevTopicName ? `← ${prevTopicName}` : 'Няма предишна тема'}
+                >
+                  <ArrowLeft size={18} />
+                </button>
+                <button
+                  onClick={() => { if (onNextTopic) { forceSave(); onNextTopic(); } }}
+                  disabled={!hasNextTopic}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    hasNextTopic
+                      ? 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+                      : 'text-stone-300 cursor-not-allowed'
+                  }`}
+                  title={nextTopicName ? `→ ${nextTopicName}` : 'Няма следваща тема'}
+                >
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            )}
+
+            <div className="h-6 w-px bg-stone-300 hidden sm:block" />
             <div className="flex items-center gap-2">
               <BookOpen size={18} className="text-stone-500" />
               <h1 className="font-semibold text-stone-800 truncate max-w-[200px] sm:max-w-[400px]">{topic.name}</h1>
@@ -1535,15 +1586,34 @@ export default function ReaderMode({ topic, subjectName, onClose, onSaveHighligh
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Save status */}
-            <div className="hidden sm:flex items-center gap-2 text-xs text-stone-400 mr-2">
+            {/* Save status - always visible, prominent */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              isSaving
+                ? 'bg-amber-100 text-amber-700 animate-pulse'
+                : hasUnsavedChanges
+                  ? 'bg-red-100 text-red-600 border border-red-200'
+                  : lastSaved
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-stone-100 text-stone-500'
+            }`}>
               {isSaving ? (
-                <span className="text-amber-600">Записване...</span>
+                <>
+                  <Loader2 size={14} className="animate-spin" />
+                  <span>Записване...</span>
+                </>
               ) : hasUnsavedChanges ? (
-                <span className="text-amber-500">Несъхранено</span>
+                <>
+                  <AlertTriangle size={14} />
+                  <span>Незапазено!</span>
+                </>
               ) : lastSaved ? (
-                <span className="text-green-600">Запазено</span>
-              ) : null}
+                <>
+                  <CheckCircle2 size={14} />
+                  <span>Запазено</span>
+                </>
+              ) : (
+                <span>—</span>
+              )}
             </div>
 
             {/* Word count badge */}

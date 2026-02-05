@@ -1290,10 +1290,36 @@ export default function ReaderMode({
       }
       if (editor && hasUnsavedChanges) {
         const markdown = htmlToMarkdown(editor.getHTML());
-        onSaveMaterial(markdown);
+        onSaveMaterialRef.current(markdown);
       }
     };
-  }, [editor, hasUnsavedChanges, onSaveMaterial]);
+  }, [editor, hasUnsavedChanges]);
+
+  // BACKUP: Auto-save every 3 seconds if there are unsaved changes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (editor && hasUnsavedChanges && !isSavingRef.current) {
+        const html = editor.getHTML();
+        if (html && html !== '<p></p>') {
+          isSavingRef.current = true;
+          setIsSaving(true);
+          try {
+            const markdown = htmlToMarkdown(html);
+            onSaveMaterialRef.current(markdown);
+            setLastSaved(new Date());
+            setHasUnsavedChanges(false);
+          } catch (e) {
+            console.error('Backup save error:', e);
+          } finally {
+            isSavingRef.current = false;
+            setIsSaving(false);
+          }
+        }
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [editor, hasUnsavedChanges]);
 
   // Show toast helper
   const showToast = useCallback((message: string, type: 'success' | 'error') => {

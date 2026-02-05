@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat, Download } from 'lucide-react';
+import { Brain, Play, ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, TrendingUp, Sparkles, Lightbulb, Target, FileText, Zap, Clock, StopCircle, Repeat, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -184,10 +184,6 @@ function QuizContent() {
   const [gradeSaved, setGradeSaved] = useState(false);
   const [isSavingGrade, setIsSavingGrade] = useState(false);
 
-  // Anki preview modal state
-  const [showAnkiPreview, setShowAnkiPreview] = useState(false);
-  const [ankiCards, setAnkiCards] = useState<Array<{ front: string; back: string; tag: string }>>([]);
-  const [editingCardIndex, setEditingCardIndex] = useState<number | null>(null);
   const MAX_HINTS = 3;
 
   // Elapsed time counter during generation
@@ -959,114 +955,6 @@ function QuizContent() {
     setIsAnalyzingMistakes(false);
   };
 
-  // Build Anki cards from wrong answers
-  const buildAnkiCards = (): Array<{ front: string; back: string; tag: string }> => {
-    const cards: Array<{ front: string; back: string; tag: string }> = [];
-
-    quizState.questions.forEach((q, i) => {
-      const openEval = openEvaluations[i];
-
-      const isWrong = q.type === 'open'
-        ? (!openEval || openEval.score < 0.7)
-        : quizState.answers[i] !== q.correctAnswer;
-
-      if (!isWrong) return;
-
-      const front = q.question.replace(/\t/g, ' ').replace(/\n/g, ' ');
-      let back = q.correctAnswer.replace(/\t/g, ' ').replace(/\n/g, ' ');
-      if (q.explanation) {
-        back += '\n\n' + q.explanation.replace(/\t/g, ' ').replace(/\n/g, ' ');
-      }
-      const tag = q.concept ? q.concept.replace(/\s+/g, '_') : 'General';
-
-      cards.push({ front, back, tag });
-    });
-
-    return cards;
-  };
-
-  // Download Anki-compatible file with proper card formats
-  const downloadAnkiTSV = (cards: Array<{ front: string; back: string; tag: string }>) => {
-    // Anki import directives - Cloze note type
-    const header = [
-      '#separator:tab',
-      '#html:true',
-      '#notetype:Cloze',
-      '#deck:Vayne Study',
-      '#tags column:2',
-      ''
-    ].join('\n');
-
-    // Create cloze cards: question visible, answer is the cloze
-    const rows = cards.map(card => {
-      const question = card.front.replace(/\t/g, ' ');
-      const answer = card.back.replace(/\t/g, ' ').replace(/\n/g, '<br>');
-      const tag = card.tag;
-
-      // Format as cloze: show the question, cloze the answer
-      const clozeText = `<b>❓ ${question}</b><br><br>{{c1::${answer}}}`;
-
-      return `${clozeText}\t${tag}`;
-    }).join('\n');
-
-    const content = header + rows;
-    const blob = new Blob(['\ufeff' + content], { type: 'text/plain;charset=utf-8' }); // BOM for UTF-8
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `anki-${topic?.name || 'quiz'}-${new Date().toISOString().split('T')[0]}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // Direct export - one click download
-  const exportAnkiDirect = () => {
-    const cards = buildAnkiCards();
-    if (cards.length === 0) {
-      showToast('Няма грешки за експорт.', 'info');
-      return;
-    }
-    downloadAnkiTSV(cards);
-    showToast(`${cards.length} Anki карти изтеглени! Import в Anki: File → Import`, 'success');
-  };
-
-  // Open preview modal for editing before export
-  const prepareAnkiCards = () => {
-    const cards = buildAnkiCards();
-    if (cards.length === 0) {
-      showToast('Няма грешки за генериране на карти.', 'info');
-      return;
-    }
-    setAnkiCards(cards);
-    setShowAnkiPreview(true);
-    setEditingCardIndex(null);
-  };
-
-  // Export from preview modal (after editing)
-  const exportAnkiCards = () => {
-    if (ankiCards.length === 0) return;
-    downloadAnkiTSV(ankiCards);
-    setShowAnkiPreview(false);
-    showToast(`${ankiCards.length} Anki карти изтеглени!`, 'success');
-  };
-
-  // Update a single Anki card
-  const updateAnkiCard = (index: number, field: 'front' | 'back' | 'tag', value: string) => {
-    setAnkiCards(prev => prev.map((card, i) =>
-      i === index ? { ...card, [field]: value } : card
-    ));
-  };
-
-  // Delete an Anki card
-  const deleteAnkiCard = (index: number) => {
-    setAnkiCards(prev => prev.filter((_, i) => i !== index));
-    setEditingCardIndex(null);
-  };
-
-
   const handleSaveGrade = () => {
     // Prevent duplicate saves
     // Support both topic quizzes and module quizzes
@@ -1672,26 +1560,74 @@ function QuizContent() {
                 <Repeat size={20} /> Drill Weakness
               </button>
             )}
-            {/* Anki Export buttons - only show if there were wrong answers */}
-            {wrongCount > 0 && (
-              <>
-                <button
-                  onClick={exportAnkiDirect}
-                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-semibold rounded-lg font-mono hover:from-cyan-700 hover:to-blue-700 transition-all"
-                  title="Изтегли грешките като Anki карти (TSV)"
-                >
-                  <Download size={20} /> Anki Export
-                </button>
-                <button
-                  onClick={prepareAnkiCards}
-                  className="flex items-center gap-2 px-4 py-3 bg-slate-700/60 border border-slate-600/50 text-slate-300 rounded-lg font-mono text-sm hover:bg-slate-700 hover:text-cyan-300 transition-all"
-                  title="Прегледай и редактирай картите преди експорт"
-                >
-                  <Settings size={16} /> Preview
-                </button>
-              </>
-            )}
           </div>
+
+          {/* Anki Cards from Wrong Answers */}
+          {wrongCount > 0 && (() => {
+            const wrongCards = quizState.questions.map((q, i) => {
+              const openEval = openEvaluations[i];
+              const isWrong = q.type === 'open'
+                ? (!openEval || openEval.score < 0.7)
+                : quizState.answers[i] !== q.correctAnswer;
+              if (!isWrong) return null;
+              return { question: q.question, answer: q.correctAnswer, explanation: q.explanation, concept: q.concept || 'General' };
+            }).filter(Boolean) as Array<{ question: string; answer: string; explanation: string; concept: string }>;
+
+            const copyCard = (card: typeof wrongCards[0]) => {
+              const text = `${card.question}\t${card.answer}${card.explanation ? ' | ' + card.explanation : ''}\t${card.concept.replace(/\s+/g, '_')}`;
+              navigator.clipboard.writeText(text);
+              showToast('Картата е копирана!', 'success');
+            };
+
+            const copyAll = () => {
+              const text = wrongCards.map(c =>
+                `${c.question}\t${c.answer}${c.explanation ? ' | ' + c.explanation : ''}\t${c.concept.replace(/\s+/g, '_')}`
+              ).join('\n');
+              navigator.clipboard.writeText(text);
+              showToast(`${wrongCards.length} карти копирани!`, 'success');
+            };
+
+            return (
+              <div className="mt-8 w-full max-w-2xl mx-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-cyan-400 font-mono flex items-center gap-2">
+                    <FileText size={16} /> Карти от грешки ({wrongCards.length})
+                  </h3>
+                  <button
+                    onClick={copyAll}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-cyan-600/20 border border-cyan-600/40 text-cyan-300 rounded-lg font-mono text-xs hover:bg-cyan-600/30 transition-colors"
+                  >
+                    <Copy size={12} /> Копирай всички
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {wrongCards.map((card, i) => (
+                    <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3 group">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <p className="text-slate-200 font-mono text-sm font-medium">{card.question}</p>
+                          <p className="text-green-400/90 font-mono text-xs">{card.answer}</p>
+                          {card.explanation && (
+                            <p className="text-slate-500 font-mono text-xs">{card.explanation}</p>
+                          )}
+                          <span className="inline-block px-1.5 py-0.5 bg-slate-700/80 text-cyan-400/70 text-[10px] rounded font-mono">
+                            {card.concept}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => copyCard(card)}
+                          className="flex-shrink-0 p-1.5 text-slate-500 hover:text-cyan-400 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Копирай"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* AI Mistake Analysis Section */}
           {wrongCount > 0 && (
@@ -1877,108 +1813,6 @@ function QuizContent() {
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg font-mono text-sm hover:bg-red-500"
                 >
                   Напусни
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Anki Preview Modal */}
-        {showAnkiPreview && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 border border-cyan-500/30 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-cyan-400 font-mono flex items-center gap-2">
-                  <Download size={20} /> Anki Preview - {ankiCards.length} карти
-                </h3>
-                <button
-                  onClick={() => setShowAnkiPreview(false)}
-                  className="text-slate-400 hover:text-slate-200 text-xl"
-                >
-                  &times;
-                </button>
-              </div>
-
-              <p className="text-sm text-slate-400 font-mono mb-4">
-                Прегледай и редактирай картите преди експорт. Кликни върху карта за редакция.
-              </p>
-
-              <div className="space-y-3 mb-6">
-                {ankiCards.map((card, index) => (
-                  <div
-                    key={index}
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                      editingCardIndex === index
-                        ? 'border-cyan-500 bg-slate-700/50'
-                        : 'border-slate-600 hover:border-slate-500 bg-slate-800/50'
-                    }`}
-                    onClick={() => setEditingCardIndex(editingCardIndex === index ? null : index)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-cyan-400 font-mono text-sm font-bold">{index + 1}</span>
-                      <div className="flex-1 min-w-0">
-                        {editingCardIndex === index ? (
-                          <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                            <div>
-                              <label className="text-xs text-slate-400 font-mono">Front (Въпрос):</label>
-                              <textarea
-                                value={card.front}
-                                onChange={(e) => updateAnkiCard(index, 'front', e.target.value)}
-                                className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
-                                rows={2}
-                              />
-                            </div>
-                            <div>
-                              <label className="text-xs text-slate-400 font-mono">Back (Отговор):</label>
-                              <textarea
-                                value={card.back}
-                                onChange={(e) => updateAnkiCard(index, 'back', e.target.value)}
-                                className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
-                                rows={4}
-                              />
-                            </div>
-                            <div className="flex gap-3">
-                              <div className="flex-1">
-                                <label className="text-xs text-slate-400 font-mono">Tag:</label>
-                                <input
-                                  value={card.tag}
-                                  onChange={(e) => updateAnkiCard(index, 'tag', e.target.value)}
-                                  className="w-full mt-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-sm text-slate-200 font-mono"
-                                />
-                              </div>
-                              <button
-                                onClick={() => deleteAnkiCard(index)}
-                                className="self-end px-3 py-2 bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 text-sm font-mono"
-                              >
-                                Изтрий
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-slate-200 font-mono text-sm line-clamp-2">{card.front}</p>
-                            <p className="text-slate-400 font-mono text-xs mt-1 line-clamp-2">{card.back}</p>
-                            <span className="inline-block mt-2 px-2 py-0.5 bg-slate-700 text-cyan-400 text-xs rounded font-mono">{card.tag}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex gap-3 justify-end">
-                <button
-                  onClick={() => setShowAnkiPreview(false)}
-                  className="px-4 py-2 bg-slate-700 text-slate-200 rounded-lg font-mono text-sm hover:bg-slate-600"
-                >
-                  Отказ
-                </button>
-                <button
-                  onClick={exportAnkiCards}
-                  className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white rounded-lg font-mono text-sm hover:from-cyan-700 hover:to-blue-700 flex items-center gap-2"
-                >
-                  <Download size={16} /> Експорт ({ankiCards.length} карти)
                 </button>
               </div>
             </div>

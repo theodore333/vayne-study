@@ -1482,6 +1482,7 @@ export default function ReaderMode({
     try {
       onSaveMaterialRef.current(editor.getHTML());
       setLastSaved(new Date());
+      hasUnsavedChangesRef.current = false;
       setHasUnsavedChanges(false);
       isSavingRef.current = false;
       setIsSaving(false);

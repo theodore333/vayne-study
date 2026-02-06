@@ -60,14 +60,18 @@ class ErrorBoundary extends Component<Props, State> {
             </p>
 
             {this.state.error && (
-              <details className="mb-6 text-left">
+              <details className="mb-6 text-left" open>
                 <summary className="text-xs text-slate-500 font-mono cursor-pointer hover:text-slate-400">
                   Технически детайли
                 </summary>
-                <pre className="mt-2 p-3 bg-slate-800/50 rounded-lg text-xs text-red-300 font-mono overflow-auto max-h-32">
-                  {this.state.error.message}
-                  {this.state.errorInfo?.componentStack}
+                <pre className="mt-2 p-3 bg-slate-800/50 rounded-lg text-xs text-red-300 font-mono overflow-auto max-h-48 whitespace-pre-wrap">
+                  {String(this.state.error.message || '')}
                 </pre>
+                {this.state.errorInfo?.componentStack && (
+                  <pre className="mt-1 p-3 bg-slate-800/50 rounded-lg text-xs text-slate-400 font-mono overflow-auto max-h-32 whitespace-pre-wrap">
+                    {String(this.state.errorInfo.componentStack)}
+                  </pre>
+                )}
               </details>
             )}
 

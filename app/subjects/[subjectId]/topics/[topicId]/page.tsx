@@ -497,7 +497,7 @@ export default function TopicDetailPage() {
                 className="text-2xl font-bold text-slate-100 font-mono cursor-pointer hover:text-cyan-300 transition-colors group flex items-center gap-2"
                 title="Кликни за редактиране"
               >
-                {topic.name}
+                {String(topic.name || '')}
                 <Pencil size={16} className="opacity-0 group-hover:opacity-50 transition-opacity" />
               </h1>
             )}
@@ -608,7 +608,7 @@ export default function TopicDetailPage() {
             {/* Extract Error */}
             {extractError && (
               <div className="mb-3 p-3 bg-red-900/20 border border-red-800/30 rounded-lg">
-                <p className="text-sm text-red-300 font-mono">{extractError}</p>
+                <p className="text-sm text-red-300 font-mono">{String(extractError)}</p>
               </div>
             )}
 
@@ -779,7 +779,7 @@ export default function TopicDetailPage() {
                     (topic.avgGrade || 0) >= 4.5 ? 'text-yellow-400' :
                     (topic.avgGrade || 0) >= 3.5 ? 'text-orange-400' : 'text-red-400'
                   }`}>
-                    {topic.avgGrade?.toFixed(2)}
+                    {typeof topic.avgGrade === 'number' ? topic.avgGrade.toFixed(2) : '—'}
                   </span>
                 </div>
                 <div className="flex gap-2 flex-wrap">
@@ -792,12 +792,12 @@ export default function TopicDetailPage() {
                         grade >= 3 ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'
                       }`}
                     >
-                      {grade}
+                      {Number(grade) || grade}
                     </span>
                   ))}
                 </div>
                 <div className="mt-2 text-xs text-slate-500 font-mono">
-                  {topic.quizCount} {topic.quizCount === 1 ? 'тест' : 'теста'}
+                  {Number(topic.quizCount) || 0} {topic.quizCount === 1 ? 'тест' : 'теста'}
                 </div>
 
                 {/* FSRS Memory Indicator */}
@@ -897,7 +897,7 @@ export default function TopicDetailPage() {
                       <div key={concept} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-slate-200 font-mono font-medium">
-                            {concept}
+                            {String(concept || '')}
                           </span>
                           <div className="flex items-center gap-2">
                             <span className="text-xs text-orange-400 font-mono">

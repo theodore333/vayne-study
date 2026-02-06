@@ -422,7 +422,7 @@ export default function Sidebar() {
             <ul className="space-y-0.5">
               {alerts.map((alert, i) => (
                 <li key={i} className="text-[10px] text-red-300 font-mono leading-tight">
-                  {alert.message}
+                  {String(alert.message || '')}
                 </li>
               ))}
             </ul>

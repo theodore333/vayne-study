@@ -1278,8 +1278,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const sessions = prev.timerSessions.map(s => {
         if (s.endTime === null) {
           const endTime = new Date().toISOString();
-          const duration = Math.round((new Date(endTime).getTime() - new Date(s.startTime).getTime()) / 1000 / 60);
-          return { ...s, endTime, duration: Math.max(0, duration), rating: null };
+          const rawDuration = Math.round((new Date(endTime).getTime() - new Date(s.startTime).getTime()) / 1000 / 60);
+          const duration = Number.isFinite(rawDuration) ? Math.max(0, rawDuration) : 0;
+          return { ...s, endTime, duration, rating: null };
         }
         return s;
       });
@@ -1295,7 +1296,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const endTime = new Date().toISOString();
       const startTime = new Date(sessions[activeIndex].startTime);
-      const duration = Math.round((new Date(endTime).getTime() - startTime.getTime()) / 1000 / 60);
+      const rawDuration = Math.round((new Date(endTime).getTime() - startTime.getTime()) / 1000 / 60);
+      const duration = Number.isFinite(rawDuration) ? Math.max(0, rawDuration) : 0;
 
       sessions[activeIndex] = {
         ...sessions[activeIndex],

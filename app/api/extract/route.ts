@@ -253,7 +253,7 @@ RULES:
       }
     }
 
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000000;
 
     return new Response(JSON.stringify({
       topics,

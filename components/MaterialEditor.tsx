@@ -165,10 +165,12 @@ function htmlToText(html: string): string {
     table.outerHTML = rows.join('\n') + '\n\n';
   });
 
-  // Get text content
+  // Get text content - add newlines around block-level elements before stripping tags
   let text = div.innerHTML
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>\s*<p>/gi, '\n\n')
+    .replace(/<\/(p|ul|ol)>/gi, '\n')
+    .replace(/<(ul|ol)>/gi, '\n')
     .replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -437,7 +439,11 @@ export default function MaterialEditor({ value, onChange, placeholder, className
       TableCell,
       TableHeader,
     ],
-    content: value ? parseMarkers(markdownToHtml(value)) : '',
+    content: value
+      ? (value.trim().startsWith('<')
+        ? value  // Already HTML (saved by ReaderMode), use directly
+        : parseMarkers(markdownToHtml(value)))  // Markdown, convert to HTML
+      : '',
     editorProps: {
       attributes: {
         class: 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px] p-4 ' + (className || ''),
@@ -523,7 +529,10 @@ export default function MaterialEditor({ value, onChange, placeholder, className
     }
     if (editor && value !== htmlToText(editor.getHTML())) {
       const currentPos = editor.state.selection.from;
-      editor.commands.setContent(value ? parseMarkers(markdownToHtml(value)) : '');
+      const content = value
+        ? (value.trim().startsWith('<') ? value : parseMarkers(markdownToHtml(value)))
+        : '';
+      editor.commands.setContent(content);
       // Try to restore cursor position
       try {
         const maxPos = editor.state.doc.content.size;

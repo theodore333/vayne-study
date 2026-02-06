@@ -234,7 +234,7 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
     if (isDev) console.log('[EXTRACT-MATERIAL] Detected size:', detectedSize);
 
     // Opus pricing: $15/1M input, $75/1M output
-    const cost = (inputTokens * 0.015 + outputTokens * 0.075) / 1000;
+    const cost = (inputTokens * 0.015 + outputTokens * 0.075) / 1000000;
 
     return new Response(JSON.stringify({
       text: extractedText,

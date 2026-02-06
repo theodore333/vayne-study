@@ -381,7 +381,7 @@ export async function POST(request: Request) {
           stats: { attempts: 0, correct: 0 }
         }));
 
-        const cost = (extractionResult.inputTokens * 0.003 + extractionResult.outputTokens * 0.015) / 1000;
+        const cost = (extractionResult.inputTokens * 0.003 + extractionResult.outputTokens * 0.015) / 1000000;
 
         if (isDev) console.log(`[EXTRACT-Q] DOCX extraction complete: ${questions.length} questions`);
 
@@ -489,7 +489,7 @@ export async function POST(request: Request) {
           stats: { attempts: 0, correct: 0 }
         }));
 
-        const cost = (totalInputTokens * 0.003 + totalOutputTokens * 0.015) / 1000;
+        const cost = (totalInputTokens * 0.003 + totalOutputTokens * 0.015) / 1000000;
 
         if (isDev) console.log(`[EXTRACT-Q] CHUNKED extraction complete: ${questions.length} total questions from ${numChunks} chunks`);
 
@@ -705,7 +705,7 @@ ${topicListForPrompt}
     }));
 
     // Sonnet pricing: $3/1M input, $15/1M output
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000000;
 
     return new Response(JSON.stringify({
       questions,

@@ -307,23 +307,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
           if (cloudTime >= localTime) {
             // CRITICAL FIX: Cloud data must go through the SAME migration pipeline as local data.
-            // Without this, cloud data has missing fields/wrong types → React error #310.
             const migratedCloud = migrateData(cloudData);
 
-            // Merge materials from local IndexedDB cache into cloud data
-            // Cloud data has empty materials since they're stored separately
-            const { getMaterialsCache } = await import('./storage');
-            const materialsCache = getMaterialsCache();
-            migratedCloud.subjects = migratedCloud.subjects.map(subject => ({
-              ...subject,
-              topics: subject.topics.map(topic => ({
-                ...topic,
-                material: materialsCache[topic.id] || topic.material || ''
-              }))
-            }));
+            // SAFETY: Never let cloud data wipe out local data
+            // If local has more subjects or topics, local wins
+            const localTopicCount = localData.subjects.reduce((sum, s) => sum + s.topics.length, 0);
+            const cloudTopicCount = migratedCloud.subjects.reduce((sum, s) => sum + s.topics.length, 0);
+            const localBankCount = (localData.questionBanks || []).length;
+            const cloudBankCount = (migratedCloud.questionBanks || []).length;
 
-            setData(migratedCloud);
-            saveData(migratedCloud); // Update localStorage
+            if (migratedCloud.subjects.length < localData.subjects.length ||
+                cloudTopicCount < localTopicCount * 0.5 ||
+                cloudBankCount < localBankCount) {
+              console.warn('[CONTEXT] Cloud data has LESS content than local - keeping local data.',
+                `Local: ${localData.subjects.length} subjects, ${localTopicCount} topics, ${localBankCount} banks.`,
+                `Cloud: ${migratedCloud.subjects.length} subjects, ${cloudTopicCount} topics, ${cloudBankCount} banks.`
+              );
+              // Push local data TO cloud instead (local is richer)
+              debouncedSaveToCloud(localData);
+            } else {
+              // Cloud is safe to use - merge materials from local IndexedDB cache
+              const { getMaterialsCache } = await import('./storage');
+              const materialsCache = getMaterialsCache();
+              migratedCloud.subjects = migratedCloud.subjects.map(subject => ({
+                ...subject,
+                topics: subject.topics.map(topic => ({
+                  ...topic,
+                  material: materialsCache[topic.id] || topic.material || ''
+                }))
+              }));
+
+              setData(migratedCloud);
+              saveData(migratedCloud);
+            }
           }
           setLastSynced(new Date());
         }

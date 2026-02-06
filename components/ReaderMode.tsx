@@ -28,10 +28,11 @@ import {
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
   Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
-  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain
+  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain,
+  Info, Lightbulb, SplitSquareVertical, Sparkles
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
-import { mergeAttributes } from '@tiptap/core';
+import { mergeAttributes, Node as TiptapNode, Mark as TiptapMark } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import TutorChat from '@/components/TutorChat';
 import katex from 'katex';
@@ -164,6 +165,96 @@ const ResizableImage = Image.extend({
   },
   addNodeView() {
     return ReactNodeViewRenderer(ResizableImageComponent);
+  },
+});
+
+// Superscript mark extension
+const Superscript = TiptapMark.create({
+  name: 'superscript',
+  excludes: 'subscript',
+  parseHTML() { return [{ tag: 'sup' }]; },
+  renderHTML({ HTMLAttributes }) { return ['sup', mergeAttributes(HTMLAttributes), 0]; },
+  addKeyboardShortcuts() {
+    return { 'Mod-Shift-.': () => this.editor.commands.toggleMark(this.name) };
+  },
+});
+
+// Subscript mark extension
+const Subscript = TiptapMark.create({
+  name: 'subscript',
+  excludes: 'superscript',
+  parseHTML() { return [{ tag: 'sub' }]; },
+  renderHTML({ HTMLAttributes }) { return ['sub', mergeAttributes(HTMLAttributes), 0]; },
+  addKeyboardShortcuts() {
+    return { 'Mod-Shift-,': () => this.editor.commands.toggleMark(this.name) };
+  },
+});
+
+// Callout block node extension
+const CALLOUT_TYPES = {
+  info: { label: 'Бележка', emoji: 'ℹ️', borderColor: '#3b82f6', bgColor: 'rgba(59,130,246,0.08)' },
+  important: { label: 'Важно', emoji: '⚠️', borderColor: '#f59e0b', bgColor: 'rgba(245,158,11,0.08)' },
+  clinical: { label: 'Клинична перла', emoji: '💡', borderColor: '#22c55e', bgColor: 'rgba(34,197,94,0.08)' },
+  danger: { label: 'Внимание', emoji: '🚨', borderColor: '#ef4444', bgColor: 'rgba(239,68,68,0.08)' },
+  definition: { label: 'Дефиниция', emoji: '📖', borderColor: '#a855f7', bgColor: 'rgba(168,85,247,0.08)' },
+} as const;
+
+const CalloutExtension = TiptapNode.create({
+  name: 'callout',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+
+  addAttributes() {
+    return {
+      type: {
+        default: 'info',
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-callout') || 'info',
+        renderHTML: (attributes: Record<string, string>) => ({ 'data-callout': attributes.type }),
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: 'div[data-callout]' }];
+  },
+
+  renderHTML({ node, HTMLAttributes }: { node: any; HTMLAttributes: Record<string, any> }) {
+    const type = node.attrs.type as keyof typeof CALLOUT_TYPES;
+    const config = CALLOUT_TYPES[type] || CALLOUT_TYPES.info;
+    return ['div', mergeAttributes(HTMLAttributes, {
+      'data-callout': node.attrs.type,
+      style: `border-left: 4px solid ${config.borderColor}; background: ${config.bgColor}; padding: 0.75em 1em; border-radius: 0 0.5em 0.5em 0; margin: 1em 0;`,
+    }), 0];
+  },
+
+  addCommands() {
+    return {
+      setCallout: (attributes?: { type: string }) => ({ commands }: { commands: any }) => {
+        return commands.wrapIn(this.name, attributes);
+      },
+      toggleCallout: (attributes?: { type: string }) => ({ commands }: { commands: any }) => {
+        if (this.editor.isActive(this.name)) {
+          return commands.lift(this.name);
+        }
+        return commands.wrapIn(this.name, attributes);
+      },
+    } as any;
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      // Backspace at empty paragraph at start of callout lifts it out
+      Backspace: () => {
+        const { $from } = this.editor.state.selection;
+        if ($from.parent.textContent === '' &&
+            $from.depth > 1 &&
+            $from.node($from.depth - 1).type.name === this.name) {
+          return this.editor.commands.lift(this.name);
+        }
+        return false;
+      },
+    };
   },
 });
 
@@ -1072,8 +1163,10 @@ export default function ReaderMode({
   const [saveToast, setSaveToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' }>({ show: false, message: '', type: 'success' });
   const [wordCount, setWordCount] = useState({ words: 0, chars: 0, readingTime: 0 });
   const [focusMode, setFocusMode] = useState(false);
+  const [showCalloutPicker, setShowCalloutPicker] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const calloutPickerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const onSaveMaterialRef = useRef(onSaveMaterial); // Ref for stable callback
@@ -1104,6 +1197,9 @@ export default function ReaderMode({
       }),
       Typography,
       Underline,
+      Superscript,
+      Subscript,
+      CalloutExtension,
       ResizableImage.configure({
         inline: false,
         allowBase64: true,
@@ -1390,6 +1486,9 @@ export default function ReaderMode({
       if (tableGridPickerRef.current && !tableGridPickerRef.current.contains(e.target as Node)) {
         setShowTableGridPicker(false);
       }
+      if (calloutPickerRef.current && !calloutPickerRef.current.contains(e.target as Node)) {
+        setShowCalloutPicker(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -1647,6 +1746,114 @@ export default function ReaderMode({
     const tr = state.tr.replaceWith(parentPos, parentEndPos, newNodes);
     editor.view.dispatch(tr);
   }, [editor]);
+
+  // Split current paragraph at all hard breaks into separate paragraphs
+  const splitParagraphBreaks = useCallback(() => {
+    if (!editor) return;
+    const { state } = editor;
+    const { $from } = state.selection;
+
+    if ($from.parent.type.name !== 'paragraph' && $from.parent.type.name !== 'heading') return;
+
+    let hasHardBreak = false;
+    $from.parent.forEach(child => {
+      if (child.type.name === 'hardBreak') hasHardBreak = true;
+    });
+
+    if (!hasHardBreak) {
+      showToast('Параграфът няма нови редове за разделяне', 'error');
+      return;
+    }
+
+    const parentStart = $from.start();
+    const parentContent = $from.parent.content;
+    const schema = state.schema;
+    const parentType = $from.parent.type;
+    const parentAttrs = $from.parent.attrs;
+
+    const breakPositions: number[] = [];
+    $from.parent.forEach((node, offset) => {
+      if (node.type.name === 'hardBreak') breakPositions.push(offset);
+    });
+
+    const lineFragments: Array<{ start: number; end: number }> = [];
+    let lineStart = 0;
+    for (const bp of breakPositions) {
+      lineFragments.push({ start: lineStart, end: bp });
+      lineStart = bp + 1;
+    }
+    lineFragments.push({ start: lineStart, end: parentContent.size });
+
+    const newNodes: any[] = [];
+    for (const { start, end } of lineFragments) {
+      const content = start < end ? parentContent.cut(start, end) : Fragment.empty;
+      // First line keeps the original type (heading/paragraph), rest become paragraphs
+      if (newNodes.length === 0 && parentType.name === 'heading') {
+        newNodes.push(parentType.create(parentAttrs, content));
+      } else {
+        newNodes.push(schema.nodes.paragraph.create(null, content));
+      }
+    }
+
+    const parentPos = $from.before();
+    const parentEndPos = $from.after();
+    editor.view.dispatch(state.tr.replaceWith(parentPos, parentEndPos, newNodes));
+    showToast(`Разделен на ${newNodes.length} параграфа`, 'success');
+  }, [editor, showToast]);
+
+  // Auto-detect and convert header-like lines to proper headings
+  const autoDetectHeaders = useCallback(() => {
+    if (!editor) return;
+
+    let html = editor.getHTML();
+    let count = 0;
+
+    // Pattern 1: === text === → h3, == text == → h2
+    html = html.replace(/<p>={3,}\s*(.+?)\s*={3,}<\/p>/g, (_, text) => { count++; return `<h3>${text}</h3>`; });
+    html = html.replace(/<p>={2}\s*(.+?)\s*={2}<\/p>/g, (_, text) => { count++; return `<h2>${text}</h2>`; });
+
+    // Also handle inside paragraphs with <br> (common from PDF extraction)
+    // Match at start of paragraph: <p>=== text ===<br>...
+    html = html.replace(/<p>={3,}\s*(.+?)\s*={3,}<br>/g, (_, text) => { count++; return `<h3>${text}</h3><p>`; });
+    html = html.replace(/<p>={2}\s*(.+?)\s*={2}<br>/g, (_, text) => { count++; return `<h2>${text}</h2><p>`; });
+
+    // Pattern 2: Numbered sections like "5.3.2. Title" or "5.3.2 Title"
+    // Three-level numbers → H3
+    html = html.replace(/<p>(\d+\.\d+\.\d+\.?\s+[^<]{3,80})<\/p>/g, (match, text) => {
+      // Only if the text is short enough to be a header (not a full paragraph)
+      if (text.length > 100) return match;
+      count++; return `<h3>${text}</h3>`;
+    });
+    // Two-level numbers → H2
+    html = html.replace(/<p>(\d+\.\d+\.?\s+[^<]{3,80})<\/p>/g, (match, text) => {
+      if (text.length > 100) return match;
+      count++; return `<h2>${text}</h2>`;
+    });
+
+    // Pattern 3: "Глава X", "ГЛАВА X", "Раздел X"
+    html = html.replace(/<p>((?:Глава|ГЛАВА|Раздел|РАЗДЕЛ|Тема|ТЕМА)\s+[^<]{1,80})<\/p>/gi, (_, text) => {
+      count++; return `<h2>${text}</h2>`;
+    });
+
+    // Pattern 4: ALL CAPS lines (3-80 chars, at least 2 Cyrillic letters)
+    html = html.replace(/<p>([А-ЯЁ\s,.\-–():;]{3,80})<\/p>/g, (match, text) => {
+      const cyrillicCount = (text.match(/[А-ЯЁ]/g) || []).length;
+      if (cyrillicCount < 2 || text.length > 80) return match;
+      // Check it's actually mostly uppercase
+      if (text === text.toUpperCase()) {
+        count++; return `<h2>${text}</h2>`;
+      }
+      return match;
+    });
+
+    if (count === 0) {
+      showToast('Не бяха открити заглавия за конвертиране', 'error');
+      return;
+    }
+
+    editor.commands.setContent(html);
+    showToast(`Открити и конвертирани ${count} заглавия`, 'success');
+  }, [editor, showToast]);
 
   // Navigate to heading in TOC
   const handleTOCNavigate = useCallback((id: string) => {
@@ -1993,6 +2200,18 @@ export default function ReaderMode({
           >
             <Heading3 size={18} />
           </ToolbarButton>
+          <ToolbarButton
+            onClick={splitParagraphBreaks}
+            title="Раздели параграф на отделни редове"
+          >
+            <SplitSquareVertical size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={autoDetectHeaders}
+            title="Авто-откриване на заглавия (===, номерирани, ГЛАВНИ БУКВИ)"
+          >
+            <Sparkles size={18} />
+          </ToolbarButton>
 
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
@@ -2024,6 +2243,20 @@ export default function ReaderMode({
             title="Зачертан"
           >
             <Strikethrough size={18} />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleMark('superscript').run()}
+            active={editor.isActive('superscript')}
+            title="Горен индекс (Ctrl+Shift+.)"
+          >
+            <span className="text-xs font-bold">X<sup className="text-[9px]">2</sup></span>
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleMark('subscript').run()}
+            active={editor.isActive('subscript')}
+            title="Долен индекс (Ctrl+Shift+,)"
+          >
+            <span className="text-xs font-bold">X<sub className="text-[9px]">2</sub></span>
           </ToolbarButton>
 
           {/* Highlight with color picker */}
@@ -2118,6 +2351,49 @@ export default function ReaderMode({
           >
             <MinusIcon size={18} />
           </ToolbarButton>
+
+          {/* Callout block */}
+          <div className="relative" ref={calloutPickerRef}>
+            <button
+              onClick={() => setShowCalloutPicker(!showCalloutPicker)}
+              className={`p-2 rounded transition-colors flex items-center gap-0.5 ${
+                editor.isActive('callout')
+                  ? 'bg-blue-100 text-blue-700'
+                  : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
+              }`}
+              title="Callout блок"
+            >
+              <Info size={18} />
+              <ChevronDown size={12} />
+            </button>
+            {showCalloutPicker && (
+              <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-stone-200 p-1.5 z-50 w-48">
+                {editor.isActive('callout') && (
+                  <button
+                    onClick={() => { editor.chain().focus().lift('callout').run(); setShowCalloutPicker(false); }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-stone-500 hover:bg-stone-100 transition-colors"
+                  >
+                    <X size={14} /> Премахни callout
+                  </button>
+                )}
+                {Object.entries(CALLOUT_TYPES).map(([type, config]) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      editor.chain().focus().run();
+                      (editor.commands as any).toggleCallout({ type });
+                      setShowCalloutPicker(false);
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-stone-100 transition-colors"
+                    style={{ borderLeft: `3px solid ${config.borderColor}` }}
+                  >
+                    <span>{config.emoji}</span>
+                    <span className="text-stone-700">{config.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
@@ -2567,6 +2843,39 @@ export default function ReaderMode({
               .ProseMirror pre .hljs-comment { color: #6a9955; }
               .ProseMirror pre .hljs-variable { color: #9cdcfe; }
               .ProseMirror pre .hljs-class { color: #4ec9b0; }
+
+              /* Superscript / Subscript */
+              .ProseMirror sup {
+                font-size: 0.75em;
+                vertical-align: super;
+                line-height: 0;
+              }
+              .ProseMirror sub {
+                font-size: 0.75em;
+                vertical-align: sub;
+                line-height: 0;
+              }
+
+              /* Callout blocks - label */
+              .ProseMirror div[data-callout]::before {
+                display: block;
+                font-weight: 700;
+                font-size: 0.85em;
+                margin-bottom: 0.3em;
+                letter-spacing: 0.02em;
+              }
+              .ProseMirror div[data-callout="info"]::before { content: "ℹ️ Бележка"; color: #3b82f6; }
+              .ProseMirror div[data-callout="important"]::before { content: "⚠️ Важно"; color: #f59e0b; }
+              .ProseMirror div[data-callout="clinical"]::before { content: "💡 Клинична перла"; color: #22c55e; }
+              .ProseMirror div[data-callout="danger"]::before { content: "🚨 Внимание"; color: #ef4444; }
+              .ProseMirror div[data-callout="definition"]::before { content: "📖 Дефиниция"; color: #a855f7; }
+
+              .ProseMirror div[data-callout] > p:first-child {
+                margin-top: 0;
+              }
+              .ProseMirror div[data-callout] > p:last-child {
+                margin-bottom: 0;
+              }
 
               /* Images */
               .ProseMirror img {

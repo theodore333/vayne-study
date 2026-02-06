@@ -165,7 +165,7 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-opus-4-6',
       max_tokens: 16000,
       messages: [{ role: 'user', content }],
       stream: true
@@ -233,8 +233,8 @@ ${appendMode ? `ВАЖНО: Вече има съществуващ матери�
 
     if (isDev) console.log('[EXTRACT-MATERIAL] Detected size:', detectedSize);
 
-    // Sonnet pricing: $3/1M input, $15/1M output
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000;
+    // Opus pricing: $15/1M input, $75/1M output
+    const cost = (inputTokens * 0.015 + outputTokens * 0.075) / 1000;
 
     return new Response(JSON.stringify({
       text: extractedText,

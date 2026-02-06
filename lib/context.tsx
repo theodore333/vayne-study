@@ -230,6 +230,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       totalCasesCompleted: 0,
       averageScore: 0
     },
+    orRoomSessions: {
+      activeCaseId: null,
+      cases: [],
+      totalCasesCompleted: 0,
+      averageScore: 0
+    },
     // Phase 1: Vayne Doctor
     developmentProjects: [],
     careerProfile: null,

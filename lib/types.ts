@@ -421,6 +421,7 @@ export interface AppData {
   academicPeriod: AcademicPeriod;
   userProgress: UserProgress;
   clinicalCaseSessions: ClinicalCaseSession;
+  orRoomSessions: ORRoomSession;
   // Phase 1: Vayne Doctor
   developmentProjects: DevelopmentProject[];
   careerProfile: CareerProfile | null;
@@ -581,6 +582,14 @@ export interface StepEvaluation {
   timestamp: string;
   pharmacologyTopics?: Array<{ id: string; name: string; subjectId: string }>;
   pharmacologyFeedback?: string;
+  suggestedImages?: SuggestedImage[];
+}
+
+export interface SuggestedImage {
+  description: string;
+  topicId: string;
+  subjectId: string;
+  type: 'ecg' | 'anatomy' | 'imaging' | 'instrument' | 'pathology';
 }
 
 // Case difficulty
@@ -688,6 +697,107 @@ export const INVESTIGATION_CATEGORIES = {
     tests: ['Кожна биопсия', 'Костно-мозъчна биопсия', 'Спирометрия']
   }
 } as const;
+
+// ================ OR ROOM SIMULATION ================
+
+export type ORStep = 'briefing' | 'setup' | 'procedure' | 'complications' | 'postop';
+
+export const OR_STEPS: { step: ORStep; name: string }[] = [
+  { step: 'briefing', name: 'Брифинг' },
+  { step: 'setup', name: 'Подготовка' },
+  { step: 'procedure', name: 'Процедура' },
+  { step: 'complications', name: 'Усложнение' },
+  { step: 'postop', name: 'Постоп' },
+];
+
+export interface ORMessage {
+  id: string;
+  role: 'student' | 'surgeon' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface ORStepEvaluation {
+  step: ORStep;
+  score: number;
+  feedback: string;
+  strengths: string[];
+  areasToImprove: string[];
+  missedPoints?: string[];
+  timestamp: string;
+  suggestedImages?: SuggestedImage[];
+  pharmacologyTopics?: Array<{ id: string; name: string; subjectId: string }>;
+  pharmacologyFeedback?: string;
+  anatomyTopics?: Array<{ id: string; name: string; subjectId: string }>;
+}
+
+export interface InteractiveORCase {
+  id: string;
+  subjectId: string;
+  topicId: string;
+
+  difficulty: CaseDifficulty;
+  procedureName: string;
+  specialty: string;
+  createdAt: string;
+  completedAt: string | null;
+
+  patient: {
+    age: number;
+    gender: 'male' | 'female';
+    diagnosis: string;
+    indication: string;
+    relevantHistory: string;
+  };
+
+  hiddenData: {
+    procedureSteps: string[];
+    expectedAnesthesia: string;
+    expectedPositioning: string;
+    keyAnatomy: string[];
+    expectedComplications: string[];
+    complicationScenario: {
+      description: string;
+      correctResponse: string;
+      severity: 'minor' | 'moderate' | 'major';
+    };
+    postOpOrders: {
+      medications: string[];
+      monitoring: string[];
+      instructions: string[];
+    };
+    relevantPharmacologyTopicIds?: string[];
+    relevantPharmacologyTopicNames?: string[];
+    relevantAnatomyTopicIds?: string[];
+    relevantAnatomyTopicNames?: string[];
+  };
+
+  currentStep: ORStep;
+  procedureMessages: ORMessage[];
+  complicationMessages: ORMessage[];
+
+  setupChoices: {
+    anesthesiaType: string;
+    positioning: string;
+    teamConfirmed: boolean;
+  };
+  postOpOrders: {
+    medications: string;
+    monitoring: string;
+    instructions: string;
+  };
+
+  evaluations: ORStepEvaluation[];
+  overallScore: number | null;
+  timeSpentMinutes: number;
+}
+
+export interface ORRoomSession {
+  activeCaseId: string | null;
+  cases: InteractiveORCase[];
+  totalCasesCompleted: number;
+  averageScore: number;
+}
 
 // ================ DEVELOPMENT PROJECTS (Phase 1: Vayne Doctor) ================
 

@@ -170,6 +170,7 @@ const defaultData: AppData = {
   academicPeriod: defaultAcademicPeriod,
   userProgress: defaultUserProgress,
   clinicalCaseSessions: defaultClinicalCaseSessions,
+  orRoomSessions: { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 },
   // Phase 1: Vayne Doctor
   developmentProjects: [],
   careerProfile: null,
@@ -332,6 +333,7 @@ export function loadData(): AppData {
     if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
     if (!data.userProgress) data.userProgress = defaultUserProgress;
     if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
+    if (!data.orRoomSessions) data.orRoomSessions = { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 };
 
     // Phase 1: Vayne Doctor migrations
     if (!data.developmentProjects) data.developmentProjects = [];

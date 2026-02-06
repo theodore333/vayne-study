@@ -6,7 +6,7 @@ import {
  Stethoscope, Play, ChevronRight, ArrowLeft, MessageCircle, User,
  Heart, Wind, Brain, Eye, Send, CheckCircle, Pill, ListOrdered,
  TestTube, AlertCircle, Clock, ChevronDown, ChevronUp, GripVertical,
- Plus, Trash2, ArrowRight
+ Plus, Trash2, ArrowRight, Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
@@ -14,7 +14,8 @@ import { STATUS_CONFIG } from '@/lib/constants';
 import {
  CASE_STEPS, CaseStep, CaseDifficulty, CaseMessage, ExamFinding,
  CaseInvestigation, DifferentialDiagnosis, TreatmentPlanItem,
- StepEvaluation, InteractiveClinicalCase, EXAM_SYSTEMS, INVESTIGATION_CATEGORIES
+ StepEvaluation, InteractiveClinicalCase, EXAM_SYSTEMS, INVESTIGATION_CATEGORIES,
+ SuggestedImage
 } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import { generateId } from '@/lib/algorithms';
@@ -1495,6 +1496,45 @@ function CasesContent() {
  </p>
  )}
  </div>
+ );
+ })()}
+
+ {/* Suggested Images */}
+ {(() => {
+ const allSuggestedImages = activeCase.evaluations
+   .flatMap(e => e.suggestedImages || [])
+   .filter(img => img.description);
+ if (allSuggestedImages.length === 0) return null;
+
+ const typeLabels: Record<string, string> = {
+   ecg: 'ЕКГ', anatomy: 'Анатомия', imaging: 'Образна диагн.',
+   instrument: 'Инструмент', pathology: 'Патология'
+ };
+ const typeColors: Record<string, string> = {
+   ecg: 'bg-red-500/20 text-red-300 border-red-500/30',
+   anatomy: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+   imaging: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+   instrument: 'bg-green-500/20 text-green-300 border-green-500/30',
+   pathology: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
+ };
+
+ return (
+   <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+     <p className="text-sm font-semibold text-amber-400 mb-3 flex items-center gap-2">
+       <Shield className="w-4 h-4" /> Предложени изображения за качване
+     </p>
+     <div className="space-y-2">
+       {allSuggestedImages.map((img: SuggestedImage, idx: number) => (
+         <div key={idx} className="flex items-start gap-3 bg-slate-900/30 rounded-lg p-3">
+           <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${typeColors[img.type] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>
+             {typeLabels[img.type] || img.type}
+           </span>
+           <p className="text-slate-300 text-sm flex-1">{img.description}</p>
+         </div>
+       ))}
+     </div>
+     <p className="text-amber-400/60 text-xs mt-2">Качете тези изображения в материалите си за визуално учене.</p>
+   </div>
  );
  })()}
 

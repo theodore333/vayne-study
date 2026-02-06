@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle,
   Clock, GraduationCap, Settings, FileQuestion, PanelLeftClose, PanelLeft,
-  Stethoscope, Rocket, ChevronDown, ChevronRight, BarChart3
+  Stethoscope, Rocket, ChevronDown, ChevronRight, BarChart3, Scissors
 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
@@ -24,7 +24,8 @@ const icons = {
   FileQuestion,
   Stethoscope,
   Rocket,
-  BarChart3
+  BarChart3,
+  Scissors
 };
 
 // Grouped navigation structure
@@ -53,6 +54,7 @@ const NAV_GROUPS = [
       { href: '/projects', label: 'Проекти', icon: 'Rocket' },
       { href: '/question-bank', label: 'Сборници', icon: 'FileQuestion' },
       { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
+      { href: '/or-room', label: 'Операционна зала', icon: 'Scissors' },
       { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
     ]
   },

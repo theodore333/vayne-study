@@ -499,10 +499,15 @@ function markdownToHtml(markdown: string): string {
     // Check for task list items first
     const taskCheckedMatch = line.match(/^- \[x\] (.+)$/);
     const taskUncheckedMatch = line.match(/^- \[ \] (.+)$/);
-    const bulletMatch = line.match(/^\s*[-*]\s+(.+)$/);
-    const numberedMatch = line.match(/^\s*\d+\.\s+(.+)$/);
+    const bulletMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+    const numberedMatch = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    // Skip standalone bullet characters with no text (e.g., lines that are just "•" or "- ")
+    const isEmptyBullet = /^\s*[-*•]\s*$/.test(line);
 
-    if (taskCheckedMatch || taskUncheckedMatch) {
+    if (isEmptyBullet) {
+      // Skip empty bullet lines entirely (e.g., "•", "- ", "* ")
+      continue;
+    } else if (taskCheckedMatch || taskUncheckedMatch) {
       // Task list item
       const content = taskCheckedMatch ? taskCheckedMatch[1] : taskUncheckedMatch![1];
       const checked = !!taskCheckedMatch;
@@ -529,8 +534,8 @@ function markdownToHtml(markdown: string): string {
         processedLines.push('</ul>');
         inList = 'none';
       }
-      // Only add non-empty lines
-      if (line.trim()) {
+      // Only add non-empty lines (also skip lines that are only bullet chars)
+      if (line.trim() && !/^[\s•\-*]+$/.test(line)) {
         processedLines.push(line);
       }
     }
@@ -567,11 +572,11 @@ function cleanupEmptyListItems(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
 
-  // Remove empty <li> elements
+  // Remove empty <li> elements (including those with only bullet chars or whitespace)
   const listItems = doc.querySelectorAll('li');
   listItems.forEach(li => {
     const text = li.textContent?.trim() || '';
-    if (text.length === 0 || /^[\s\u200B\u00A0]*$/.test(text)) {
+    if (text.length === 0 || /^[\s\u200B\u00A0•\-*]+$/.test(text)) {
       li.remove();
     }
   });
@@ -584,15 +589,34 @@ function cleanupEmptyListItems(html: string): string {
     }
   });
 
-  // Remove empty <p> elements (including those with only <br> or whitespace)
+  // Remove empty <p> elements (including those with only <br>, whitespace, or lone bullet chars)
   const paragraphs = doc.querySelectorAll('p');
   paragraphs.forEach(p => {
     const text = p.textContent?.trim() || '';
     const hasOnlyBr = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '';
-    if (text.length === 0 || hasOnlyBr) {
+    // Also remove paragraphs that contain only bullet characters (•, -, *)
+    const hasOnlyBullets = /^[\s•\-*\u200B\u00A0]+$/.test(text);
+    if (text.length === 0 || hasOnlyBr || hasOnlyBullets) {
       p.remove();
     }
   });
+
+  // Collapse consecutive empty-ish elements: remove runs of >1 empty <p> between content
+  // (TipTap may add <p><br></p> for spacing - keep max 1)
+  const children = Array.from(doc.body.children);
+  let consecutiveEmpty = 0;
+  for (const child of children) {
+    const text = child.textContent?.trim() || '';
+    const isEmpty = child.tagName === 'P' && (text === '' || child.innerHTML.trim() === '<br>');
+    if (isEmpty) {
+      consecutiveEmpty++;
+      if (consecutiveEmpty > 1) {
+        child.remove();
+      }
+    } else {
+      consecutiveEmpty = 0;
+    }
+  }
 
   return doc.body.innerHTML;
 }

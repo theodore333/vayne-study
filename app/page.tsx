@@ -95,23 +95,43 @@ export default function Dashboard() {
     setAnkiLoading(false);
   };
 
+  // All hooks must be before any early return (React hooks rule)
+  const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
+  const alerts = useMemo(() => getAlerts(activeSubjects, data.schedule, data.studyGoals), [activeSubjects, data.schedule, data.studyGoals]);
+  const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
+  const longestStreak = useMemo(() => getLongestStreak(data.timerSessions), [data.timerSessions]);
+  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals), [activeSubjects, data.studyGoals]);
+  const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
+  const subjectHealthStatuses = useMemo(() => {
+    try {
+      return getSubjectHealth(activeSubjects);
+    } catch (e) {
+      console.error('getSubjectHealth error:', e);
+      return [];
+    }
+  }, [activeSubjects]);
+  const nextExamReadiness = useMemo(() => {
+    try {
+      return getNextExamReadiness(activeSubjects, data.questionBanks || []);
+    } catch (e) {
+      console.error('getNextExamReadiness error:', e);
+      return null;
+    }
+  }, [activeSubjects, data.questionBanks]);
+
   if (isLoading) {
     return (
       <div className="max-w-6xl mx-auto p-6 space-y-6">
-        {/* Skeleton header */}
         <div className="h-8 w-64 bg-slate-800/50 rounded animate-pulse" />
-        {/* Skeleton top row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1, 2, 3].map(i => (
             <div key={i} className="h-32 bg-slate-800/30 rounded-xl animate-pulse" />
           ))}
         </div>
-        {/* Skeleton middle row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
           <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
         </div>
-        {/* Skeleton bottom row */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1, 2, 3].map(i => (
             <div key={i} className="h-40 bg-slate-800/30 rounded-xl animate-pulse" />
@@ -121,10 +141,6 @@ export default function Dashboard() {
     );
   }
 
-  // Filter out archived and soft-deleted subjects (memoized to prevent downstream useMemos from recomputing)
-  const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
-
-  const alerts = useMemo(() => getAlerts(activeSubjects, data.schedule, data.studyGoals), [activeSubjects, data.schedule, data.studyGoals]);
   const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);
   const statusCounts = activeSubjects.reduce(
     (acc, subject) => {
@@ -133,31 +149,6 @@ export default function Dashboard() {
     },
     { green: 0, yellow: 0, orange: 0, gray: 0 }
   );
-
-  // Analytics data
-  const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
-  const longestStreak = useMemo(() => getLongestStreak(data.timerSessions), [data.timerSessions]);
-  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals), [activeSubjects, data.studyGoals]);
-  const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
-
-  // New dashboard algorithms - wrapped in try-catch for safety
-  const subjectHealthStatuses = useMemo(() => {
-    try {
-      return getSubjectHealth(activeSubjects);
-    } catch (e) {
-      console.error('getSubjectHealth error:', e);
-      return [];
-    }
-  }, [activeSubjects]);
-
-  const nextExamReadiness = useMemo(() => {
-    try {
-      return getNextExamReadiness(activeSubjects, data.questionBanks || []);
-    } catch (e) {
-      console.error('getNextExamReadiness error:', e);
-      return null;
-    }
-  }, [activeSubjects, data.questionBanks]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">

@@ -207,6 +207,35 @@ export default function TopicDetailPage() {
     }
   }, [subjectId, topicId, topic, subject, setLastOpenedTopic]);
 
+  // All hooks must be before any early return (React hooks rule)
+  const contextSyncNeededRef = useRef(false);
+  const materialRef = useRef(material);
+  materialRef.current = material;
+
+  const handleSaveMaterialFromReader = useCallback((newMaterial: string) => {
+    setMaterial(newMaterial);
+    saveMaterialToStorage(topicId, newMaterial);
+    try {
+      localStorage.setItem(`material-${topicId}`, newMaterial);
+    } catch {}
+    contextSyncNeededRef.current = true;
+  }, [topicId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (contextSyncNeededRef.current) {
+        updateTopicMaterial(subjectId, topicId, materialRef.current);
+        contextSyncNeededRef.current = false;
+      }
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+      if (contextSyncNeededRef.current) {
+        updateTopicMaterial(subjectId, topicId, materialRef.current);
+      }
+    };
+  }, [subjectId, topicId, updateTopicMaterial]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -352,44 +381,6 @@ export default function TopicDetailPage() {
   const handleSaveHighlights = (highlights: TextHighlight[]) => {
     updateTopic(subjectId, topicId, { highlights });
   };
-
-  // Handle saving material from ReaderMode
-  // Performance: Only persist to IndexedDB + localStorage on each save.
-  // Context sync (which triggers full app re-render + LZ-compress) is batched every 10s.
-  const contextSyncNeededRef = useRef(false);
-  const materialRef = useRef(material);
-  materialRef.current = material;
-
-  const handleSaveMaterialFromReader = useCallback((newMaterial: string) => {
-    // Update local React state (cheap - only re-renders this component)
-    setMaterial(newMaterial);
-
-    // Persist to IndexedDB + localStorage (fast, no re-render)
-    saveMaterialToStorage(topicId, newMaterial);
-    try {
-      localStorage.setItem(`material-${topicId}`, newMaterial);
-    } catch {}
-
-    // Mark that context needs sync (will happen on 10s interval or unmount)
-    contextSyncNeededRef.current = true;
-  }, [topicId]);
-
-  // Batch context sync every 10 seconds (instead of on every keystroke)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (contextSyncNeededRef.current) {
-        updateTopicMaterial(subjectId, topicId, materialRef.current);
-        contextSyncNeededRef.current = false;
-      }
-    }, 10000);
-    return () => {
-      clearInterval(interval);
-      // Sync on unmount so context is up-to-date when leaving the page
-      if (contextSyncNeededRef.current) {
-        updateTopicMaterial(subjectId, topicId, materialRef.current);
-      }
-    };
-  }, [subjectId, topicId, updateTopicMaterial]);
 
   // ReaderMode needs the full topic with current material
   const topicForReader = { ...topic, material };

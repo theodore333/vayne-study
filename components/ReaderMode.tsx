@@ -1128,6 +1128,25 @@ export default function ReaderMode({
         const clipboardData = event.clipboardData;
         if (!clipboardData) return false;
 
+        // Handle pasted images (screenshots, copied images)
+        const items = Array.from(clipboardData.items || []);
+        const imageItem = items.find(item => item.type.startsWith('image/'));
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (file) {
+            event.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const base64 = e.target?.result as string;
+              if (base64 && editor) {
+                editor.chain().focus().setImage({ src: base64 }).run();
+              }
+            };
+            reader.readAsDataURL(file);
+            return true;
+          }
+        }
+
         // Check for HTML content first (Notion pastes HTML)
         const html = clipboardData.getData('text/html');
         if (html) {
@@ -1269,6 +1288,26 @@ export default function ReaderMode({
         }
 
         return false; // Let default handling take over
+      },
+      handleDrop: (view, event) => {
+        // Handle dropped image files
+        const files = event.dataTransfer?.files;
+        if (files && files.length > 0) {
+          const imageFile = Array.from(files).find(f => f.type.startsWith('image/'));
+          if (imageFile) {
+            event.preventDefault();
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const base64 = e.target?.result as string;
+              if (base64 && editor) {
+                editor.chain().focus().setImage({ src: base64 }).run();
+              }
+            };
+            reader.readAsDataURL(imageFile);
+            return true;
+          }
+        }
+        return false;
       },
     },
     onCreate: () => {

@@ -1111,7 +1111,7 @@ function QuizContent() {
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-mono">
                         <span>Bloom: {t.currentBloomLevel || 1}</span>
-                        {t.quizCount > 0 && <span>• {t.quizCount} теста</span>}
+                        {t.quizCount > 0 && <span>• {t.quizCount} {t.quizCount === 1 ? 'тест' : 'теста'}</span>}
                       </div>
                     </Link>
                   ))}

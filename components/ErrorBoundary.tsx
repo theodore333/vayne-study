@@ -28,6 +28,14 @@ class ErrorBoundary extends Component<Props, State> {
     this.setState({ errorInfo });
     // Log error to console for debugging
     console.error('ErrorBoundary caught an error:', error, errorInfo);
+
+    // Capture data diagnostics if available
+    if (typeof window !== 'undefined') {
+      const issues = (window as unknown as Record<string, unknown>).__dataIssues;
+      if (Array.isArray(issues) && issues.length > 0) {
+        console.error('[ErrorBoundary] Data issues found by sanitizer:', issues);
+      }
+    }
   }
 
   handleRetry = (): void => {
@@ -72,6 +80,18 @@ class ErrorBoundary extends Component<Props, State> {
                     {String(this.state.errorInfo.componentStack)}
                   </pre>
                 )}
+              </details>
+            )}
+
+            {/* Show data corruption diagnostics if available */}
+            {typeof window !== 'undefined' && Array.isArray((window as unknown as Record<string, unknown>).__dataIssues) && ((window as unknown as Record<string, unknown>).__dataIssues as string[]).length > 0 && (
+              <details className="mb-6 text-left" open>
+                <summary className="text-xs text-yellow-500 font-mono cursor-pointer hover:text-yellow-400">
+                  Открити проблеми с данните ({((window as unknown as Record<string, unknown>).__dataIssues as string[]).length})
+                </summary>
+                <pre className="mt-2 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg text-xs text-yellow-300 font-mono overflow-auto max-h-48 whitespace-pre-wrap">
+                  {((window as unknown as Record<string, unknown>).__dataIssues as string[]).join('\n')}
+                </pre>
               </details>
             )}
 

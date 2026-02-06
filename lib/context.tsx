@@ -9,31 +9,74 @@ import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComb
 
 // Sanitize data to prevent React error #310 (objects rendered as children)
 // Ensures all fields that get rendered in JSX are primitives, not objects
+// Also LOGS any corrupted fields to help find the root cause
 function sanitizeData(data: AppData): AppData {
+  let issues: string[] = [];
+
+  function checkField(path: string, value: unknown, expected: string): void {
+    if (value !== null && value !== undefined && typeof value === 'object' && !Array.isArray(value)) {
+      issues.push(`${path}: expected ${expected}, got object with keys [${Object.keys(value as Record<string, unknown>).join(', ')}]`);
+    }
+  }
+
   try {
-    return {
+    const result = {
       ...data,
-      subjects: (Array.isArray(data.subjects) ? data.subjects : []).map(s => ({
-        ...s,
-        name: typeof s.name === 'string' ? s.name : String(s.name ?? ''),
-        color: typeof s.color === 'string' ? s.color : '#6366f1',
-        semester: typeof s.semester === 'string' ? s.semester : (s.semester ? String(s.semester) : undefined),
-        examDate: typeof s.examDate === 'string' ? s.examDate : undefined,
-        examFormat: typeof s.examFormat === 'string' ? s.examFormat : undefined,
-        topics: (Array.isArray(s.topics) ? s.topics : []).map(t => ({
-          ...t,
-          name: typeof t.name === 'string' ? t.name : String(t.name ?? ''),
-          status: typeof t.status === 'string' ? t.status : 'gray',
-          material: typeof t.material === 'string' ? t.material : '',
-          grades: Array.isArray(t.grades) ? t.grades.filter(g => typeof g === 'number') : [],
-          avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : undefined,
-          quizCount: typeof t.quizCount === 'number' ? t.quizCount : 0,
-          readCount: typeof t.readCount === 'number' ? t.readCount : 0,
-          section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
-          size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : undefined,
-        } as Topic)),
-      } as Subject)),
+      subjects: (Array.isArray(data.subjects) ? data.subjects : []).map((s, si) => {
+        checkField(`subjects[${si}].name`, s.name, 'string');
+        checkField(`subjects[${si}].color`, s.color, 'string');
+        checkField(`subjects[${si}].semester`, s.semester, 'string|undefined');
+        checkField(`subjects[${si}].examDate`, s.examDate, 'string|null');
+        checkField(`subjects[${si}].examFormat`, s.examFormat, 'string|null');
+
+        return {
+          ...s,
+          name: typeof s.name === 'string' ? s.name : String(s.name ?? ''),
+          color: typeof s.color === 'string' ? s.color : '#6366f1',
+          semester: typeof s.semester === 'string' ? s.semester : (s.semester ? String(s.semester) : undefined),
+          examDate: typeof s.examDate === 'string' || s.examDate === null ? s.examDate : undefined,
+          examFormat: typeof s.examFormat === 'string' || s.examFormat === null ? s.examFormat : undefined,
+          topics: (Array.isArray(s.topics) ? s.topics : []).map((t, ti) => {
+            checkField(`subjects[${si}].topics[${ti}].name`, t.name, 'string');
+            checkField(`subjects[${si}].topics[${ti}].status`, t.status, 'string');
+            checkField(`subjects[${si}].topics[${ti}].avgGrade`, t.avgGrade, 'number|undefined');
+            checkField(`subjects[${si}].topics[${ti}].section`, t.section, 'string|undefined');
+            checkField(`subjects[${si}].topics[${ti}].size`, t.size, 'string|undefined');
+            // Check each grade in grades array
+            if (Array.isArray(t.grades)) {
+              t.grades.forEach((g, gi) => {
+                if (typeof g !== 'number') {
+                  issues.push(`subjects[${si}].topics[${ti}].grades[${gi}]: expected number, got ${typeof g} = ${JSON.stringify(g)}`);
+                }
+              });
+            }
+
+            return {
+              ...t,
+              name: typeof t.name === 'string' ? t.name : String(t.name ?? ''),
+              status: typeof t.status === 'string' ? t.status : 'gray',
+              material: typeof t.material === 'string' ? t.material : '',
+              grades: Array.isArray(t.grades) ? t.grades.filter(g => typeof g === 'number') : [],
+              avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : null,
+              quizCount: typeof t.quizCount === 'number' ? t.quizCount : 0,
+              readCount: typeof t.readCount === 'number' ? t.readCount : 0,
+              section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
+              size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : undefined,
+            } as Topic;
+          }),
+        } as Subject;
+      }),
     };
+
+    if (issues.length > 0) {
+      console.error('[SANITIZE] Found corrupted data fields:', issues);
+      // Also store in window for ErrorBoundary access
+      if (typeof window !== 'undefined') {
+        (window as unknown as Record<string, unknown>).__dataIssues = issues;
+      }
+    }
+
+    return result;
   } catch (e) {
     console.error('[CONTEXT] sanitizeData failed:', e);
     return data;
@@ -371,7 +414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateData = useCallback((updater: (prev: AppData) => AppData) => {
     setData(prev => {
-      const newData = updater(prev);
+      const newData = sanitizeData(updater(prev));
       saveData(newData);
       // Sync to cloud with debounce (2 second delay)
       debouncedSaveToCloud(newData);

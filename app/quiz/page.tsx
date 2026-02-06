@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo, useCallback } from 'react';
+import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText } from 'lucide-react';
 import Link from 'next/link';
@@ -85,8 +85,7 @@ function QuizContent() {
   const [showPreview, setShowPreview] = useState(false);
   const [previewQuestionCount, setPreviewQuestionCount] = useState(12);
 
-  // Multi-topic mode
-  const [multiTopicMode, setMultiTopicMode] = useState(false);
+  // Multi-topic mode (selectedTopics used by resetQuiz)
   const [selectedTopics, setSelectedTopics] = useState<Array<{ subjectId: string; topicId: string }>>([]);
 
   // Free recall state
@@ -990,18 +989,6 @@ function QuizContent() {
     // Note: We don't increment bloom level here anymore - context.tsx handles that
     // based on quizHistory (needs 2+ successful quizzes at current level)
 
-    // Get weight from preset (custom mode uses standard weight)
-    const weight = mode === 'custom' ? 1.0 : QUIZ_LENGTH_PRESETS[quizLength].weight;
-
-    const quizResult = {
-      date: new Date().toISOString(),
-      bloomLevel: quizBloomLevel, // The level this quiz was taken at
-      score: Math.round(percentage),
-      questionsCount: quizState.questions.length,
-      correctAnswers: Math.round(score),
-      weight
-    };
-
     // Don't set currentBloomLevel directly - let context.tsx calculate it
     // based on quizHistory (requires 2+ successful quizzes at current level to advance)
     // Note: quizHistory is now updated via addGrade()/addModuleGrade(), only update wrongAnswers here
@@ -1071,33 +1058,6 @@ function QuizContent() {
     setCountWarning(null);
     setShowEarlyStopConfirm(false);
     setShowBackConfirm(false);
-  };
-
-  // Toggle topic selection for multi-topic mode
-  const toggleTopicSelection = (subjectId: string, topicId: string) => {
-    setSelectedTopics(prev => {
-      const exists = prev.some(t => t.subjectId === subjectId && t.topicId === topicId);
-      if (exists) {
-        return prev.filter(t => !(t.subjectId === subjectId && t.topicId === topicId));
-      } else {
-        return [...prev, { subjectId, topicId }];
-      }
-    });
-  };
-
-  // Get combined material for multi-topic quiz
-  const getMultiTopicMaterial = () => {
-    return selectedTopics.map(({ subjectId, topicId }) => {
-      const subj = data.subjects.find(s => s.id === subjectId);
-      const top = subj?.topics.find(t => t.id === topicId);
-      if (!subj || !top) return null;
-      return {
-        subjectName: subj.name,
-        topicName: top.name,
-        topicNumber: top.number,
-        material: top.material || ''
-      };
-    }).filter(Boolean);
   };
 
   // No topic selected - show simple topic selection (skip if multi-topic mode or showing preview)

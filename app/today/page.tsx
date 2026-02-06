@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -49,6 +49,9 @@ export default function TodayPage() {
 
   // Module detail modal state
   const [selectedModule, setSelectedModule] = useState<{ module: ProjectModule; project: DevelopmentProject } | null>(null);
+
+  // Collapsible sections
+  const [syllabusExpanded, setSyllabusExpanded] = useState(false);
 
   // Load API key
   useEffect(() => {
@@ -482,220 +485,6 @@ export default function TodayPage() {
         </div>
       )}
 
-      {/* Anki Due Cards Widget */}
-      {ankiStats && (
-        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Layers size={24} className="text-blue-400" />
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki Flashcards</h3>
-                <p className="text-xs text-slate-400 font-mono">Due за днес</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold font-mono text-blue-400">{ankiStats.dueToday}</div>
-                <div className="text-xs text-slate-500 font-mono">Due</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold font-mono text-cyan-400">{ankiStats.newToday}</div>
-                <div className="text-xs text-slate-500 font-mono">New</div>
-              </div>
-              <button
-                onClick={refreshAnkiStats}
-                disabled={ankiLoading}
-                className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-                title="Обнови"
-              >
-                <RefreshCw size={16} className={ankiLoading ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          </div>
-          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
-            <div className="mt-3 text-xs text-slate-400 font-mono">
-              Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Syllabus Progress Widget */}
-      {syllabusProgress.bySubject.length > 0 && (
-        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
-          <div className="flex items-center gap-3 mb-4">
-            <TrendingUp size={20} className="text-emerald-400" />
-            <h3 className="text-sm font-semibold text-slate-100 font-mono">Прогрес по конспект</h3>
-          </div>
-          <div className="space-y-3">
-            {syllabusProgress.bySubject.map(subject => {
-              const subjectData = activeSubjects.find(s => s.id === subject.subjectId);
-              const totalTopics = subjectData?.topics.length || 0;
-              const greenTopics = subjectData?.topics.filter(t => t.status === 'green').length || 0;
-              const progressPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
-
-              return (
-                <div key={subject.subjectId} className="bg-slate-800/30 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: subjectData?.color || '#64748b' }}
-                      />
-                      <span className="text-sm font-medium text-slate-200 font-mono">{subject.subjectName}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {subject.urgency === 'critical' && (
-                        <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-mono flex items-center gap-1">
-                          <AlertTriangle size={10} />
-                          Критично
-                        </span>
-                      )}
-                      {subject.urgency === 'high' && (
-                        <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded font-mono">
-                          Спешно
-                        </span>
-                      )}
-                      {subject.warning && (
-                        <span className="text-xs text-red-400 font-mono">{subject.warning}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="h-1.5 bg-slate-700 rounded-full mb-2 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${progressPercent}%`,
-                        backgroundColor: progressPercent >= 80 ? '#22c55e' : progressPercent >= 50 ? '#eab308' : '#f97316'
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                    <span>
-                      {greenTopics}/{totalTopics} готови ({progressPercent}%)
-                    </span>
-                    <span className="flex items-center gap-3">
-                      <span>{subject.remaining} остават</span>
-                      <span>{subject.daysLeft}д до изпит</span>
-                      <span className={subject.topics > 5 ? 'text-red-400' : subject.topics > 3 ? 'text-yellow-400' : 'text-emerald-400'}>
-                        {subject.topics} теми/ден
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Overall status */}
-          <div className="mt-4 pt-3 border-t border-slate-700/50">
-            {(() => {
-              const avgTopicsPerDay = syllabusProgress.bySubject.reduce((sum, s) => sum + s.topics, 0) / Math.max(1, syllabusProgress.bySubject.length);
-              const hasCritical = syllabusProgress.bySubject.some(s => s.urgency === 'critical');
-              const hasWarnings = syllabusProgress.bySubject.some(s => s.warning);
-
-              if (hasWarnings) {
-                return (
-                  <div className="flex items-center gap-2 text-red-400 text-sm font-mono">
-                    <AlertTriangle size={16} />
-                    <span>Изоставаш! Някои предмети имат нереалистичен workload.</span>
-                  </div>
-                );
-              } else if (hasCritical) {
-                return (
-                  <div className="flex items-center gap-2 text-orange-400 text-sm font-mono">
-                    <Flame size={16} />
-                    <span>Критични изпити наближават - фокусирай се!</span>
-                  </div>
-                );
-              } else if (avgTopicsPerDay <= 3) {
-                return (
-                  <div className="flex items-center gap-2 text-emerald-400 text-sm font-mono">
-                    <CheckCircle2 size={16} />
-                    <span>По график си! Средно {avgTopicsPerDay.toFixed(1)} теми/ден.</span>
-                  </div>
-                );
-              } else {
-                return (
-                  <div className="flex items-center gap-2 text-yellow-400 text-sm font-mono">
-                    <TrendingUp size={16} />
-                    <span>Малко натоварено ({avgTopicsPerDay.toFixed(1)} теми/ден), но изпълнимо.</span>
-                  </div>
-                );
-              }
-            })()}
-          </div>
-        </div>
-      )}
-
-      {/* FSRS Scheduled Reviews */}
-      {fsrsReviews.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Brain size={20} className="text-purple-400" />
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100 font-mono">FSRS Преговор</h3>
-                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниска запаметеност</p>
-              </div>
-            </div>
-            {fsrsReviews.length > 1 && (
-              <Link
-                href={`/quiz?multi=true&topics=${fsrsReviews.slice(0, 5).map(r => `${r.subject.id}:${r.topic.id}`).join(',')}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-              >
-                <Brain size={12} />
-                Mix Quiz ({Math.min(5, fsrsReviews.length)})
-              </Link>
-            )}
-          </div>
-
-          <div className="space-y-2 max-h-[200px] overflow-y-auto">
-            {fsrsReviews.slice(0, 8).map(({ topic, subject, retrievability }) => (
-              <div
-                key={topic.id}
-                className="flex items-center gap-3 p-2 bg-slate-800/30 rounded-lg"
-              >
-                <div
-                  className="w-2 h-8 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: subject.color }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-slate-200 truncate">{topic.name}</div>
-                  <div className="text-[10px] text-slate-500">{subject.name}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`text-sm font-mono font-bold ${
-                    retrievability < 0.5 ? 'text-red-400' :
-                    retrievability < 0.7 ? 'text-orange-400' :
-                    'text-yellow-400'
-                  }`}>
-                    {Math.round(retrievability * 100)}%
-                  </div>
-                  <Link
-                    href={`/quiz?subject=${subject.id}&topic=${topic.id}`}
-                    className="px-2 py-1 text-[10px] font-mono bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 rounded transition-colors"
-                  >
-                    Quiz
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {fsrsReviews.length > 8 && (
-            <div className="mt-2 text-center">
-              <span className="text-xs text-slate-500 font-mono">
-                +{fsrsReviews.length - 8} още теми
-              </span>
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Daily Plan Tasks */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
         <div className="p-6 border-b border-[#1e293b]">
@@ -1010,6 +799,240 @@ export default function TodayPage() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* FSRS Scheduled Reviews */}
+      {fsrsReviews.length > 0 && (
+        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Brain size={20} className="text-purple-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100 font-mono">FSRS Преговор</h3>
+                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниска запаметеност</p>
+              </div>
+            </div>
+            {fsrsReviews.length > 1 && (
+              <Link
+                href={`/quiz?multi=true&topics=${fsrsReviews.slice(0, 5).map(r => `${r.subject.id}:${r.topic.id}`).join(',')}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+              >
+                <Brain size={12} />
+                Mix Quiz ({Math.min(5, fsrsReviews.length)})
+              </Link>
+            )}
+          </div>
+          <div className="space-y-2 max-h-[200px] overflow-y-auto">
+            {fsrsReviews.slice(0, 8).map(({ topic, subject, retrievability }) => (
+              <div key={topic.id} className="flex items-center gap-3 p-2 bg-slate-800/30 rounded-lg">
+                <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-slate-200 truncate">{topic.name}</div>
+                  <div className="text-[10px] text-slate-500">{subject.name}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`text-sm font-mono font-bold ${
+                    retrievability < 0.5 ? 'text-red-400' : retrievability < 0.7 ? 'text-orange-400' : 'text-yellow-400'
+                  }`}>
+                    {Math.round(retrievability * 100)}%
+                  </div>
+                  <Link
+                    href={`/quiz?subject=${subject.id}&topic=${topic.id}`}
+                    className="px-2 py-1 text-[10px] font-mono bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 rounded transition-colors"
+                  >
+                    Quiz
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+          {fsrsReviews.length > 8 && (
+            <div className="mt-2 text-center">
+              <span className="text-xs text-slate-500 font-mono">+{fsrsReviews.length - 8} още теми</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Anki Due Cards Widget */}
+      {ankiStats && (
+        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Layers size={24} className="text-blue-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki Flashcards</h3>
+                <p className="text-xs text-slate-400 font-mono">Due за днес</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-blue-400">{ankiStats.dueToday}</div>
+                <div className="text-xs text-slate-500 font-mono">Due</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-cyan-400">{ankiStats.newToday}</div>
+                <div className="text-xs text-slate-500 font-mono">New</div>
+              </div>
+              <button
+                onClick={refreshAnkiStats}
+                disabled={ankiLoading}
+                className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                title="Обнови"
+              >
+                <RefreshCw size={16} className={ankiLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
+            <div className="mt-3 text-xs text-slate-400 font-mono">
+              Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Syllabus Progress Widget - Collapsible */}
+      {syllabusProgress.bySubject.length > 0 && (
+        <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
+          <button
+            onClick={() => setSyllabusExpanded(!syllabusExpanded)}
+            className="w-full p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors rounded-xl"
+          >
+            <div className="flex items-center gap-3">
+              <TrendingUp size={20} className="text-emerald-400" />
+              <h3 className="text-sm font-semibold text-slate-100 font-mono">Прогрес по конспект</h3>
+              <span className="text-xs text-slate-500 font-mono">({syllabusProgress.bySubject.length} предмета)</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Compact summary when collapsed */}
+              {!syllabusExpanded && (() => {
+                const hasCritical = syllabusProgress.bySubject.some(s => s.urgency === 'critical');
+                const hasWarning = syllabusProgress.bySubject.some(s => s.warning);
+                return (
+                  <>
+                    {(hasCritical || hasWarning) && (
+                      <span className="text-xs text-red-400 font-mono flex items-center gap-1">
+                        <AlertTriangle size={12} />
+                        {hasWarning ? 'Изоставане' : 'Критично'}
+                      </span>
+                    )}
+                    <div className="flex gap-1">
+                      {syllabusProgress.bySubject.slice(0, 6).map(s => {
+                        const subjectData = activeSubjects.find(sd => sd.id === s.subjectId);
+                        const total = subjectData?.topics.length || 1;
+                        const done = subjectData?.topics.filter(t => t.status === 'green').length || 0;
+                        const pct = Math.round((done / total) * 100);
+                        return (
+                          <div key={s.subjectId} className="w-6 h-2 rounded-full bg-slate-700 overflow-hidden" title={`${s.subjectName}: ${pct}%`}>
+                            <div className="h-full rounded-full" style={{
+                              width: `${pct}%`,
+                              backgroundColor: subjectData?.color || '#64748b'
+                            }} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
+              <ChevronDown size={16} className={`text-slate-500 transition-transform ${syllabusExpanded ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
+
+          {syllabusExpanded && (
+            <div className="px-4 pb-4 space-y-3">
+              {syllabusProgress.bySubject.map(subject => {
+                const subjectData = activeSubjects.find(s => s.id === subject.subjectId);
+                const totalTopics = subjectData?.topics.length || 0;
+                const greenTopics = subjectData?.topics.filter(t => t.status === 'green').length || 0;
+                const progressPercent = totalTopics > 0 ? Math.round((greenTopics / totalTopics) * 100) : 0;
+
+                return (
+                  <div key={subject.subjectId} className="bg-slate-800/30 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectData?.color || '#64748b' }} />
+                        <span className="text-sm font-medium text-slate-200 font-mono">{subject.subjectName}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {subject.urgency === 'critical' && (
+                          <span className="text-xs bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-mono flex items-center gap-1">
+                            <AlertTriangle size={10} /> Критично
+                          </span>
+                        )}
+                        {subject.urgency === 'high' && (
+                          <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded font-mono">Спешно</span>
+                        )}
+                        {subject.warning && (
+                          <span className="text-xs text-red-400 font-mono">{subject.warning}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-slate-700 rounded-full mb-2 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${progressPercent}%`,
+                          backgroundColor: progressPercent >= 80 ? '#22c55e' : progressPercent >= 50 ? '#eab308' : '#f97316'
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                      <span>{greenTopics}/{totalTopics} готови ({progressPercent}%)</span>
+                      <span className="flex items-center gap-3">
+                        <span>{subject.remaining} остават</span>
+                        <span>{subject.daysLeft}д до изпит</span>
+                        <span className={subject.topics > 5 ? 'text-red-400' : subject.topics > 3 ? 'text-yellow-400' : 'text-emerald-400'}>
+                          {subject.topics} теми/ден
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Overall status */}
+              <div className="pt-3 border-t border-slate-700/50">
+                {(() => {
+                  const avgTopicsPerDay = syllabusProgress.bySubject.reduce((sum, s) => sum + s.topics, 0) / Math.max(1, syllabusProgress.bySubject.length);
+                  const hasCritical = syllabusProgress.bySubject.some(s => s.urgency === 'critical');
+                  const hasWarnings = syllabusProgress.bySubject.some(s => s.warning);
+
+                  if (hasWarnings) {
+                    return (
+                      <div className="flex items-center gap-2 text-red-400 text-sm font-mono">
+                        <AlertTriangle size={16} />
+                        <span>Изоставаш! Някои предмети имат нереалистичен workload.</span>
+                      </div>
+                    );
+                  } else if (hasCritical) {
+                    return (
+                      <div className="flex items-center gap-2 text-orange-400 text-sm font-mono">
+                        <Flame size={16} />
+                        <span>Критични изпити наближават - фокусирай се!</span>
+                      </div>
+                    );
+                  } else if (avgTopicsPerDay <= 3) {
+                    return (
+                      <div className="flex items-center gap-2 text-emerald-400 text-sm font-mono">
+                        <CheckCircle2 size={16} />
+                        <span>По график си! Средно {avgTopicsPerDay.toFixed(1)} теми/ден.</span>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="flex items-center gap-2 text-yellow-400 text-sm font-mono">
+                        <TrendingUp size={16} />
+                        <span>Малко натоварено ({avgTopicsPerDay.toFixed(1)} теми/ден), но изпълнимо.</span>
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

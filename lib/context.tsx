@@ -713,14 +713,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
+      const src = importData.subject;
       const importedSubject: Subject = {
-        ...importData.subject,
         id: generateId(),
+        name: typeof src.name === 'string' ? src.name : 'Внесен предмет',
+        color: typeof src.color === 'string' ? src.color : '#6366f1',
+        subjectType: typeof src.subjectType === 'string' ? src.subjectType as SubjectType : 'preclinical',
+        examDate: typeof src.examDate === 'string' ? src.examDate : null,
+        examFormat: typeof src.examFormat === 'string' ? src.examFormat : null,
+        semester: typeof src.semester === 'string' ? src.semester : undefined,
         createdAt: new Date().toISOString(),
         archived: false,
-        topics: (importData.subject.topics || []).map((t: any) => ({
-          ...t,
+        topics: (Array.isArray(src.topics) ? src.topics : []).map((t: any) => ({
           id: generateId(),
+          name: typeof t.name === 'string' ? t.name : 'Без име',
+          number: typeof t.number === 'number' ? t.number : 1,
+          material: typeof t.material === 'string' ? t.material : '',
+          materialImages: Array.isArray(t.materialImages) ? t.materialImages : [],
+          section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
+          size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
+          sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
+          currentBloomLevel: typeof t.currentBloomLevel === 'number' ? t.currentBloomLevel : 1,
           // Reset progress
           status: 'gray' as TopicStatus,
           grades: [],

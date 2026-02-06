@@ -7,54 +7,175 @@ import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
-// Lightweight sanitizer - runs ONLY at load time to fix primitive types
-// Does NOT run on every mutation (no perf impact)
+// Full sanitizer - runs ONLY at load time (not on mutations = no perf impact)
+// Ensures EVERY field that React might render is the correct primitive type
 function sanitizeLoadedData(data: AppData): AppData {
   try {
     const s = (v: unknown, fb = ''): string => typeof v === 'string' ? v : fb;
     const n = (v: unknown, fb = 0): number => typeof v === 'number' && !isNaN(v) ? v : fb;
+    const b = (v: unknown, fb = false): boolean => typeof v === 'boolean' ? v : fb;
     const a = (v: unknown): any[] => Array.isArray(v) ? v : [];
+    const o = (v: unknown, fb: any): any => (v && typeof v === 'object' && !Array.isArray(v)) ? v : fb;
+    const sn = (v: unknown): string | null => typeof v === 'string' ? v : null;
+
+    const d = (data || {}) as any;
+
+    // userProgress
+    const rp = o(d.userProgress, {});
+    const userProgress = {
+      ...defaultUserProgress,
+      ...rp,
+      xp: n(rp.xp),
+      level: n(rp.level, 1),
+      totalXpEarned: n(rp.totalXpEarned),
+      achievements: a(rp.achievements),
+      combo: {
+        count: n(rp.combo?.count),
+        lastActionTime: sn(rp.combo?.lastActionTime),
+      },
+      stats: {
+        topicsCompleted: n(rp.stats?.topicsCompleted),
+        quizzesTaken: n(rp.stats?.quizzesTaken),
+        perfectQuizzes: n(rp.stats?.perfectQuizzes),
+        greenTopics: n(rp.stats?.greenTopics),
+        longestStreak: n(rp.stats?.longestStreak),
+      },
+    };
+
+    // studyGoals
+    const rg = o(d.studyGoals, {});
+    const studyGoals = {
+      dailyMinutes: n(rg.dailyMinutes, 480),
+      weeklyMinutes: n(rg.weeklyMinutes, 2880),
+      monthlyMinutes: n(rg.monthlyMinutes, 12480),
+      weekendDailyMinutes: n(rg.weekendDailyMinutes, 240),
+      useWeekendHours: b(rg.useWeekendHours, true),
+      vacationMode: b(rg.vacationMode),
+      vacationMultiplier: n(rg.vacationMultiplier, 0.4),
+      ...(rg.fsrsEnabled !== undefined ? { fsrsEnabled: b(rg.fsrsEnabled) } : {}),
+      ...(rg.fsrsTargetRetention !== undefined ? { fsrsTargetRetention: n(rg.fsrsTargetRetention, 0.85) } : {}),
+      ...(rg.fsrsMaxReviewsPerDay !== undefined ? { fsrsMaxReviewsPerDay: n(rg.fsrsMaxReviewsPerDay, 20) } : {}),
+      ...(rg.fsrsMaxInterval !== undefined ? { fsrsMaxInterval: n(rg.fsrsMaxInterval, 365) } : {}),
+    };
+
+    // usageData
+    const ru = o(d.usageData, {});
+    const usageData = {
+      dailyCalls: n(ru.dailyCalls),
+      monthlyCost: n(ru.monthlyCost),
+      monthlyBudget: n(ru.monthlyBudget, 5),
+      lastReset: s(ru.lastReset, getTodayString()),
+    };
+
+    // dailyStatus
+    const rd = o(d.dailyStatus, {});
+    const dailyStatus = {
+      date: s(rd.date, getTodayString()),
+      sick: b(rd.sick),
+      holiday: b(rd.holiday),
+    };
+
+    // pomodoroSettings
+    const rpm = o(d.pomodoroSettings, {});
+    const pomodoroSettings = {
+      workDuration: n(rpm.workDuration, 25),
+      shortBreakDuration: n(rpm.shortBreakDuration, 5),
+      longBreakDuration: n(rpm.longBreakDuration, 15),
+      longBreakAfter: n(rpm.longBreakAfter, 4),
+      autoStartBreaks: b(rpm.autoStartBreaks),
+      autoStartWork: b(rpm.autoStartWork),
+      soundEnabled: b(rpm.soundEnabled, true),
+    };
+
+    // academicPeriod
+    const rap = o(d.academicPeriod, {});
+    const academicPeriod = {
+      semesterStart: sn(rap.semesterStart),
+      semesterEnd: sn(rap.semesterEnd),
+      sessionStart: sn(rap.sessionStart),
+      sessionEnd: sn(rap.sessionEnd),
+    };
+
+    // gpaData
+    const rgpa = o(d.gpaData, {});
+    const gpaData = {
+      grades: a(rgpa.grades),
+      targetGPA: n(rgpa.targetGPA, 5.5),
+      stateExams: a(rgpa.stateExams),
+    };
+
+    // clinicalCaseSessions
+    const rcc = o(d.clinicalCaseSessions, {});
+    const clinicalCaseSessions = {
+      activeCaseId: sn(rcc.activeCaseId),
+      cases: a(rcc.cases),
+      totalCasesCompleted: n(rcc.totalCasesCompleted),
+      averageScore: n(rcc.averageScore),
+    };
+
+    // orRoomSessions
+    const ror = o(d.orRoomSessions, {});
+    const orRoomSessions = {
+      activeCaseId: sn(ror.activeCaseId),
+      cases: a(ror.cases),
+      totalCasesCompleted: n(ror.totalCasesCompleted),
+      averageScore: n(ror.averageScore),
+    };
+
+    // subjects + topics
+    const subjects = a(d.subjects).map((subj: any) => ({
+      ...subj,
+      id: s(subj.id, generateId()),
+      name: s(subj.name, 'Без име'),
+      color: s(subj.color, '#6366f1'),
+      subjectType: s(subj.subjectType, 'preclinical'),
+      examDate: sn(subj.examDate),
+      examFormat: sn(subj.examFormat),
+      createdAt: s(subj.createdAt, new Date().toISOString()),
+      topics: a(subj.topics).map((t: any) => ({
+        ...t,
+        id: s(t.id, generateId()),
+        name: s(t.name, 'Без име'),
+        number: n(t.number, 1),
+        status: s(t.status, 'gray'),
+        material: s(t.material),
+        materialImages: a(t.materialImages),
+        grades: a(t.grades).filter((g: any) => typeof g === 'number'),
+        avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : null,
+        quizCount: n(t.quizCount),
+        quizHistory: a(t.quizHistory),
+        lastReview: sn(t.lastReview),
+        currentBloomLevel: n(t.currentBloomLevel, 1),
+        readCount: n(t.readCount),
+        lastRead: sn(t.lastRead),
+        size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
+        sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
+        wrongAnswers: a(t.wrongAnswers),
+        highlights: a(t.highlights),
+      })),
+    }));
 
     return {
-      ...data,
-      subjects: a(data.subjects).map((subj: any) => ({
-        ...subj,
-        id: s(subj.id, generateId()),
-        name: s(subj.name, 'Без име'),
-        color: s(subj.color, '#6366f1'),
-        subjectType: s(subj.subjectType, 'preclinical'),
-        examDate: typeof subj.examDate === 'string' ? subj.examDate : null,
-        examFormat: typeof subj.examFormat === 'string' ? subj.examFormat : null,
-        createdAt: s(subj.createdAt, new Date().toISOString()),
-        topics: a(subj.topics).map((t: any) => ({
-          ...t,
-          id: s(t.id, generateId()),
-          name: s(t.name, 'Без име'),
-          number: n(t.number, 1),
-          status: s(t.status, 'gray'),
-          material: s(t.material),
-          materialImages: a(t.materialImages),
-          grades: a(t.grades).filter((g: any) => typeof g === 'number'),
-          avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : null,
-          quizCount: n(t.quizCount),
-          quizHistory: a(t.quizHistory),
-          lastReview: typeof t.lastReview === 'string' ? t.lastReview : null,
-          currentBloomLevel: n(t.currentBloomLevel, 1),
-          readCount: n(t.readCount),
-          lastRead: typeof t.lastRead === 'string' ? t.lastRead : null,
-          size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
-          sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
-          wrongAnswers: a(t.wrongAnswers),
-          highlights: a(t.highlights),
-        })),
-      })),
-      schedule: a(data.schedule),
-      timerSessions: a(data.timerSessions),
-      questionBanks: a(data.questionBanks),
-      developmentProjects: a(data.developmentProjects),
-      academicEvents: a(data.academicEvents),
-      dailyGoals: a(data.dailyGoals),
-    };
+      ...d,
+      subjects,
+      schedule: a(d.schedule),
+      dailyStatus,
+      timerSessions: a(d.timerSessions),
+      gpaData,
+      usageData,
+      questionBanks: a(d.questionBanks),
+      pomodoroSettings,
+      studyGoals,
+      academicPeriod,
+      userProgress,
+      clinicalCaseSessions,
+      orRoomSessions,
+      developmentProjects: a(d.developmentProjects),
+      careerProfile: d.careerProfile === null || (typeof d.careerProfile === 'object' && d.careerProfile !== null) ? d.careerProfile : null,
+      academicEvents: a(d.academicEvents),
+      lastOpenedTopic: d.lastOpenedTopic === null || (typeof d.lastOpenedTopic === 'object' && d.lastOpenedTopic !== null) ? d.lastOpenedTopic : null,
+      dailyGoals: a(d.dailyGoals),
+    } as AppData;
   } catch (e) {
     console.error('[SANITIZE] Failed:', e);
     return data;

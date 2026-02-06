@@ -1353,7 +1353,38 @@ export function generateDailyPlan(
     }
   }
 
-  // 4. NEW MATERIAL - Cover gray topics after reviews
+  // 4b. DRILL WEAKNESS - Target accumulated wrong answers before exams
+  // Only for subjects with upcoming exams (≤7 days) and significant unmastered wrong answers
+  for (const subject of subjects) {
+    if (capacityAfterFsrs <= 0) break;
+    // Skip if already has a task
+    if (tasks.some(t => t.subjectId === subject.id && t.type !== 'medium')) continue;
+
+    const daysUntilExam = getDaysUntil(subject.examDate);
+    if (daysUntilExam > 7 || daysUntilExam <= 0) continue;
+
+    const allWrongAnswers = subject.topics.flatMap(t => t.wrongAnswers || []);
+    const unmastered = allWrongAnswers.filter(wa => wa.drillCount < 3);
+    if (unmastered.length < 5) continue;
+
+    const priority: 'critical' | 'high' = daysUntilExam <= 3 ? 'critical' : 'high';
+
+    tasks.push({
+      id: generateId(),
+      subjectId: subject.id,
+      subjectName: subject.name,
+      subjectColor: subject.color,
+      type: priority,
+      typeLabel: `🎯 Drill Weakness`,
+      description: `${unmastered.length} неупражнявани грешки (${allWrongAnswers.length - unmastered.length} адресирани)`,
+      topics: [], // No specific topics - cross-topic drill
+      estimatedMinutes: Math.min(unmastered.length * 2, 30),
+      completed: false
+    });
+    capacityAfterFsrs -= 1;
+  }
+
+  // 5. NEW MATERIAL - Cover gray topics after reviews
   // Uses dynamic quota (30-50%) based on gray% and exam proximity
   const availableForNew = reservedForNew + Math.max(0, capacityAfterFsrs);
   let capacityAfterNew = capacityAfterFsrs;

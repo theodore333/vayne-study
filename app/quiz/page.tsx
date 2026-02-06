@@ -176,6 +176,9 @@ function QuizContent() {
   // Question count warning
   const [countWarning, setCountWarning] = useState<string | null>(null);
 
+  // Cross-topic drill weakness
+  const [crossTopicDrill, setCrossTopicDrill] = useState(false);
+
   // Mistake analysis state
   const [mistakeAnalysis, setMistakeAnalysis] = useState<MistakeAnalysis | null>(null);
   const [isAnalyzingMistakes, setIsAnalyzingMistakes] = useState(false);
@@ -232,6 +235,28 @@ function QuizContent() {
     }
     return null;
   }, [isModuleQuiz, module, project, topic]);
+
+  // Cross-topic weakness stats for the selected subject
+  const subjectWeaknessStats = useMemo(() => {
+    if (!subject || isModuleQuiz) return null;
+    const allWrongAnswers = subject.topics.flatMap(t => t.wrongAnswers || []);
+    const unmastered = allWrongAnswers.filter(wa => wa.drillCount < 3);
+    const mastered = allWrongAnswers.length - unmastered.length;
+    return { total: allWrongAnswers.length, unmastered: unmastered.length, mastered };
+  }, [subject, isModuleQuiz]);
+
+  // Get prioritized cross-topic wrong answers (sorted by drillCount asc, date desc, capped at 30)
+  const crossTopicWrongAnswers = useMemo(() => {
+    if (!subject || !crossTopicDrill) return [];
+    return subject.topics
+      .flatMap(t => t.wrongAnswers || [])
+      .filter(wa => wa.drillCount < 3)
+      .sort((a, b) => {
+        if (a.drillCount !== b.drillCount) return a.drillCount - b.drillCount;
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      })
+      .slice(0, 30);
+  }, [subject, crossTopicDrill]);
 
   // Validation state - detect when params don't match existing data
   const [invalidParamsWarning, setInvalidParamsWarning] = useState<string | null>(null);
@@ -507,7 +532,9 @@ function QuizContent() {
           currentBloomLevel: topic?.currentBloomLevel || 1,
           quizHistory: topic?.quizHistory,
           // For drill_weakness and gap_analysis modes - pass wrong answers
-          wrongAnswers: (mode === 'drill_weakness' || mode === 'gap_analysis') ? topic?.wrongAnswers : undefined,
+          wrongAnswers: mode === 'drill_weakness'
+            ? (crossTopicDrill ? crossTopicWrongAnswers : topic?.wrongAnswers)
+            : mode === 'gap_analysis' ? topic?.wrongAnswers : undefined,
           model: selectedModel
         };
       }
@@ -1115,21 +1142,36 @@ function QuizContent() {
     let mergedWrongAnswers: WrongAnswer[];
     const existingWrongAnswers = isModuleQuiz ? (module?.wrongAnswers || []) : (topic?.wrongAnswers || []);
 
-    if (mode === 'drill_weakness') {
-      // For drill_weakness mode: only increment drillCount for questions that were ACTUALLY in this quiz
-      // Get the concepts that were drilled (from the quiz questions)
+    if (mode === 'drill_weakness' && crossTopicDrill && subject) {
+      // Cross-topic drill: update drillCount across ALL topics of the subject
       const drilledConcepts = new Set(
         quizState.questions.map(q => q.concept || 'General')
       );
 
-      mergedWrongAnswers = existingWrongAnswers.map(wa => {
-        // Only increment if this wrong answer's concept was drilled in this quiz
-        const wasDrilled = drilledConcepts.has(wa.concept);
-        return {
-          ...wa,
-          drillCount: wasDrilled ? wa.drillCount + 1 : wa.drillCount
-        };
+      subject.topics.forEach(t => {
+        if (!t.wrongAnswers || t.wrongAnswers.length === 0) return;
+        const updated = t.wrongAnswers
+          .map(wa => ({
+            ...wa,
+            drillCount: drilledConcepts.has(wa.concept) ? wa.drillCount + 1 : wa.drillCount
+          }))
+          .filter(wa => !(wa.drillCount >= 3 && masteredConcepts.has(wa.concept)));
+        if (subjectId) {
+          updateTopic(subjectId, t.id, { wrongAnswers: updated });
+        }
       });
+      // Skip the normal save below - we already updated all topics
+      mergedWrongAnswers = existingWrongAnswers;
+    } else if (mode === 'drill_weakness') {
+      // Per-topic drill: only increment drillCount for questions that were ACTUALLY in this quiz
+      const drilledConcepts = new Set(
+        quizState.questions.map(q => q.concept || 'General')
+      );
+
+      mergedWrongAnswers = existingWrongAnswers.map(wa => ({
+        ...wa,
+        drillCount: drilledConcepts.has(wa.concept) ? wa.drillCount + 1 : wa.drillCount
+      }));
       // Also add any NEW wrong answers from this drill session
       if (newWrongAnswers.length > 0) {
         mergedWrongAnswers = [...newWrongAnswers, ...mergedWrongAnswers].slice(0, 20);
@@ -1140,7 +1182,6 @@ function QuizContent() {
     }
 
     // Remove "mastered" wrong answers: drillCount >= 3 AND concept answered correctly
-    // This cleans up old weaknesses that the student has now overcome
     mergedWrongAnswers = mergedWrongAnswers.filter(wa => {
       const isMastered = wa.drillCount >= 3 && masteredConcepts.has(wa.concept);
       return !isMastered;
@@ -2701,8 +2742,8 @@ function QuizContent() {
               <span className="text-xs text-slate-500 font-mono">Открий слаби места</span>
             </button>
 
-            {/* Drill Weakness - only show if there are wrong answers */}
-            {!isMultiMode && topic?.wrongAnswers && topic.wrongAnswers.length > 0 && (
+            {/* Drill Weakness - show if topic or subject has wrong answers */}
+            {!isMultiMode && ((topic?.wrongAnswers && topic.wrongAnswers.length > 0) || (subjectWeaknessStats && subjectWeaknessStats.unmastered > 0)) && (
               <button
                 onClick={() => { setMode('drill_weakness'); setShowCustomOptions(false); }}
                 className={`p-4 rounded-xl border text-left transition-all ${
@@ -2713,10 +2754,58 @@ function QuizContent() {
                 <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'drill_weakness' ? 'text-orange-400' : 'text-slate-300'}`}>
                   Drill Weakness
                 </span>
-                <span className="text-xs text-slate-500 font-mono">{topic.wrongAnswers.length} грешки за преговор</span>
+                <span className="text-xs text-slate-500 font-mono">
+                  {topic?.wrongAnswers?.length || 0} грешки (тема)
+                  {subjectWeaknessStats && subjectWeaknessStats.unmastered > 0 && (
+                    <> · {subjectWeaknessStats.unmastered} (предмет)</>
+                  )}
+                </span>
               </button>
             )}
           </div>
+
+          {/* Cross-topic drill toggle + stats */}
+          {mode === 'drill_weakness' && subjectWeaknessStats && subjectWeaknessStats.total > 0 && (
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-300 font-mono">Обхват на drill:</span>
+                <div className="flex bg-slate-900/60 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setCrossTopicDrill(false)}
+                    className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all ${
+                      !crossTopicDrill ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    Тази тема
+                  </button>
+                  <button
+                    onClick={() => setCrossTopicDrill(true)}
+                    className={`px-3 py-1.5 text-xs font-mono rounded-md transition-all ${
+                      crossTopicDrill ? 'bg-orange-500/20 text-orange-400 border border-orange-500/40' : 'text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    Целия предмет
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <div className="flex items-center gap-4">
+                  <span className="text-red-400">
+                    {crossTopicDrill ? subjectWeaknessStats.unmastered : (topic?.wrongAnswers?.filter(w => w.drillCount < 3).length || 0)} неупражнявани
+                  </span>
+                  <span className="text-green-400">
+                    {crossTopicDrill ? subjectWeaknessStats.mastered : (topic?.wrongAnswers?.filter(w => w.drillCount >= 3).length || 0)} адресирани
+                  </span>
+                  <span className="text-slate-500">
+                    {crossTopicDrill ? subjectWeaknessStats.total : (topic?.wrongAnswers?.length || 0)} общо
+                  </span>
+                </div>
+                {crossTopicDrill && (
+                  <span className="text-slate-500">max 30 за quiz</span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Quiz Length Dropdown - only show for standard quiz modes */}
           {mode && mode !== 'free_recall' && mode !== 'custom' && mode !== 'drill_weakness' && (

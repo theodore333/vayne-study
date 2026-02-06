@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, Repeat } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -704,6 +704,18 @@ export default function TodayPage() {
                             );
                           })}
                         </div>
+                      )}
+                      {/* Drill Weakness link */}
+                      {task.typeLabel.includes('Drill Weakness') && task.topics.length === 0 && (
+                        <Link
+                          href={`/quiz?subject=${task.subjectId}&topic=${
+                            activeSubjects.find(s => s.id === task.subjectId)?.topics[0]?.id || ''
+                          }`}
+                          className="block p-2 rounded-lg bg-orange-500/5 hover:bg-orange-500/10 text-xs font-mono text-orange-400 transition-all"
+                        >
+                          <Repeat size={12} className="inline mr-1.5" />
+                          Drill Weakness Quiz (cross-topic)
+                        </Link>
                       )}
                       {/* Empty state for projects without modules */}
                       {task.type === 'project' && (!task.projectModules || task.projectModules.length === 0) && (

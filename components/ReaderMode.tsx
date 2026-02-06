@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeViewRenderer } from '@tiptap/react';
+import { Fragment } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -413,6 +414,11 @@ function markdownToHtml(markdown: string): string {
   html = html.replace(/^---+$/gm, '<hr>');
 
   // Headers (must be before other replacements)
+  // Wiki-style headers: === Title === → h3, == Title == → h2, = Title = → h1
+  html = html.replace(/^={3,}\s*(.+?)\s*={3,}$/gm, '<h3>$1</h3>');
+  html = html.replace(/^={2}\s*(.+?)\s*={2}$/gm, '<h2>$1</h2>');
+  html = html.replace(/^=\s*(.+?)\s*=$/gm, '<h1>$1</h1>');
+  // Markdown-style headers
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
@@ -1559,6 +1565,89 @@ export default function ReaderMode({
     showToast(`Заменени ${searchResults} съвпадения`, 'success');
   }, [editor, searchQuery, replaceQuery, searchResults, showToast]);
 
+  // Smart heading toggle: isolates the current line from <br>-joined paragraphs before applying
+  const smartToggleHeading = useCallback((level: 1 | 2 | 3) => {
+    if (!editor) return;
+
+    // If already a heading at this level, just toggle off
+    if (editor.isActive('heading', { level })) {
+      editor.chain().focus().toggleHeading({ level }).run();
+      return;
+    }
+
+    const { state } = editor;
+    const { $from } = state.selection;
+
+    // Only need special handling for paragraphs with hard breaks
+    if ($from.parent.type.name !== 'paragraph') {
+      editor.chain().focus().toggleHeading({ level }).run();
+      return;
+    }
+
+    let hasHardBreak = false;
+    $from.parent.forEach(child => {
+      if (child.type.name === 'hardBreak') hasHardBreak = true;
+    });
+
+    if (!hasHardBreak) {
+      editor.chain().focus().toggleHeading({ level }).run();
+      return;
+    }
+
+    // Paragraph has hard breaks - isolate the current line
+    const parentStart = $from.start();
+    const cursorOffset = $from.pos - parentStart;
+    const parentContent = $from.parent.content;
+    const schema = state.schema;
+
+    // Collect hard break positions (offsets within parent content)
+    const breakPositions: number[] = [];
+    $from.parent.forEach((node, offset) => {
+      if (node.type.name === 'hardBreak') {
+        breakPositions.push(offset);
+      }
+    });
+
+    // Build line fragments: [start, end) pairs excluding hardBreaks
+    const lineFragments: Array<{ start: number; end: number }> = [];
+    let lineStart = 0;
+    for (const bp of breakPositions) {
+      lineFragments.push({ start: lineStart, end: bp });
+      lineStart = bp + 1; // skip the hardBreak node (size 1)
+    }
+    lineFragments.push({ start: lineStart, end: parentContent.size });
+
+    // Find which line the cursor is on
+    let cursorLineIndex = lineFragments.length - 1;
+    for (let i = 0; i < lineFragments.length; i++) {
+      if (cursorOffset >= lineFragments[i].start && cursorOffset <= lineFragments[i].end) {
+        cursorLineIndex = i;
+        break;
+      }
+    }
+
+    // Build replacement nodes: each line becomes its own block
+    const newNodes: any[] = [];
+    for (let i = 0; i < lineFragments.length; i++) {
+      const { start, end } = lineFragments[i];
+      const content = start < end ? parentContent.cut(start, end) : Fragment.empty;
+
+      if (i === cursorLineIndex) {
+        // This line becomes a heading
+        newNodes.push(schema.nodes.heading.create({ level }, content));
+      } else {
+        // This line stays as a paragraph
+        newNodes.push(schema.nodes.paragraph.create(null, content));
+      }
+    }
+
+    // Replace the parent paragraph with the new nodes
+    const parentPos = $from.before();
+    const parentEndPos = $from.after();
+    const tr = state.tr.replaceWith(parentPos, parentEndPos, newNodes);
+    editor.view.dispatch(tr);
+  }, [editor]);
+
   // Navigate to heading in TOC
   const handleTOCNavigate = useCallback((id: string) => {
     if (!editor) return;
@@ -1884,21 +1973,21 @@ export default function ReaderMode({
 
           {/* Headings */}
           <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            onClick={() => smartToggleHeading(1)}
             active={editor.isActive('heading', { level: 1 })}
             title="Заглавие 1 (Ctrl+Alt+1)"
           >
             <Heading1 size={18} />
           </ToolbarButton>
           <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            onClick={() => smartToggleHeading(2)}
             active={editor.isActive('heading', { level: 2 })}
             title="Заглавие 2 (Ctrl+Alt+2)"
           >
             <Heading2 size={18} />
           </ToolbarButton>
           <ToolbarButton
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            onClick={() => smartToggleHeading(3)}
             active={editor.isActive('heading', { level: 3 })}
             title="Заглавие 3 (Ctrl+Alt+3)"
           >

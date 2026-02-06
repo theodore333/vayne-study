@@ -2619,8 +2619,7 @@ export default function ReaderMode({
               }
               .ProseMirror p {
                 margin-bottom: 1.25em;
-                text-align: justify;
-                hyphens: auto;
+                text-align: left;
               }
               .ProseMirror h1 {
                 font-size: 2em;

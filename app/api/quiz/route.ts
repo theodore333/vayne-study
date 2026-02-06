@@ -65,7 +65,9 @@ export async function POST(request: Request) {
       hintContext,
       // Gap analysis specific
       quizHistory,
-      currentBloomLevel
+      currentBloomLevel,
+      // Mastery context for smarter quiz generation
+      masteryContext
     } = body;
 
     if (!apiKey) {
@@ -135,7 +137,8 @@ export async function POST(request: Request) {
       questionCount,
       currentBloomLevel,
       matchExamFormat,
-      model
+      model,
+      masteryContext
     });
 
   } catch (error: unknown) {
@@ -657,9 +660,20 @@ async function handleStandardQuiz(
     currentBloomLevel: number;
     matchExamFormat?: boolean;
     model?: 'opus' | 'sonnet' | 'haiku';
+    masteryContext?: {
+      topicStatus: string;
+      bloomLevel: number;
+      avgGrade: number | null;
+      quizCount: number;
+      readCount: number;
+      lastReview: string | null;
+      recentQuizzes: Array<{ date: string; score: number; bloomLevel: number }>;
+      masteredConcepts: string[];
+      weakConcepts: Array<{ concept: string; drillCount: number }>;
+    };
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet' } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -730,6 +744,40 @@ CRITICAL REQUIREMENT FOR HIGHER-ORDER QUESTIONS:
     bloomInstructions = `\nBLOOM'S TAXONOMY LEVEL:\n${BLOOM_PROMPTS[bloomLevel]}`;
   }
 
+  // Build mastery context instructions for smarter quiz generation
+  let masteryInstructions = '';
+  if (masteryContext) {
+    const { topicStatus, bloomLevel: masteryBloom, avgGrade, quizCount, recentQuizzes, masteredConcepts, weakConcepts } = masteryContext;
+
+    // Determine quiz trend from recent scores
+    let trend = 'stable';
+    if (recentQuizzes.length >= 2) {
+      const recent = recentQuizzes.slice(-3);
+      const avgRecent = recent.reduce((s, q) => s + q.score, 0) / recent.length;
+      const older = recentQuizzes.slice(0, -3);
+      if (older.length > 0) {
+        const avgOlder = older.reduce((s, q) => s + q.score, 0) / older.length;
+        if (avgRecent > avgOlder + 5) trend = 'improving';
+        else if (avgRecent < avgOlder - 5) trend = 'declining';
+      }
+    }
+
+    masteryInstructions = `
+STUDENT MASTERY CONTEXT (use this to generate smarter, more targeted questions):
+- Topic status: ${topicStatus} | Bloom level: ${masteryBloom}/6 | Avg grade: ${avgGrade !== null ? `${avgGrade}/6` : 'no quizzes yet'} | Total quizzes: ${quizCount}
+- Performance trend: ${trend}${recentQuizzes.length > 0 ? ` (last ${recentQuizzes.length} quizzes: ${recentQuizzes.map(q => `${q.score}%`).join(', ')})` : ''}
+${masteredConcepts.length > 0 ? `- MASTERED concepts (student already drilled 3+ times, AVOID unless testing at HIGHER Bloom levels): ${masteredConcepts.join(', ')}` : ''}
+${weakConcepts.length > 0 ? `- WEAK concepts (PRIORITIZE these, student struggles with them): ${weakConcepts.map(wc => `${wc.concept} (drilled ${wc.drillCount}x)`).join(', ')}` : ''}
+
+ADAPTIVE INSTRUCTIONS:
+${topicStatus === 'gray' || topicStatus === 'orange' ? '- Student is still LEARNING this topic. Focus on foundational concepts, definitions, and basic understanding. Be encouraging.' : ''}
+${topicStatus === 'green' ? '- Student has GOOD mastery. Focus on edge cases, integration with other concepts, and higher-order thinking.' : ''}
+${weakConcepts.length > 0 ? '- At least 40-50% of questions should target the WEAK concepts listed above.' : ''}
+${masteredConcepts.length > 0 ? '- Do NOT repeat basic questions about mastered concepts. If you must include them, test at a HIGHER Bloom level than before.' : ''}
+${trend === 'declining' ? '- Student performance is DECLINING. Include some easier questions to rebuild confidence, then gradually increase difficulty.' : ''}
+${trend === 'improving' ? '- Student is IMPROVING. Challenge them with slightly harder questions than their current level.' : ''}`;
+  }
+
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 8192,
@@ -742,6 +790,7 @@ Topic: ${topicName}
 ${subjectTypeInstructions}
 ${examFormatInstructions}
 ${bloomInstructions}
+${masteryInstructions}
 
 Study Material:
 """

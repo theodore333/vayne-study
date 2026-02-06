@@ -1084,7 +1084,7 @@ function TableOfContents({
   if (!show) return null;
 
   return (
-    <div className="absolute top-0 left-0 z-50 bg-white border border-stone-200 rounded-lg shadow-lg p-4 m-4 w-72 max-h-96 overflow-y-auto">
+    <div className="fixed top-20 left-4 z-50 bg-white border border-stone-200 rounded-lg shadow-lg p-4 w-72 max-h-[calc(100vh-10rem)] overflow-y-auto">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-stone-700 flex items-center gap-2">
           <ListTree size={16} />

@@ -541,9 +541,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       try {
         const cloudData = await loadFromCloud();
         if (cloudData) {
-          // Merge: use cloud data but keep local if newer
-          const localTime = new Date(dataToUse.dailyStatus.date).getTime();
-          const cloudTime = new Date((cloudData as any).dailyStatus?.date || '2000-01-01').getTime();
+          // Merge: use cloud data if it's newer (by lastModified timestamp, fallback to dailyStatus.date)
+          const localTime = new Date(dataToUse.lastModified || dataToUse.dailyStatus.date).getTime();
+          const cloudTime = new Date((cloudData as any).lastModified || (cloudData as any).dailyStatus?.date || '2000-01-01').getTime();
 
           if (cloudTime >= localTime) {
             // CRITICAL FIX: Cloud data must go through the SAME migration pipeline as local data.
@@ -595,8 +595,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Pure setState - persistence handled by useEffect([data]) above
+  // Stamps lastModified on every mutation for reliable cloud merge
   const updateData = useCallback((updater: (prev: AppData) => AppData) => {
-    setData(updater);
+    setData(prev => {
+      const updated = updater(prev);
+      return { ...updated, lastModified: new Date().toISOString() };
+    });
   }, []);
 
   // Uses dataRef to always have latest data (no stale closure)

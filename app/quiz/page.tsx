@@ -546,19 +546,21 @@ function QuizContent() {
   };
 
   const handleAnswer = async () => {
-    const currentQuestion = quizState.questions[quizState.currentIndex];
+    if (isEvaluatingOpen) return; // Guard against double-click
+    const questionIndex = quizState.currentIndex; // Capture index before any async gap
+    const currentQuestion = quizState.questions[questionIndex];
     const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
       ? selectedAnswer
       : openAnswer;
 
     const newAnswers = [...quizState.answers];
-    newAnswers[quizState.currentIndex] = answer;
+    newAnswers[questionIndex] = answer;
 
     // Persist the answer immediately so early stop captures it
     setQuizState(prev => ({ ...prev, answers: newAnswers }));
 
     // Record time spent on this question
-    timer.recordQuestionTime(quizState.currentIndex);
+    timer.recordQuestionTime(questionIndex);
 
     // For open questions, evaluate with AI
     if (currentQuestion.type === 'open' && openAnswer.trim()) {
@@ -577,7 +579,7 @@ function QuizContent() {
               correctAnswer: currentQuestion.correctAnswer,
               bloomLevel: currentQuestion.bloomLevel || 3
             }),
-            
+
             signal: gen.abortControllerRef.current?.signal
           });
 
@@ -585,7 +587,7 @@ function QuizContent() {
           if (result.evaluation) {
             setOpenEvaluations(prev => ({
               ...prev,
-              [quizState.currentIndex]: result.evaluation
+              [questionIndex]: result.evaluation
             }));
             if (result.usage) incrementApiCalls(result.usage.cost);
           }

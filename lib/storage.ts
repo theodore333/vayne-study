@@ -325,6 +325,9 @@ export function migrateData(rawData: any): AppData {
   if (data.lastOpenedTopic === undefined) data.lastOpenedTopic = null;
   if (!data.dailyGoals) data.dailyGoals = [];
 
+  // Sync metadata migration - stamp lastModified if missing
+  if (!data.lastModified) data.lastModified = new Date().toISOString();
+
   // Phase 2: Migrate ProjectModule to have learning infrastructure
   if (data.developmentProjects && data.developmentProjects.length > 0) {
     data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({

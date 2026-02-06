@@ -122,6 +122,13 @@ function ORRoomContent() {
   const apiKey = typeof window !== 'undefined' ? localStorage.getItem('claude-api-key') : null;
   const chatEndRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<number>(Date.now());
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Cleanup: abort pending requests on unmount
+  useEffect(() => {
+    abortControllerRef.current = new AbortController();
+    return () => { abortControllerRef.current?.abort(); };
+  }, []);
 
   // Core state
   const [activeCase, setActiveCase] = useState<InteractiveORCase | null>(null);
@@ -224,7 +231,8 @@ function ORRoomContent() {
           pharmacologyTopics: pharmacologyTopics.slice(0, 30),
           anatomyTopics: anatomyTopics.slice(0, 30)
         }),
-        timeout: 60000
+        timeout: 60000,
+        signal: abortControllerRef.current?.signal
       });
 
       if (!res.ok) {
@@ -337,7 +345,8 @@ function ORRoomContent() {
             complicationScenario: activeCase.hiddenData.complicationScenario,
             keyAnatomy: activeCase.hiddenData.keyAnatomy
           }),
-          timeout: 30000
+          timeout: 30000,
+          signal: abortControllerRef.current?.signal
         });
 
         if (res.ok) {
@@ -481,7 +490,8 @@ function ORRoomContent() {
             pharmacologyMaterial: pharmacologyMaterial || undefined,
             anatomyMaterial: anatomyMaterial || undefined
           }),
-          timeout: 45000
+          timeout: 45000,
+          signal: abortControllerRef.current?.signal
         });
 
         if (!res.ok) throw new Error('Evaluation failed');
@@ -639,7 +649,8 @@ function ORRoomContent() {
               anatomy: anatomyTopics
             }
           }),
-          timeout: 45000
+          timeout: 45000,
+          signal: abortControllerRef.current?.signal
         });
 
         if (res.ok) {

@@ -430,6 +430,8 @@ export interface AppData {
   // Dashboard Features
   lastOpenedTopic: LastOpenedTopic | null;
   dailyGoals: DailyGoal[];
+  // Sync metadata
+  lastModified?: string; // ISO timestamp for cloud merge freshness
 }
 
 export interface PredictedGrade {

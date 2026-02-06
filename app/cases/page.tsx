@@ -846,22 +846,22 @@ function CasesContent() {
  case 'presentation':
  return (
  <div className="space-y-6">
- <div className="bg-blue-50 border border-blue-300 rounded-xl p-6">
- <h3 className="text-lg font-semibold text-blue-800 mb-4">
+ <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6">
+ <h3 className="text-lg font-semibold text-blue-300 mb-4">
  Представяне на пациента
  </h3>
- <div className="space-y-3 text-gray-700">
- <p><strong>Възраст:</strong> {activeCase.presentation.age} години</p>
- <p><strong>Пол:</strong> {activeCase.presentation.gender === 'male' ? 'Мъж' : 'Жена'}</p>
- <p><strong>Основно оплакване:</strong> {activeCase.presentation.chiefComplaint}</p>
- <p className="mt-4 text-gray-600 italic">
+ <div className="space-y-3 text-slate-200 text-base leading-relaxed">
+ <p><strong className="text-slate-100">Възраст:</strong> {activeCase.presentation.age} години</p>
+ <p><strong className="text-slate-100">Пол:</strong> {activeCase.presentation.gender === 'male' ? 'Мъж' : 'Жена'}</p>
+ <p><strong className="text-slate-100">Основно оплакване:</strong> {activeCase.presentation.chiefComplaint}</p>
+ <p className="mt-4 text-slate-300 italic leading-relaxed">
  {activeCase.presentation.briefHistory}
  </p>
  </div>
  </div>
  <button
  onClick={handleNextStep}
- className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+ className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 flex items-center justify-center gap-2"
  >
  Започни анамнеза <ArrowRight className="w-5 h-5" />
  </button>
@@ -871,20 +871,20 @@ function CasesContent() {
  case 'history':
  return (
  <div className="space-y-4">
- <div className="bg-white rounded-xl p-4 h-96 overflow-y-auto">
+ <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 h-[28rem] overflow-y-auto">
  {activeCase.historyMessages.length === 0 && (
- <p className="text-gray-500 text-center py-8">
+ <p className="text-slate-500 text-center py-8 text-base">
  Задавай въпроси на пациента, за да съберете анамнеза...
  </p>
  )}
  {activeCase.historyMessages.map((msg, i) => (
  <div key={msg.id} className={`mb-3 flex ${msg.role === 'student' ? 'justify-end' : 'justify-start'}`}>
- <div className={`max-w-[80%] p-3 rounded-lg ${
+ <div className={`max-w-[80%] p-3 rounded-lg text-base leading-relaxed ${
  msg.role === 'student'
- ? 'bg-blue-600 text-white'
- : 'bg-white text-gray-800 border border-gray-300'
+ ? 'bg-blue-600/80 text-white'
+ : 'bg-slate-700/60 text-slate-200 border border-slate-600/50'
  }`}>
- <p className="text-sm font-medium mb-1 opacity-70">
+ <p className="text-xs font-medium mb-1 opacity-60">
  {msg.role === 'student' ? 'Вие' : 'Пациент'}
  </p>
  {msg.content}
@@ -893,11 +893,11 @@ function CasesContent() {
  ))}
  {isPatientResponding && (
  <div className="flex justify-start">
- <div className="bg-white p-3 rounded-lg border border-gray-300">
+ <div className="bg-slate-700/60 p-3 rounded-lg border border-slate-600/50">
  <div className="flex gap-1">
- <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" />
- <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
- <div className="w-2 h-2 bg-gray-300 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+ <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" />
+ <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+ <div className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
  </div>
  </div>
  </div>
@@ -910,20 +910,20 @@ function CasesContent() {
  onChange={(e) => setHistoryInput(e.target.value)}
  onKeyDown={(e) => e.key === 'Enter' && !isPatientResponding && handleSendQuestion()}
  placeholder="Задайте въпрос на пациента..."
- className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 "
+ className="flex-1 px-4 py-3 border border-slate-600 rounded-lg bg-slate-800/50 text-slate-100 placeholder-slate-500 text-base"
  disabled={isPatientResponding}
  />
  <button
  onClick={handleSendQuestion}
  disabled={isPatientResponding || !historyInput.trim()}
- className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  <Send className="w-5 h-5" />
  </button>
  </div>
  <button
  onClick={handleNextStep}
- className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+ className="w-full py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50"
  >
  Продължи към физикален преглед →
  </button>
@@ -933,7 +933,7 @@ function CasesContent() {
  case 'physical_exam':
  return (
  <div className="space-y-4">
- <p className="text-gray-600">
+ <p className="text-slate-300 text-base">
  Изберете кои системи искате да прегледате:
  </p>
  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -953,8 +953,8 @@ function CasesContent() {
  disabled={examRevealed}
  className={`p-3 rounded-lg border flex flex-col items-center gap-2 transition-all ${
  selectedExamSystems.has(system.id)
- ? 'border-blue-500 bg-blue-50 text-blue-700'
- : 'border-gray-200 hover:border-gray-400'
+ ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+ : 'border-slate-600/50 text-slate-300 hover:border-slate-500'
  } ${examRevealed ? 'opacity-60' : ''}`}
  >
  {SYSTEM_ICONS[system.id] || <Stethoscope className="w-5 h-5" />}
@@ -967,23 +967,23 @@ function CasesContent() {
  <button
  onClick={handleRevealExam}
  disabled={selectedExamSystems.size === 0 || isRevealingExam}
- className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  {isRevealingExam ? 'Преглеждам...' : `Прегледай (${selectedExamSystems.size} системи)`}
  </button>
  )}
 
  {examRevealed && activeCase.examFindings.length > 0 && (
- <div className="bg-white rounded-xl p-4 space-y-3">
- <h4 className="font-semibold">Находки от прегледа:</h4>
+ <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4 space-y-3">
+ <h4 className="font-semibold text-slate-100">Находки от прегледа:</h4>
  {activeCase.examFindings.map((finding, i) => (
  <div key={i} className={`p-3 rounded-lg ${
  finding.isNormal
- ? 'bg-green-50 border border-green-300'
- : 'bg-yellow-50 border border-yellow-300'
+ ? 'bg-green-500/10 border border-green-500/30'
+ : 'bg-yellow-500/10 border border-yellow-500/30'
  }`}>
- <p className="font-medium">{EXAM_SYSTEMS.find(s => s.id === finding.system)?.name}</p>
- <p className="text-sm text-gray-600">{finding.finding}</p>
+ <p className="font-medium text-slate-100">{EXAM_SYSTEMS.find(s => s.id === finding.system)?.name}</p>
+ <p className="text-base text-slate-300 leading-relaxed">{finding.finding}</p>
  </div>
  ))}
  </div>
@@ -992,7 +992,7 @@ function CasesContent() {
  {examRevealed && (
  <button
  onClick={handleNextStep}
- className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+ className="w-full py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50"
  >
  Продължи към изследвания →
  </button>
@@ -1003,23 +1003,23 @@ function CasesContent() {
  case 'investigations':
  return (
  <div className="space-y-4">
- <p className="text-gray-600">
+ <p className="text-slate-300 text-base">
  Назначете изследвания и обосновете избора си:
  </p>
 
  {/* Investigation categories */}
  <div className="space-y-2">
  {Object.entries(INVESTIGATION_CATEGORIES).map(([key, category]) => (
- <div key={key} className="border border-gray-200 rounded-lg">
+ <div key={key} className="border border-slate-600/50 rounded-lg">
  <button
  onClick={() => setExpandedCategory(expandedCategory === key ? null : key)}
- className="w-full px-4 py-2 flex justify-between items-center text-left hover:bg-gray-50"
+ className="w-full px-4 py-2 flex justify-between items-center text-left text-slate-200 hover:bg-slate-700/50"
  >
  <span className="font-medium">{category.name}</span>
  {expandedCategory === key ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
  </button>
  {expandedCategory === key && (
- <div className="p-3 border-t grid grid-cols-2 gap-2">
+ <div className="p-3 border-t border-slate-600/50 grid grid-cols-2 gap-2">
  {category.tests.map(test => {
  const isOrdered = activeCase.orderedInvestigations.some(i => i.name === test);
  return (
@@ -1029,10 +1029,10 @@ function CasesContent() {
  disabled={isOrdered}
  className={`p-2 text-sm rounded border transition-all ${
  selectedInvestigation === test
- ? 'border-blue-500 bg-blue-50'
+ ? 'border-blue-500 bg-blue-500/15 text-blue-300'
  : isOrdered
- ? 'border-green-300 bg-green-50 text-green-700'
- : 'border-gray-200 hover:border-gray-300'
+ ? 'border-green-500/30 bg-green-500/10 text-green-400'
+ : 'border-slate-600/50 text-slate-300 hover:border-slate-500'
  }`}
  >
  {isOrdered && <CheckCircle className="w-3 h-3 inline mr-1" />}
@@ -1048,19 +1048,19 @@ function CasesContent() {
 
  {/* Order investigation form */}
  {selectedInvestigation && (
- <div className="bg-blue-50 rounded-lg p-4 space-y-3">
- <p className="font-medium">Назначаване: {selectedInvestigation}</p>
+ <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 space-y-3">
+ <p className="font-medium text-slate-100">Назначаване: {selectedInvestigation}</p>
  <textarea
  value={investigationJustification}
  onChange={(e) => setInvestigationJustification(e.target.value)}
  placeholder="Защо назначавате това изследване?"
- className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 "
+ className="w-full px-3 py-2 border border-slate-600 rounded-lg bg-slate-800/50 text-slate-100 placeholder-slate-500"
  rows={2}
  />
  <button
  onClick={handleOrderInvestigation}
  disabled={!investigationJustification.trim() || isProcessingInvestigation}
- className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  {isProcessingInvestigation ? 'Обработвам...' : 'Назначи'}
  </button>
@@ -1070,20 +1070,20 @@ function CasesContent() {
  {/* Ordered investigations */}
  {activeCase.orderedInvestigations.length > 0 && (
  <div className="space-y-3">
- <h4 className="font-semibold text-gray-800">Резултати:</h4>
+ <h4 className="font-semibold text-slate-100">Резултати:</h4>
  {activeCase.orderedInvestigations.map(inv => {
  const invImage = activeCase.hiddenData.investigationImages?.[inv.name];
  return (
- <div key={inv.id} className={`p-4 rounded-lg border bg-white shadow-sm ${inv.isAppropriate ? 'border-green-300' : 'border-yellow-300'}`}>
- <p className="font-semibold text-gray-900 text-lg">{inv.name}</p>
+ <div key={inv.id} className={`p-4 rounded-lg border bg-slate-800/50 ${inv.isAppropriate ? 'border-green-500/30' : 'border-yellow-500/30'}`}>
+ <p className="font-semibold text-slate-100 text-lg">{inv.name}</p>
  {invImage && (
  <div className="my-3">
- <img src={invImage} alt={inv.name} className="rounded-lg max-w-full h-auto border border-gray-200 shadow-sm" />
+ <img src={invImage} alt={inv.name} className="rounded-lg max-w-full h-auto border border-slate-600/50" />
  </div>
  )}
- <pre className="text-sm text-gray-700 mt-2 whitespace-pre-wrap font-mono bg-gray-50 p-3 rounded border">{inv.result}</pre>
+ <pre className="text-base text-slate-300 mt-2 whitespace-pre-wrap font-mono bg-slate-900/50 p-3 rounded border border-slate-700/50 leading-relaxed">{inv.result}</pre>
  {inv.feedback && (
- <p className="text-sm text-green-700 mt-3 p-2 bg-green-50 rounded border border-green-200">{inv.feedback}</p>
+ <p className="text-base text-green-400 mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">{inv.feedback}</p>
  )}
  </div>
  );
@@ -1093,7 +1093,7 @@ function CasesContent() {
 
  <button
  onClick={handleNextStep}
- className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+ className="w-full py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50"
  >
  Продължи към DDx →
  </button>
@@ -1104,7 +1104,7 @@ function CasesContent() {
  const ddxEvaluation = activeCase.evaluations.find(e => e.step === 'ddx');
  return (
  <div className="space-y-4">
- <p className="text-gray-600">
+ <p className="text-slate-300 text-base">
  Подредете диференциалните диагнози по вероятност (най-вероятната най-горе):
  </p>
 
@@ -1117,19 +1117,19 @@ function CasesContent() {
  onDragStart={() => handleDragStart(index)}
  onDragOver={(e) => handleDragOver(e, index)}
  onDragEnd={handleDragEnd}
- className={`p-3 bg-white rounded-lg border border-gray-200 flex items-center gap-3 cursor-move ${
+ className={`p-3 bg-slate-800/50 rounded-lg border border-slate-600/50 flex items-center gap-3 cursor-move text-slate-200 ${
  draggedIndex === index ? 'opacity-50' : ''
  }`}
  >
- <GripVertical className="w-4 h-4 text-gray-400" />
- <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-medium">
+ <GripVertical className="w-4 h-4 text-slate-500" />
+ <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-300 flex items-center justify-center text-sm font-medium">
  {item.rank}
  </span>
  <span className="flex-1">{item.diagnosis}</span>
  {!ddxEvaluation && (
  <button
  onClick={() => handleRemoveDdx(item.id)}
- className="text-red-500 hover:text-red-700"
+ className="text-red-400 hover:text-red-300"
  >
  <Trash2 className="w-4 h-4" />
  </button>
@@ -1147,12 +1147,12 @@ function CasesContent() {
  onChange={(e) => setNewDdxInput(e.target.value)}
  onKeyDown={(e) => e.key === 'Enter' && handleAddDdx()}
  placeholder="Добави диагноза..."
- className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 "
+ className="flex-1 px-4 py-3 border border-slate-600 rounded-lg bg-slate-800/50 text-slate-100 placeholder-slate-500 text-base"
  />
  <button
  onClick={handleAddDdx}
  disabled={!newDdxInput.trim()}
- className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  <Plus className="w-5 h-5" />
  </button>
@@ -1163,11 +1163,11 @@ function CasesContent() {
  {ddxEvaluation && (
  <div className={`p-4 rounded-lg ${
  ddxEvaluation.score >= 70
- ? 'bg-green-50 border border-green-300'
- : 'bg-yellow-50 border border-yellow-300'
+ ? 'bg-green-500/10 border border-green-500/30'
+ : 'bg-yellow-500/10 border border-yellow-500/30'
  }`}>
- <p className="font-semibold mb-2">Оценка: {ddxEvaluation.score}%</p>
- <p className="text-sm text-gray-600">{ddxEvaluation.feedback}</p>
+ <p className="font-semibold mb-2 text-slate-100">Оценка: {ddxEvaluation.score}%</p>
+ <p className="text-base text-slate-300 leading-relaxed">{ddxEvaluation.feedback}</p>
  </div>
  )}
 
@@ -1175,7 +1175,7 @@ function CasesContent() {
  <button
  onClick={handleEvaluateDdx}
  disabled={isEvaluatingDdx}
- className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  {isEvaluatingDdx ? 'Оценявам...' : 'Оцени DDx'}
  </button>
@@ -1184,7 +1184,7 @@ function CasesContent() {
  {ddxEvaluation && (
  <button
  onClick={handleNextStep}
- className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+ className="w-full py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50"
  >
  Продължи към финална диагноза →
  </button>
@@ -1196,7 +1196,7 @@ function CasesContent() {
  const diagnosisEvaluation = activeCase.evaluations.find(e => e.step === 'confirmation');
  return (
  <div className="space-y-4">
- <p className="text-gray-600">
+ <p className="text-slate-300 text-base">
  Въз основа на събраната информация, каква е вашата финална диагноза?
  </p>
 
@@ -1207,12 +1207,12 @@ function CasesContent() {
  value={finalDiagnosisInput}
  onChange={(e) => setFinalDiagnosisInput(e.target.value)}
  placeholder="Въведете финална диагноза..."
- className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white text-gray-900 text-lg"
+ className="w-full px-4 py-3 border border-slate-600 rounded-lg bg-slate-800/50 text-slate-100 placeholder-slate-500 text-lg"
  />
  <button
  onClick={handleEvaluateDiagnosis}
  disabled={!finalDiagnosisInput.trim() || isEvaluatingDiagnosis}
- className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+ className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
  >
  {isEvaluatingDiagnosis ? 'Проверявам...' : 'Потвърди диагноза'}
  </button>
@@ -1223,20 +1223,20 @@ function CasesContent() {
  <>
  <div className={`p-4 rounded-lg ${
  diagnosisEvaluation.score >= 70
- ? 'bg-green-50 border border-green-300'
- : 'bg-red-50 border border-red-300'
+ ? 'bg-green-500/10 border border-green-500/30'
+ : 'bg-red-500/10 border border-red-500/30'
  }`}>
- <p className="font-semibold mb-2">
+ <p className={`font-semibold mb-2 ${diagnosisEvaluation.score >= 70 ? 'text-green-400' : 'text-red-400'}`}>
  {diagnosisEvaluation.score >= 70 ? '✓ Правилно!' : '✗ Неправилно'}
  </p>
- <p className="text-sm text-gray-600 mb-2">{diagnosisEvaluation.feedback}</p>
- <p className="text-sm font-medium">
+ <p className="text-base text-slate-300 mb-2 leading-relaxed">{diagnosisEvaluation.feedback}</p>
+ <p className="text-base font-medium text-slate-200">
  Правилна диагноза: {activeCase.hiddenData.actualDiagnosis}
  </p>
  </div>
  <button
  onClick={handleNextStep}
- className="w-full py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+ className="w-full py-2 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50"
  >
  Продължи към лечение →
  </button>
@@ -1248,19 +1248,19 @@ function CasesContent() {
  case 'treatment':
  return (
  <div className="space-y-4">
- <p className="text-gray-600">
+ <p className="text-slate-300 text-base">
  Създайте план за лечение на {activeCase.hiddenData.actualDiagnosis}:
  </p>
 
  {/* Treatment items */}
  <div className="space-y-3">
  {treatmentItems.map(item => (
- <div key={item.id} className="p-3 bg-white rounded-lg border border-gray-200 space-y-2">
+ <div key={item.id} className="p-3 bg-slate-800/50 rounded-lg border border-slate-600/50 space-y-2">
  <div className="flex items-center gap-2">
  <select
  value={item.category}
  onChange={(e) => updateTreatmentItem(item.id, { category: e.target.value as TreatmentPlanItem['category'] })}
- className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 text-sm"
+ className="px-2 py-1 border border-slate-600 rounded bg-slate-700 text-slate-200 text-sm"
  >
  <option value="medication">Медикамент</option>
  <option value="procedure">Процедура</option>
@@ -1271,7 +1271,7 @@ function CasesContent() {
  <select
  value={item.priority}
  onChange={(e) => updateTreatmentItem(item.id, { priority: e.target.value as TreatmentPlanItem['priority'] })}
- className="px-2 py-1 border border-gray-300 rounded bg-white text-gray-900 text-sm"
+ className="px-2 py-1 border border-slate-600 rounded bg-slate-700 text-slate-200 text-sm"
  >
  <option value="immediate">Спешно</option>
  <option value="short_term">Краткосрочно</option>
@@ -1279,7 +1279,7 @@ function CasesContent() {
  </select>
  <button
  onClick={() => removeTreatmentItem(item.id)}
- className="text-red-500 hover:text-red-700 ml-auto"
+ className="text-red-400 hover:text-red-300 ml-auto"
  >
  <Trash2 className="w-4 h-4" />
  </button>
@@ -1289,7 +1289,7 @@ function CasesContent() {
  value={item.description}
  onChange={(e) => updateTreatmentItem(item.id, { description: e.target.value })}
  placeholder="Описание..."
- className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 "
+ className="w-full px-3 py-2 border border-slate-600 rounded bg-slate-800/50 text-slate-100 placeholder-slate-500"
  />
  {item.category === 'medication' && (
  <input
@@ -1297,7 +1297,7 @@ function CasesContent() {
  value={item.dosage || ''}
  onChange={(e) => updateTreatmentItem(item.id, { dosage: e.target.value })}
  placeholder="Дозировка..."
- className="w-full px-3 py-2 border border-gray-300 rounded bg-white text-gray-900 text-sm"
+ className="w-full px-3 py-2 border border-slate-600 rounded bg-slate-800/50 text-slate-100 placeholder-slate-500 text-sm"
  />
  )}
  </div>
@@ -1308,19 +1308,19 @@ function CasesContent() {
  <div className="flex flex-wrap gap-2">
  <button
  onClick={() => handleAddTreatmentItem('medication')}
- className="px-3 py-1 text-sm border rounded-full hover:bg-gray-100"
+ className="px-3 py-1 text-sm border border-slate-600/50 text-slate-300 rounded-full hover:bg-slate-700/50"
  >
  + Медикамент
  </button>
  <button
  onClick={() => handleAddTreatmentItem('procedure')}
- className="px-3 py-1 text-sm border rounded-full hover:bg-gray-100"
+ className="px-3 py-1 text-sm border border-slate-600/50 text-slate-300 rounded-full hover:bg-slate-700/50"
  >
  + Процедура
  </button>
  <button
  onClick={() => handleAddTreatmentItem('monitoring')}
- className="px-3 py-1 text-sm border rounded-full hover:bg-gray-100"
+ className="px-3 py-1 text-sm border border-slate-600/50 text-slate-300 rounded-full hover:bg-slate-700/50"
  >
  + Мониториране
  </button>
@@ -1329,7 +1329,7 @@ function CasesContent() {
  <button
  onClick={handleEvaluateTreatment}
  disabled={treatmentItems.length === 0 || isEvaluatingTreatment}
- className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+ className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:opacity-50"
  >
  {isEvaluatingTreatment ? 'Оценявам...' : 'Завърши случая'}
  </button>
@@ -1347,25 +1347,25 @@ function CasesContent() {
  <div className="space-y-6">
  <div className="text-center py-6">
  <div className={`inline-flex items-center justify-center w-20 h-20 rounded-full mb-4 ${
- caseSummary.grade >= 5 ? 'bg-green-100 text-green-600' :
- caseSummary.grade >= 4 ? 'bg-yellow-100 text-yellow-600' :
- 'bg-red-100 text-red-600'
+ caseSummary.grade >= 5 ? 'bg-green-500/20 text-green-400' :
+ caseSummary.grade >= 4 ? 'bg-yellow-500/20 text-yellow-400' :
+ 'bg-red-500/20 text-red-400'
  }`}>
  <span className="text-3xl font-bold">{caseSummary.grade}</span>
  </div>
- <h2 className="text-2xl font-bold mb-2">Случаят е завършен!</h2>
- <p className="text-gray-600">
+ <h2 className="text-2xl font-bold mb-2 text-slate-100">Случаят е завършен!</h2>
+ <p className="text-slate-400">
  {caseSummary.overallScore}% | {formatTime(elapsedTime)}
  </p>
  </div>
 
- <div className="bg-white rounded-xl p-6 space-y-4">
- <p className="text-gray-700">{caseSummary.summary}</p>
+ <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 space-y-4">
+ <p className="text-slate-200 text-base leading-relaxed">{caseSummary.summary}</p>
 
  {caseSummary.keyLearnings.length > 0 && (
  <div>
- <h4 className="font-semibold mb-2">Какво научи:</h4>
- <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+ <h4 className="font-semibold mb-2 text-slate-100">Какво научи:</h4>
+ <ul className="list-disc list-inside text-base text-slate-300 space-y-1 leading-relaxed">
  {caseSummary.keyLearnings.map((learning, i) => (
  <li key={i}>{learning}</li>
  ))}
@@ -1375,8 +1375,8 @@ function CasesContent() {
 
  {caseSummary.areasForReview.length > 0 && (
  <div>
- <h4 className="font-semibold mb-2">За преговор:</h4>
- <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+ <h4 className="font-semibold mb-2 text-slate-100">За преговор:</h4>
+ <ul className="list-disc list-inside text-base text-slate-300 space-y-1 leading-relaxed">
  {caseSummary.areasForReview.map((area, i) => (
  <li key={i}>{area}</li>
  ))}
@@ -1384,20 +1384,20 @@ function CasesContent() {
  </div>
  )}
 
- <p className="text-blue-600 italic">{caseSummary.encouragement}</p>
+ <p className="text-blue-400 italic text-base">{caseSummary.encouragement}</p>
  </div>
 
  {/* Per-step evaluations */}
  <div className="space-y-3">
- <h4 className="font-semibold">Оценки по стъпки:</h4>
+ <h4 className="font-semibold text-slate-100">Оценки по стъпки:</h4>
  {activeCase.evaluations.map((evaluation, i) => (
- <div key={i} className="p-3 bg-white rounded-lg border border-gray-200">
+ <div key={i} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
  <div className="flex justify-between items-center">
- <span className="font-medium">
+ <span className="font-medium text-slate-200">
  {CASE_STEPS.find(s => s.step === evaluation.step)?.name}
  </span>
  <span className={`px-2 py-1 rounded text-sm ${
- evaluation.score >= 70 ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+ evaluation.score >= 70 ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
  }`}>
  {evaluation.score}%
  </span>
@@ -1411,9 +1411,9 @@ function CasesContent() {
  const caseSubject = data.subjects.find(s => s.id === activeCase.subjectId);
  const caseTopic = caseSubject?.topics.find(t => t.id === activeCase.topicId);
  return caseTopic && (
- <div className="bg-blue-50 border border-blue-300 rounded-lg p-4">
- <p className="text-sm text-blue-600 mb-1">Случаят беше базиран на:</p>
- <p className="font-semibold text-blue-800">{caseTopic.name}</p>
+ <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+ <p className="text-sm text-blue-400 mb-1">Случаят беше базиран на:</p>
+ <p className="font-semibold text-blue-300">{caseTopic.name}</p>
  </div>
  );
  })()}
@@ -1421,13 +1421,13 @@ function CasesContent() {
  <div className="flex gap-3">
  <Link
  href="/cases"
- className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-center"
+ className="flex-1 py-3 bg-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700 border border-slate-600/50 text-center"
  >
  Нов случай
  </Link>
  <Link
  href={`/subjects/${activeCase.subjectId}/topics/${activeCase.topicId}`}
- className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-center"
+ className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500 text-center"
  >
  Преговори темата
  </Link>
@@ -1450,18 +1450,18 @@ function CasesContent() {
  setElapsedTime(0);
  }
  }}
- className="text-gray-600 hover:text-gray-800 hover:text-gray-700"
+ className="text-slate-400 hover:text-slate-200"
  >
  <ArrowLeft className="w-5 h-5" />
  </button>
- <div className="flex items-center gap-2 text-sm text-gray-600">
+ <div className="flex items-center gap-2 text-sm text-slate-400">
  <Clock className="w-4 h-4" />
  {formatTime(elapsedTime)}
  </div>
  </div>
 
  {/* Step progress */}
- <div className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+ <div className="flex items-center justify-between bg-slate-800/50 border border-slate-700/50 rounded-lg p-2">
  {CASE_STEPS.map((step, index) => {
  const isActive = step.step === activeCase.currentStep;
  const isPast = index < getCurrentStepIndex();
@@ -1472,13 +1472,13 @@ function CasesContent() {
  ? 'bg-blue-600 text-white'
  : isPast
  ? 'bg-green-500 text-white'
- : 'bg-gray-200 text-gray-600'
+ : 'bg-slate-700 text-slate-400'
  }`}>
  {isPast ? <CheckCircle className="w-4 h-4" /> : index + 1}
  </div>
  {index < CASE_STEPS.length - 1 && (
  <div className={`w-4 md:w-8 h-0.5 ${
- isPast ? 'bg-green-500' : 'bg-gray-200'
+ isPast ? 'bg-green-500' : 'bg-slate-700'
  }`} />
  )}
  </div>
@@ -1487,13 +1487,13 @@ function CasesContent() {
  </div>
 
  {/* Current step name */}
- <h2 className="text-xl font-semibold text-center">
+ <h2 className="text-xl font-semibold text-center text-slate-100">
  {CASE_STEPS.find(s => s.step === activeCase.currentStep)?.name}
  </h2>
 
  {/* Error display */}
  {error && (
- <div className="bg-red-50 border border-red-300 text-red-700 p-3 rounded-lg flex items-center gap-2">
+ <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg flex items-center gap-2">
  <AlertCircle className="w-5 h-5" />
  {error}
  </div>
@@ -1518,24 +1518,24 @@ function CasesContent() {
  return (
  <div className="space-y-6">
  <div className="flex items-center justify-between">
- <h1 className="text-2xl font-bold flex items-center gap-2">
- <Stethoscope className="w-7 h-7 text-blue-600" />
+ <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-100">
+ <Stethoscope className="w-7 h-7 text-blue-400" />
  Клинични Случаи
  </h1>
- <Link href="/" className="text-gray-600 hover:text-gray-800 hover:text-gray-700">
+ <Link href="/" className="text-slate-400 hover:text-slate-200">
  <ArrowLeft className="w-5 h-5" />
  </Link>
  </div>
 
  {/* Subject selection - only clinical/hybrid */}
  <div>
- <label className="block text-sm font-medium text-gray-700 mb-2">
+ <label className="block text-sm font-medium text-slate-400 mb-2">
  Предмет
  </label>
  {clinicalSubjects.length === 0 ? (
- <div className="bg-yellow-50 border border-yellow-300 text-yellow-700 p-4 rounded-lg">
+ <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 p-4 rounded-lg">
  <p className="font-medium mb-1">Няма подходящи предмети</p>
- <p className="text-sm">Клиничните случаи са достъпни само за клинични и хибридни предмети. Отиди в Предмети и промени типа на предмета.</p>
+ <p className="text-sm text-yellow-400/80">Клиничните случаи са достъпни само за клинични и хибридни предмети. Отиди в Предмети и промени типа на предмета.</p>
  </div>
  ) : (
  <select
@@ -1544,7 +1544,7 @@ function CasesContent() {
  setSelectedSubjectId(e.target.value || null);
  setSelectedTopicId(null);
  }}
- className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-900 "
+ className="w-full px-4 py-2 border border-slate-600 rounded-lg bg-slate-800/50 text-slate-100"
  >
  <option value="">Избери предмет...</option>
  {clinicalSubjects.map(s => (
@@ -1560,16 +1560,16 @@ function CasesContent() {
  {selectedSubjectId && subject && (
  <div className={`p-4 rounded-lg border ${
  availableTopics.length > 0
- ? 'bg-green-50 border-green-300'
- : 'bg-yellow-50 border-yellow-300'
+ ? 'bg-green-500/10 border-green-500/30'
+ : 'bg-yellow-500/10 border-yellow-500/30'
  }`}>
  {availableTopics.length > 0 ? (
- <p className="text-green-700">
+ <p className="text-green-400">
  <CheckCircle className="w-4 h-4 inline mr-2" />
  {availableTopics.length} теми с материал. AI ще избере случайна тема за случая.
  </p>
  ) : (
- <p className="text-yellow-700">
+ <p className="text-yellow-400">
  <AlertCircle className="w-4 h-4 inline mr-2" />
  Няма теми с достатъчно материал. Добави материал в поне една тема.
  </p>
@@ -1580,7 +1580,7 @@ function CasesContent() {
  {/* Difficulty selection */}
  {selectedSubjectId && availableTopics.length > 0 && (
  <div>
- <label className="block text-sm font-medium text-gray-700 mb-2">
+ <label className="block text-sm font-medium text-slate-400 mb-2">
  Трудност
  </label>
  <div className="grid grid-cols-3 gap-3">
@@ -1590,14 +1590,14 @@ function CasesContent() {
  onClick={() => setDifficulty(d)}
  className={`p-3 rounded-lg border text-center transition-all ${
  difficulty === d
- ? 'border-blue-500 bg-blue-50 text-blue-700'
- : 'border-gray-200 hover:border-gray-400 text-gray-700'
+ ? 'border-blue-500 bg-blue-500/15 text-blue-300'
+ : 'border-slate-600/50 hover:border-slate-500 text-slate-300'
  }`}
  >
  <div className="font-medium">
  {d === 'beginner' ? 'Начинаещ' : d === 'intermediate' ? 'Среден' : 'Напреднал'}
  </div>
- <div className="text-xs text-gray-500 mt-1">
+ <div className="text-xs text-slate-500 mt-1">
  {d === 'beginner' ? 'Ясна презентация' : d === 'intermediate' ? 'Умерена сложност' : 'Комплексен случай'}
  </div>
  </button>
@@ -1608,7 +1608,7 @@ function CasesContent() {
 
  {/* Error display */}
  {error && (
- <div className="bg-red-50 border border-red-300 text-red-700 p-3 rounded-lg flex items-center gap-2">
+ <div className="bg-red-500/10 border border-red-500/30 text-red-400 p-3 rounded-lg flex items-center gap-2">
  <AlertCircle className="w-5 h-5" />
  {error}
  </div>
@@ -1616,7 +1616,7 @@ function CasesContent() {
 
  {/* API key warning */}
  {!apiKey && (
- <div className="bg-yellow-50 border border-yellow-300 text-yellow-700 p-3 rounded-lg">
+ <div className="bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 p-3 rounded-lg">
  Нямаш конфигуриран Claude API ключ. Отиди в Settings за да го добавиш.
  </div>
  )}
@@ -1625,7 +1625,7 @@ function CasesContent() {
  <button
  onClick={handleGenerateCase}
  disabled={!selectedSubjectId || availableTopics.length === 0 || !apiKey || isGenerating}
- className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg font-semibold"
+ className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg font-semibold"
  >
  {isGenerating ? (
  <>
@@ -1643,16 +1643,16 @@ function CasesContent() {
  {/* Demo button */}
  <button
  onClick={loadDemoCase}
- className="w-full py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 flex items-center justify-center gap-2 font-semibold"
+ className="w-full py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-500 flex items-center justify-center gap-2 font-semibold"
  >
  <Stethoscope className="w-5 h-5" />
  Demo: Тествай с готов случай (без API)
  </button>
 
  {/* Info box */}
- <div className="bg-white rounded-xl p-4 text-sm text-gray-600">
- <h4 className="font-semibold mb-2 text-gray-700">Как работи:</h4>
- <ol className="list-decimal list-inside space-y-1">
+ <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-4 text-base text-slate-400">
+ <h4 className="font-semibold mb-2 text-slate-300">Как работи:</h4>
+ <ol className="list-decimal list-inside space-y-1 leading-relaxed">
  <li>AI избира случайна тема и генерира клиничен случай</li>
  <li>Събираш анамнеза чрез разговор с "пациента"</li>
  <li>Избираш какво да прегледаш и изследваш</li>
@@ -1668,7 +1668,7 @@ export default function CasesPage() {
  return (
  <Suspense fallback={
  <div className="flex items-center justify-center min-h-[400px]">
- <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+ <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
  </div>
  }>
  <CasesContent />

@@ -3056,7 +3056,7 @@ export default function ReaderMode({
       />
 
       {/* Status bar */}
-      <div className="fixed bottom-0 left-0 right-0 h-8 bg-stone-100 border-t border-stone-200 flex items-center justify-between px-4 text-xs text-stone-500 z-40">
+      <div className="flex-shrink-0 h-8 bg-stone-100 border-t border-stone-200 flex items-center justify-between px-4 text-xs text-stone-500">
         <div className="flex items-center gap-4">
           <span className="flex items-center gap-1">
             <FileText size={12} />

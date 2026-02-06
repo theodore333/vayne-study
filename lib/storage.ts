@@ -286,6 +286,151 @@ export function setMaterial(topicId: string, material: string): void {
   }
 }
 
+/**
+ * Migrate raw data (from any source: localStorage, cloud, etc.) to current AppData schema.
+ * This is the SINGLE source of truth for all data migrations.
+ * Both localStorage and cloud data MUST go through this function.
+ */
+export function migrateData(rawData: any): AppData {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = { ...rawData };
+
+  // Ensure subjects array exists
+  if (!Array.isArray(data.subjects)) data.subjects = [];
+  if (!Array.isArray(data.schedule)) data.schedule = [];
+
+  // Migrate old data - add missing fields with defaults
+  if (!data.timerSessions) data.timerSessions = [];
+  if (!data.gpaData) data.gpaData = defaultGPAData;
+  if (!data.usageData) data.usageData = defaultUsageData;
+  if (!data.questionBanks) data.questionBanks = [];
+  if (!data.pomodoroSettings) data.pomodoroSettings = defaultPomodoroSettings;
+  if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
+  if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
+  if (data.studyGoals.vacationMode === undefined) data.studyGoals.vacationMode = false;
+  if (data.studyGoals.vacationMultiplier === undefined) data.studyGoals.vacationMultiplier = 0.4;
+  if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
+  if (!data.userProgress) data.userProgress = defaultUserProgress;
+  if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
+  if (!data.orRoomSessions) data.orRoomSessions = { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 };
+
+  // Phase 1: Vayne Doctor migrations
+  if (!data.developmentProjects) data.developmentProjects = [];
+  if (data.careerProfile === undefined) data.careerProfile = null;
+
+  // Academic Events migration
+  if (!data.academicEvents) data.academicEvents = [];
+
+  // Dashboard widgets migration
+  if (data.lastOpenedTopic === undefined) data.lastOpenedTopic = null;
+  if (!data.dailyGoals) data.dailyGoals = [];
+
+  // Phase 2: Migrate ProjectModule to have learning infrastructure
+  if (data.developmentProjects && data.developmentProjects.length > 0) {
+    data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({
+      ...project,
+      modules: (project.modules || []).map((module: ProjectModule) => ({
+        ...module,
+        material: module.material ?? '',
+        materialImages: module.materialImages ?? [],
+        grades: module.grades ?? [],
+        avgGrade: module.avgGrade ?? null,
+        quizCount: module.quizCount ?? 0,
+        quizHistory: module.quizHistory ?? [],
+        currentBloomLevel: module.currentBloomLevel ?? 1,
+        lastReview: module.lastReview ?? null,
+        wrongAnswers: module.wrongAnswers ?? [],
+        readCount: module.readCount ?? 0,
+        lastRead: module.lastRead ?? null,
+        size: module.size ?? null,
+        sizeSetBy: module.sizeSetBy ?? null,
+        highlights: module.highlights ?? [],
+      }))
+    }));
+  }
+
+  // Migrate: Calculate stats from existing data
+  if (data.userProgress && data.subjects) {
+    let topicsCompleted = 0;
+    let greenTopics = 0;
+    let quizzesTaken = 0;
+
+    (data.subjects as LegacySubject[]).forEach((subject) => {
+      (subject.topics || []).forEach((topic) => {
+        if (topic.status !== 'gray') topicsCompleted++;
+        if (topic.status === 'green') greenTopics++;
+        quizzesTaken += topic.quizCount || 0;
+      });
+    });
+
+    if (!data.userProgress.stats) {
+      data.userProgress.stats = {
+        topicsCompleted: 0,
+        quizzesTaken: 0,
+        perfectQuizzes: 0,
+        greenTopics: 0,
+        longestStreak: 0
+      };
+    }
+    data.userProgress.stats.topicsCompleted = Math.max(data.userProgress.stats.topicsCompleted || 0, topicsCompleted);
+    data.userProgress.stats.greenTopics = Math.max(data.userProgress.stats.greenTopics || 0, greenTopics);
+    data.userProgress.stats.quizzesTaken = Math.max(data.userProgress.stats.quizzesTaken || 0, quizzesTaken);
+  }
+
+  // Remove deprecated focusSession
+  delete data.focusSession;
+
+  // Migrate subjects and topics - add missing fields
+  data.subjects = (data.subjects as LegacySubject[]).map((subject): Subject => ({
+    ...subject,
+    subjectType: subject.subjectType ?? 'preclinical',
+    examFormat: subject.examFormat ?? null,
+    topics: (subject.topics || []).map((topic): Topic => ({
+      ...topic,
+      material: topic.material || '',
+      materialImages: topic.materialImages || [],
+      currentBloomLevel: (topic.currentBloomLevel || 1) as BloomLevel,
+      quizHistory: (topic.quizHistory || []).map((qr) => ({
+        ...qr,
+        weight: qr.weight ?? 1.0
+      })),
+      readCount: topic.readCount ?? 0,
+      lastRead: topic.lastRead ?? null,
+      size: topic.size ?? null,
+      sizeSetBy: topic.sizeSetBy ?? null,
+      wrongAnswers: topic.wrongAnswers ?? [],
+      highlights: topic.highlights ?? []
+    }))
+  }));
+
+  // Migrate dailyStatus - remove old fields, add holiday
+  if (!data.dailyStatus) {
+    data.dailyStatus = { date: getTodayString(), sick: false, holiday: false };
+  }
+  const today = getTodayString();
+  if (data.dailyStatus.date !== today || data.dailyStatus.holiday === undefined) {
+    data.dailyStatus = {
+      date: today,
+      sick: data.dailyStatus.sick ?? false,
+      holiday: data.dailyStatus.holiday ?? false
+    };
+  }
+  delete data.dailyStatus.sleep;
+  delete data.dailyStatus.energy;
+  delete data.dailyStatus.availableHours;
+
+  // Reset usage data if new month
+  if (data.usageData?.lastReset) {
+    const lastReset = new Date(data.usageData.lastReset);
+    const now = new Date();
+    if (lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
+      data.usageData = { ...defaultUsageData, lastReset: today };
+    }
+  }
+
+  return data as AppData;
+}
+
 export function loadData(): AppData {
   if (typeof window === 'undefined') return defaultData;
 
@@ -320,161 +465,27 @@ export function loadData(): AppData {
 
     const data = JSON.parse(stored);
 
-    // Migrate old data - add missing fields
-    if (!data.timerSessions) data.timerSessions = [];
-    if (!data.gpaData) data.gpaData = defaultGPAData;
-    if (!data.usageData) data.usageData = defaultUsageData;
-    if (!data.questionBanks) data.questionBanks = [];
-    if (!data.pomodoroSettings) data.pomodoroSettings = defaultPomodoroSettings;
-    if (!data.studyGoals) data.studyGoals = defaultStudyGoals;
-    if (!data.studyGoals.monthlyMinutes) data.studyGoals.monthlyMinutes = 4800;
-    if (data.studyGoals.vacationMode === undefined) data.studyGoals.vacationMode = false;
-    if (data.studyGoals.vacationMultiplier === undefined) data.studyGoals.vacationMultiplier = 0.4;
-    if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
-    if (!data.userProgress) data.userProgress = defaultUserProgress;
-    if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
-    if (!data.orRoomSessions) data.orRoomSessions = { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 };
+    // Run through the shared migration pipeline
+    const migrated = migrateData(data);
 
-    // Phase 1: Vayne Doctor migrations
-    if (!data.developmentProjects) data.developmentProjects = [];
-    if (data.careerProfile === undefined) data.careerProfile = null;
-
-    // Academic Events migration
-    if (!data.academicEvents) data.academicEvents = [];
-
-    // Dashboard widgets migration
-    if (data.lastOpenedTopic === undefined) data.lastOpenedTopic = null;
-    if (!data.dailyGoals) data.dailyGoals = [];
-
-    // Phase 2: Migrate ProjectModule to have learning infrastructure
-    if (data.developmentProjects && data.developmentProjects.length > 0) {
-      data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({
-        ...project,
-        modules: project.modules.map((module: ProjectModule) => ({
-          ...module,
-          // Learning Material
-          material: module.material ?? '',
-          materialImages: module.materialImages ?? [],
-          // Quiz Tracking
-          grades: module.grades ?? [],
-          avgGrade: module.avgGrade ?? null,
-          quizCount: module.quizCount ?? 0,
-          quizHistory: module.quizHistory ?? [],
-          currentBloomLevel: module.currentBloomLevel ?? 1,
-          lastReview: module.lastReview ?? null,
-          // Gap Analysis
-          wrongAnswers: module.wrongAnswers ?? [],
-          // Reading Progress
-          readCount: module.readCount ?? 0,
-          lastRead: module.lastRead ?? null,
-          // Size
-          size: module.size ?? null,
-          sizeSetBy: module.sizeSetBy ?? null,
-          // Highlights
-          highlights: module.highlights ?? [],
-        }))
-      }));
-    }
-
-    // Migrate: Calculate stats from existing data
-    if (data.userProgress && data.subjects) {
-      let topicsCompleted = 0;
-      let greenTopics = 0;
-      let quizzesTaken = 0;
-
-      (data.subjects as LegacySubject[]).forEach((subject) => {
-        subject.topics.forEach((topic) => {
-          if (topic.status !== 'gray') topicsCompleted++;
-          if (topic.status === 'green') greenTopics++;
-          quizzesTaken += topic.quizCount || 0;
-        });
-      });
-
-      // Only update if current stats are lower (don't overwrite progress)
-      if (!data.userProgress.stats) {
-        data.userProgress.stats = {
-          topicsCompleted: 0,
-          quizzesTaken: 0,
-          perfectQuizzes: 0,
-          greenTopics: 0,
-          longestStreak: 0
-        };
-      }
-      data.userProgress.stats.topicsCompleted = Math.max(data.userProgress.stats.topicsCompleted || 0, topicsCompleted);
-      data.userProgress.stats.greenTopics = Math.max(data.userProgress.stats.greenTopics || 0, greenTopics);
-      data.userProgress.stats.quizzesTaken = Math.max(data.userProgress.stats.quizzesTaken || 0, quizzesTaken);
-    }
-    // Remove deprecated focusSession
-    delete data.focusSession;
-
-    // Migrate subjects and topics - add missing fields
-    data.subjects = (data.subjects as LegacySubject[]).map((subject): Subject => ({
-      ...subject,
-      subjectType: subject.subjectType ?? 'preclinical', // Default to preclinical
-      examFormat: subject.examFormat ?? null, // Add exam format field
-      topics: subject.topics.map((topic): Topic => ({
-        ...topic,
-        material: topic.material || '',
-        materialImages: topic.materialImages || [],
-        // Bloom's Taxonomy tracking
-        currentBloomLevel: (topic.currentBloomLevel || 1) as BloomLevel,
-        // Migrate quiz history to include weight
-        quizHistory: (topic.quizHistory || []).map((qr) => ({
-          ...qr,
-          weight: qr.weight ?? 1.0 // Default to standard weight for existing results
-        })),
-        // Reading tracking
-        readCount: topic.readCount ?? 0,
-        lastRead: topic.lastRead ?? null,
-        // Smart Scheduling: Size classification
-        size: topic.size ?? null,
-        sizeSetBy: topic.sizeSetBy ?? null,
-        // Gap Analysis: Track wrong answers
-        wrongAnswers: topic.wrongAnswers ?? [],
-        // Reader Mode: Highlights
-        highlights: topic.highlights ?? []
-      }))
-    }));
-
-    // Apply decay to all topics - but only once per day
+    // Apply decay to all topics - only once per day (localStorage-specific)
     const lastDecayDate = localStorage.getItem('vayne-last-decay-date');
     const today = getTodayString();
     if (lastDecayDate !== today) {
-      data.subjects = applyDecayToSubjects(data.subjects);
+      migrated.subjects = applyDecayToSubjects(migrated.subjects);
       localStorage.setItem('vayne-last-decay-date', today);
     }
 
     // Load materials from cache (initialized from IndexedDB at startup) and merge into topics
-    data.subjects = data.subjects.map((subject: Subject) => ({
+    migrated.subjects = migrated.subjects.map((subject: Subject) => ({
       ...subject,
       topics: subject.topics.map((topic: Topic) => ({
         ...topic,
-        // Load material from cache if available, fallback to topic.material (for migration)
         material: materialsCache[topic.id] || topic.material || ''
       }))
     }));
 
-    // Migrate dailyStatus - remove old fields, add holiday
-    if (data.dailyStatus.date !== today || data.dailyStatus.holiday === undefined) {
-      data.dailyStatus = {
-        date: today,
-        sick: data.dailyStatus.sick ?? false,
-        holiday: data.dailyStatus.holiday ?? false
-      };
-    }
-    // Remove deprecated fields
-    delete data.dailyStatus.sleep;
-    delete data.dailyStatus.energy;
-    delete data.dailyStatus.availableHours;
-
-    // Reset usage data if new month
-    const lastReset = new Date(data.usageData.lastReset);
-    const now = new Date();
-    if (lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
-      data.usageData = { ...defaultUsageData, lastReset: today };
-    }
-
-    return data as AppData;
+    return migrated;
   } catch (error) {
     console.error('Error loading data:', error);
     return defaultData;

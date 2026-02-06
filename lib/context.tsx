@@ -2,225 +2,10 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal } from './types';
-import { loadData, saveData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
+import { loadData, saveData, migrateData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
-
-// COMPREHENSIVE data sanitizer to prevent React error #310
-// Checks EVERY field in the ENTIRE AppData structure, not just subjects/topics
-// Any field that should be a primitive but is an object gets fixed and logged
-function sanitizeData(data: AppData): AppData {
-  const issues: string[] = [];
-
-  // Helper: ensure value is the expected primitive type
-  function str(path: string, v: unknown, fallback = ''): string {
-    if (typeof v === 'string') return v;
-    if (v !== null && v !== undefined) issues.push(`${path}: expected string, got ${typeof v} = ${JSON.stringify(v)?.slice(0, 80)}`);
-    return fallback;
-  }
-  function num(path: string, v: unknown, fallback = 0): number {
-    if (typeof v === 'number' && !isNaN(v)) return v;
-    if (v !== null && v !== undefined && v !== '') issues.push(`${path}: expected number, got ${typeof v} = ${JSON.stringify(v)?.slice(0, 80)}`);
-    return fallback;
-  }
-  function bool(path: string, v: unknown, fallback = false): boolean {
-    if (typeof v === 'boolean') return v;
-    if (v !== null && v !== undefined) issues.push(`${path}: expected boolean, got ${typeof v}`);
-    return fallback;
-  }
-  function arr(path: string, v: unknown): any[] {
-    if (Array.isArray(v)) return v;
-    if (v !== null && v !== undefined) issues.push(`${path}: expected array, got ${typeof v}`);
-    return [];
-  }
-  function obj(path: string, v: unknown, fallback: any): any {
-    if (v !== null && v !== undefined && typeof v === 'object' && !Array.isArray(v)) return v;
-    if (v !== null && v !== undefined) issues.push(`${path}: expected object, got ${typeof v}`);
-    return fallback;
-  }
-  function strOrNull(path: string, v: unknown): string | null {
-    if (v === null || v === undefined) return null;
-    if (typeof v === 'string') return v;
-    issues.push(`${path}: expected string|null, got ${typeof v}`);
-    return null;
-  }
-  function numOrNull(path: string, v: unknown): number | null {
-    if (v === null || v === undefined) return null;
-    if (typeof v === 'number' && !isNaN(v)) return v;
-    issues.push(`${path}: expected number|null, got ${typeof v}`);
-    return null;
-  }
-
-  try {
-    // Ensure all top-level fields are correct types
-    const d = data || {} as any;
-
-    // Sanitize userProgress (rendered in dashboard, gamification)
-    const rawProgress = obj('userProgress', d.userProgress, defaultUserProgress);
-    const progress = {
-      ...defaultUserProgress,
-      ...rawProgress,
-      xp: num('userProgress.xp', rawProgress.xp),
-      level: num('userProgress.level', rawProgress.level, 1),
-      totalXpEarned: num('userProgress.totalXpEarned', rawProgress.totalXpEarned),
-      achievements: arr('userProgress.achievements', rawProgress.achievements),
-      combo: {
-        count: num('userProgress.combo.count', rawProgress.combo?.count),
-        lastActionTime: strOrNull('userProgress.combo.lastActionTime', rawProgress.combo?.lastActionTime),
-      },
-      stats: {
-        topicsCompleted: num('userProgress.stats.topicsCompleted', rawProgress.stats?.topicsCompleted),
-        quizzesTaken: num('userProgress.stats.quizzesTaken', rawProgress.stats?.quizzesTaken),
-        perfectQuizzes: num('userProgress.stats.perfectQuizzes', rawProgress.stats?.perfectQuizzes),
-        greenTopics: num('userProgress.stats.greenTopics', rawProgress.stats?.greenTopics),
-        longestStreak: num('userProgress.stats.longestStreak', rawProgress.stats?.longestStreak),
-      },
-    };
-
-    // Sanitize studyGoals (rendered in dashboard, today page)
-    const rawGoals = obj('studyGoals', d.studyGoals, {});
-    const studyGoals = {
-      dailyMinutes: num('studyGoals.dailyMinutes', rawGoals.dailyMinutes, 480),
-      weeklyMinutes: num('studyGoals.weeklyMinutes', rawGoals.weeklyMinutes, 2880),
-      monthlyMinutes: num('studyGoals.monthlyMinutes', rawGoals.monthlyMinutes, 12480),
-      weekendDailyMinutes: num('studyGoals.weekendDailyMinutes', rawGoals.weekendDailyMinutes, 240),
-      useWeekendHours: bool('studyGoals.useWeekendHours', rawGoals.useWeekendHours, true),
-      vacationMode: bool('studyGoals.vacationMode', rawGoals.vacationMode),
-      vacationMultiplier: num('studyGoals.vacationMultiplier', rawGoals.vacationMultiplier, 0.4),
-      // FSRS fields (may not exist in old data)
-      ...(rawGoals.fsrsEnabled !== undefined ? { fsrsEnabled: bool('studyGoals.fsrsEnabled', rawGoals.fsrsEnabled) } : {}),
-      ...(rawGoals.fsrsTargetRetention !== undefined ? { fsrsTargetRetention: num('studyGoals.fsrsTargetRetention', rawGoals.fsrsTargetRetention, 0.85) } : {}),
-      ...(rawGoals.fsrsMaxReviewsPerDay !== undefined ? { fsrsMaxReviewsPerDay: num('studyGoals.fsrsMaxReviewsPerDay', rawGoals.fsrsMaxReviewsPerDay, 20) } : {}),
-      ...(rawGoals.fsrsMaxInterval !== undefined ? { fsrsMaxInterval: num('studyGoals.fsrsMaxInterval', rawGoals.fsrsMaxInterval, 365) } : {}),
-    };
-
-    // Sanitize usageData (rendered in settings)
-    const rawUsage = obj('usageData', d.usageData, {});
-    const usageData = {
-      dailyCalls: num('usageData.dailyCalls', rawUsage.dailyCalls),
-      monthlyCost: num('usageData.monthlyCost', rawUsage.monthlyCost),
-      monthlyBudget: num('usageData.monthlyBudget', rawUsage.monthlyBudget, 5),
-      lastReset: str('usageData.lastReset', rawUsage.lastReset, getTodayString()),
-    };
-
-    // Sanitize dailyStatus
-    const rawDaily = obj('dailyStatus', d.dailyStatus, {});
-    const dailyStatus = {
-      date: str('dailyStatus.date', rawDaily.date, getTodayString()),
-      sick: bool('dailyStatus.sick', rawDaily.sick),
-      holiday: bool('dailyStatus.holiday', rawDaily.holiday),
-    };
-
-    // Sanitize pomodoroSettings
-    const rawPomo = obj('pomodoroSettings', d.pomodoroSettings, {});
-    const pomodoroSettings = {
-      workDuration: num('pomodoroSettings.workDuration', rawPomo.workDuration, 25),
-      shortBreakDuration: num('pomodoroSettings.shortBreakDuration', rawPomo.shortBreakDuration, 5),
-      longBreakDuration: num('pomodoroSettings.longBreakDuration', rawPomo.longBreakDuration, 15),
-      longBreakAfter: num('pomodoroSettings.longBreakAfter', rawPomo.longBreakAfter, 4),
-      autoStartBreaks: bool('pomodoroSettings.autoStartBreaks', rawPomo.autoStartBreaks),
-      autoStartWork: bool('pomodoroSettings.autoStartWork', rawPomo.autoStartWork),
-      soundEnabled: bool('pomodoroSettings.soundEnabled', rawPomo.soundEnabled, true),
-    };
-
-    // Sanitize academicPeriod
-    const rawPeriod = obj('academicPeriod', d.academicPeriod, {});
-    const academicPeriod = {
-      semesterStart: strOrNull('academicPeriod.semesterStart', rawPeriod.semesterStart),
-      semesterEnd: strOrNull('academicPeriod.semesterEnd', rawPeriod.semesterEnd),
-      sessionStart: strOrNull('academicPeriod.sessionStart', rawPeriod.sessionStart),
-      sessionEnd: strOrNull('academicPeriod.sessionEnd', rawPeriod.sessionEnd),
-    };
-
-    // Sanitize gpaData
-    const rawGpa = obj('gpaData', d.gpaData, {});
-    const gpaData = {
-      grades: arr('gpaData.grades', rawGpa.grades),
-      targetGPA: num('gpaData.targetGPA', rawGpa.targetGPA, 5.5),
-      stateExams: arr('gpaData.stateExams', rawGpa.stateExams),
-    };
-
-    // Sanitize clinicalCaseSessions
-    const rawClinical = obj('clinicalCaseSessions', d.clinicalCaseSessions, {});
-    const clinicalCaseSessions = {
-      activeCaseId: strOrNull('clinicalCaseSessions.activeCaseId', rawClinical.activeCaseId),
-      cases: arr('clinicalCaseSessions.cases', rawClinical.cases),
-      totalCasesCompleted: num('clinicalCaseSessions.totalCasesCompleted', rawClinical.totalCasesCompleted),
-      averageScore: num('clinicalCaseSessions.averageScore', rawClinical.averageScore),
-    };
-
-    // Sanitize orRoomSessions
-    const rawOR = obj('orRoomSessions', d.orRoomSessions, {});
-    const orRoomSessions = {
-      activeCaseId: strOrNull('orRoomSessions.activeCaseId', rawOR.activeCaseId),
-      cases: arr('orRoomSessions.cases', rawOR.cases),
-      totalCasesCompleted: num('orRoomSessions.totalCasesCompleted', rawOR.totalCasesCompleted),
-      averageScore: num('orRoomSessions.averageScore', rawOR.averageScore),
-    };
-
-    // Sanitize subjects and topics (the original detailed sanitizer)
-    const subjects = arr('subjects', d.subjects).map((s: any, si: number) => ({
-      ...s,
-      name: str(`subjects[${si}].name`, s.name),
-      color: str(`subjects[${si}].color`, s.color, '#6366f1'),
-      semester: typeof s.semester === 'string' ? s.semester : undefined,
-      examDate: strOrNull(`subjects[${si}].examDate`, s.examDate),
-      examFormat: strOrNull(`subjects[${si}].examFormat`, s.examFormat),
-      subjectType: str(`subjects[${si}].subjectType`, s.subjectType, 'preclinical'),
-      topics: arr(`subjects[${si}].topics`, s.topics).map((t: any, ti: number) => ({
-        ...t,
-        name: str(`s[${si}].t[${ti}].name`, t.name),
-        status: str(`s[${si}].t[${ti}].status`, t.status, 'gray'),
-        material: typeof t.material === 'string' ? t.material : '',
-        grades: arr(`s[${si}].t[${ti}].grades`, t.grades).filter((g: any) => typeof g === 'number'),
-        avgGrade: numOrNull(`s[${si}].t[${ti}].avgGrade`, t.avgGrade),
-        quizCount: num(`s[${si}].t[${ti}].quizCount`, t.quizCount),
-        readCount: num(`s[${si}].t[${ti}].readCount`, t.readCount),
-        section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
-        size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : undefined,
-        quizHistory: arr(`s[${si}].t[${ti}].quizHistory`, t.quizHistory),
-        wrongAnswers: arr(`s[${si}].t[${ti}].wrongAnswers`, t.wrongAnswers),
-        highlights: arr(`s[${si}].t[${ti}].highlights`, t.highlights),
-        currentBloomLevel: num(`s[${si}].t[${ti}].bloomLevel`, t.currentBloomLevel, 1),
-      } as Topic)),
-    } as Subject));
-
-    const result = {
-      ...d,
-      subjects,
-      schedule: arr('schedule', d.schedule),
-      dailyStatus,
-      timerSessions: arr('timerSessions', d.timerSessions),
-      gpaData,
-      usageData,
-      questionBanks: arr('questionBanks', d.questionBanks),
-      pomodoroSettings,
-      studyGoals,
-      academicPeriod,
-      userProgress: progress,
-      clinicalCaseSessions,
-      orRoomSessions,
-      developmentProjects: arr('developmentProjects', d.developmentProjects),
-      careerProfile: d.careerProfile === null || (typeof d.careerProfile === 'object' && d.careerProfile !== null) ? d.careerProfile : null,
-      academicEvents: arr('academicEvents', d.academicEvents),
-      lastOpenedTopic: d.lastOpenedTopic === null || (typeof d.lastOpenedTopic === 'object' && d.lastOpenedTopic !== null) ? d.lastOpenedTopic : null,
-      dailyGoals: arr('dailyGoals', d.dailyGoals),
-    } as AppData;
-
-    if (issues.length > 0) {
-      console.error('[SANITIZE] Found', issues.length, 'corrupted fields:', issues);
-      if (typeof window !== 'undefined') {
-        (window as unknown as Record<string, unknown>).__dataIssues = issues;
-      }
-    }
-
-    return result;
-  } catch (e) {
-    console.error('[SANITIZE] CRITICAL - sanitizeData itself failed:', e);
-    return data;
-  }
-}
 
 interface AppContextType {
   data: AppData;
@@ -510,7 +295,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log('[CONTEXT] Loaded', topicsWithMaterial.length, 'topics with material');
       }
 
-      setData(sanitizeData(localData));
+      setData(localData);
 
       // Then try to load from cloud
       try {
@@ -518,26 +303,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cloudData) {
           // Merge: use cloud data but keep local if newer
           const localTime = new Date(localData.dailyStatus.date).getTime();
-          const cloudTime = new Date(cloudData.dailyStatus.date).getTime();
+          const cloudTime = new Date((cloudData as any).dailyStatus?.date || '2000-01-01').getTime();
 
           if (cloudTime >= localTime) {
-            // CRITICAL: Merge materials from local IndexedDB cache into cloud data
+            // CRITICAL FIX: Cloud data must go through the SAME migration pipeline as local data.
+            // Without this, cloud data has missing fields/wrong types → React error #310.
+            const migratedCloud = migrateData(cloudData);
+
+            // Merge materials from local IndexedDB cache into cloud data
             // Cloud data has empty materials since they're stored separately
             const { getMaterialsCache } = await import('./storage');
             const materialsCache = getMaterialsCache();
-            const cloudDataWithMaterials = sanitizeData({
-              ...cloudData,
-              subjects: cloudData.subjects.map(subject => ({
-                ...subject,
-                topics: subject.topics.map(topic => ({
-                  ...topic,
-                  // Prefer local material from IndexedDB, fallback to cloud material, then empty
-                  material: materialsCache[topic.id] || topic.material || ''
-                }))
+            migratedCloud.subjects = migratedCloud.subjects.map(subject => ({
+              ...subject,
+              topics: subject.topics.map(topic => ({
+                ...topic,
+                material: materialsCache[topic.id] || topic.material || ''
               }))
-            });
-            setData(cloudDataWithMaterials);
-            saveData(cloudDataWithMaterials); // Update localStorage
+            }));
+
+            setData(migratedCloud);
+            saveData(migratedCloud); // Update localStorage
           }
           setLastSynced(new Date());
         }
@@ -553,9 +339,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateData = useCallback((updater: (prev: AppData) => AppData) => {
     setData(prev => {
-      const newData = sanitizeData(updater(prev));
+      const newData = updater(prev);
       saveData(newData);
-      // Sync to cloud with debounce (2 second delay)
       debouncedSaveToCloud(newData);
       return newData;
     });

@@ -58,10 +58,20 @@ export default function TopicDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
 
+  // Track read only once per reader mode session
+  const hasTrackedReadRef = useRef(false);
+  useEffect(() => {
+    if (readerFromUrl && !hasTrackedReadRef.current) {
+      hasTrackedReadRef.current = true;
+      trackTopicRead(subjectId, topicId);
+    }
+    if (!readerFromUrl) {
+      hasTrackedReadRef.current = false;
+    }
+  }, [readerFromUrl, subjectId, topicId, trackTopicRead]);
+
   // Open/close reader mode via URL
   const openReaderMode = () => {
-    // Track as actual read when entering reader mode
-    trackTopicRead(subjectId, topicId);
     router.push(`/subjects/${subjectId}/topics/${topicId}?reader=true`);
   };
   const closeReaderMode = () => {

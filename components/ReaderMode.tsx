@@ -490,8 +490,27 @@ function markdownToHtml(markdown: string): string {
     return tableHtml;
   });
 
+  // Pre-process: split inline bullets into separate lines
+  // e.g., "• Бели дробове • Сърце • Корем" → three separate "• ..." lines
+  const rawLines = html.split('\n');
+  const expandedLines: string[] = [];
+  for (const line of rawLines) {
+    // Check if line has multiple inline bullets (• or - used as separators)
+    // Match pattern: text starts with • and has more • in the middle
+    if (/•/.test(line)) {
+      const parts = line.split(/\s*•\s*/).filter(p => p.trim());
+      if (parts.length > 1) {
+        for (const part of parts) {
+          expandedLines.push(`• ${part.trim()}`);
+        }
+        continue;
+      }
+    }
+    expandedLines.push(line);
+  }
+
   // Process lists line-by-line (prevents empty bullet points)
-  const lines = html.split('\n');
+  const lines = expandedLines;
   const processedLines: string[] = [];
   let inList: 'none' | 'bullet' | 'task' = 'none';
 

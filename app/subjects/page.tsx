@@ -963,8 +963,10 @@ function SubjectsContent() {
                       <span className="text-[10px] text-slate-600 font-mono ml-2">
                         {selectedSubject.topics.filter(t => t.size === 'small').length}S /
                         {selectedSubject.topics.filter(t => t.size === 'medium').length}M /
-                        {selectedSubject.topics.filter(t => t.size === 'large').length}L /
-                        {selectedSubject.topics.filter(t => !t.size).length}?
+                        {selectedSubject.topics.filter(t => t.size === 'large').length}L
+                        {selectedSubject.topics.filter(t => !t.size).length > 0 && (
+                          <span className="text-slate-700"> / {selectedSubject.topics.filter(t => !t.size).length} без</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1001,8 +1003,10 @@ function SubjectsContent() {
                     {selectedSubject && (
                       <span className="text-[10px] text-slate-600 font-mono ml-2">
                         {selectedSubject.topics.filter(t => t.section === 'theoretical').length}📖 /
-                        {selectedSubject.topics.filter(t => t.section === 'practical').length}🔬 /
-                        {selectedSubject.topics.filter(t => !t.section).length}?
+                        {selectedSubject.topics.filter(t => t.section === 'practical').length}🔬
+                        {selectedSubject.topics.filter(t => !t.section).length > 0 && (
+                          <span className="text-slate-700"> / {selectedSubject.topics.filter(t => !t.section).length} без</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1155,18 +1159,26 @@ function SubjectsContent() {
                                     {TOPIC_SIZE_CONFIG[topic.size].short}
                                   </span>
                                 )}
-                                {/* Section Badge */}
-                                {topic.section && (
-                                  <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                                      topic.section === 'theoretical'
-                                        ? 'bg-blue-500/20 text-blue-400'
-                                        : 'bg-green-500/20 text-green-400'
-                                    }`}
-                                  >
-                                    {topic.section === 'theoretical' ? '📖 Теор' : '🔬 Практ'}
-                                  </span>
-                                )}
+                                {/* Section Badge - clickable to cycle */}
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (!selectedSubjectId) return;
+                                    const next = !topic.section ? 'theoretical' : topic.section === 'theoretical' ? 'practical' : undefined;
+                                    updateTopic(selectedSubjectId, topic.id, { section: next });
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-all ${
+                                    topic.section === 'theoretical'
+                                      ? 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
+                                      : topic.section === 'practical'
+                                        ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                                        : 'bg-slate-700/30 text-slate-600 hover:bg-slate-700/50 hover:text-slate-400'
+                                  }`}
+                                  title="Кликни за смяна: без → теоретичен → практичен"
+                                >
+                                  {topic.section === 'theoretical' ? '📖 Теор' : topic.section === 'practical' ? '🔬 Практ' : '⊘'}
+                                </button>
                                 {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} {topic.quizCount === 1 ? 'тест' : 'теста'}</span>}
                                 {(topic.readCount || 0) > 0 && (

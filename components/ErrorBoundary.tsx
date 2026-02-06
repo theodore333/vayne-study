@@ -12,24 +12,38 @@ interface State {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
+  retryCount: number;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null };
+    this.state = { hasError: false, error: null, errorInfo: null, retryCount: 0 };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error, errorInfo: null };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.setState({ errorInfo });
-    // Log error to console for debugging
     console.error('ErrorBoundary caught an error:', error, errorInfo);
 
-    // Capture data diagnostics if available
+    // For error #310 (objects as children), auto-retry once after a brief delay
+    // This gives the sanitizer a chance to fix data on the next render cycle
+    if (error.message?.includes('310') && this.state.retryCount < 2) {
+      console.warn('[ErrorBoundary] Auto-retrying after error #310 (attempt', this.state.retryCount + 1, ')');
+      setTimeout(() => {
+        this.setState(prev => ({
+          hasError: false,
+          error: null,
+          errorInfo: null,
+          retryCount: prev.retryCount + 1,
+        }));
+      }, 500);
+    }
+
+    // Log data diagnostics
     if (typeof window !== 'undefined') {
       const issues = (window as unknown as Record<string, unknown>).__dataIssues;
       if (Array.isArray(issues) && issues.length > 0) {
@@ -39,7 +53,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   handleRetry = (): void => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+    this.setState({ hasError: false, error: null, errorInfo: null, retryCount: 0 });
+  };
+
+  handleFullReload = (): void => {
+    window.location.reload();
   };
 
   handleGoHome = (): void => {
@@ -51,6 +69,10 @@ class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) {
         return this.props.fallback;
       }
+
+      const dataIssues = typeof window !== 'undefined'
+        ? (window as unknown as Record<string, unknown>).__dataIssues as string[] | undefined
+        : undefined;
 
       return (
         <div className="min-h-[400px] flex items-center justify-center p-6">
@@ -64,7 +86,7 @@ class ErrorBoundary extends Component<Props, State> {
             </h2>
 
             <p className="text-slate-400 font-mono text-sm mb-6">
-              Възникна неочаквана грешка. Опитай да презаредиш или се върни към началото.
+              Възникна неочаквана грешка. Материалите ти са запазени - презареди страницата.
             </p>
 
             {this.state.error && (
@@ -83,29 +105,34 @@ class ErrorBoundary extends Component<Props, State> {
               </details>
             )}
 
-            {/* Show data corruption diagnostics if available */}
-            {typeof window !== 'undefined' && Array.isArray((window as unknown as Record<string, unknown>).__dataIssues) && ((window as unknown as Record<string, unknown>).__dataIssues as string[]).length > 0 && (
+            {Array.isArray(dataIssues) && dataIssues.length > 0 && (
               <details className="mb-6 text-left" open>
                 <summary className="text-xs text-yellow-500 font-mono cursor-pointer hover:text-yellow-400">
-                  Открити проблеми с данните ({((window as unknown as Record<string, unknown>).__dataIssues as string[]).length})
+                  Открити проблеми с данните ({dataIssues.length})
                 </summary>
                 <pre className="mt-2 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg text-xs text-yellow-300 font-mono overflow-auto max-h-48 whitespace-pre-wrap">
-                  {((window as unknown as Record<string, unknown>).__dataIssues as string[]).join('\n')}
+                  {dataIssues.join('\n')}
                 </pre>
               </details>
             )}
 
             <div className="flex gap-3 justify-center">
               <button
+                onClick={this.handleFullReload}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-mono text-sm"
+              >
+                <RefreshCw size={16} />
+                Презареди
+              </button>
+              <button
                 onClick={this.handleRetry}
                 className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors font-mono text-sm"
               >
-                <RefreshCw size={16} />
                 Опитай отново
               </button>
               <button
                 onClick={this.handleGoHome}
-                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-mono text-sm"
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors font-mono text-sm"
               >
                 <Home size={16} />
                 Начало

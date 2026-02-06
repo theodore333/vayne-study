@@ -2309,10 +2309,29 @@ export default function ReaderMode({
                 padding-left: 1.75em;
                 margin-bottom: 1.25em;
               }
+              .ProseMirror ul ul {
+                list-style-type: circle;
+                margin-bottom: 0.5em;
+              }
+              .ProseMirror ul ul ul {
+                list-style-type: square;
+                margin-bottom: 0.25em;
+              }
+              .ProseMirror ul ul ul ul {
+                list-style-type: '–  ';
+              }
               .ProseMirror ol {
                 list-style-type: decimal;
                 padding-left: 1.75em;
                 margin-bottom: 1.25em;
+              }
+              .ProseMirror ol ol {
+                list-style-type: lower-alpha;
+                margin-bottom: 0.5em;
+              }
+              .ProseMirror ol ol ol {
+                list-style-type: lower-roman;
+                margin-bottom: 0.25em;
               }
               .ProseMirror li {
                 margin-bottom: 0.4em;

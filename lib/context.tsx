@@ -144,6 +144,9 @@ function sanitizeLoadedData(data: AppData): AppData {
       subjectType: s(subj.subjectType, 'preclinical', `subject[${subj.id}].subjectType`),
       examDate: sn(subj.examDate),
       examFormat: sn(subj.examFormat),
+      semester: typeof subj.semester === 'string' ? subj.semester : undefined,
+      archived: b(subj.archived),
+      deletedAt: sn(subj.deletedAt),
       createdAt: s(subj.createdAt, new Date().toISOString(), `subject[${subj.id}].createdAt`),
       topics: a(subj.topics, `subject[${subj.id}].topics`).map((t: any) => ({
         ...t,
@@ -163,6 +166,7 @@ function sanitizeLoadedData(data: AppData): AppData {
         lastRead: sn(t.lastRead),
         size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
         sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
+        section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
         wrongAnswers: a(t.wrongAnswers),
         highlights: a(t.highlights),
       })),

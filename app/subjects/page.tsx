@@ -228,8 +228,8 @@ function SubjectsContent() {
     const active = notTrashed.filter(s => !s.archived);
     const archived = notTrashed.filter(s => s.archived);
 
-    // Get unique semesters from active subjects
-    const semesters = [...new Set(active.map(s => s.semester).filter(Boolean))] as string[];
+    // Get unique semesters from active subjects (guard: only strings, prevents error #310)
+    const semesters = [...new Set(active.map(s => s.semester).filter((v): v is string => typeof v === 'string' && v !== ''))];
     semesters.sort();
 
     let displayed;
@@ -591,7 +591,7 @@ function SubjectsContent() {
                             <span className="text-slate-500 font-mono">{subject.topics.length} теми</span>
                             <span className="text-slate-500 font-mono">{progress.percentage}%</span>
                           </div>
-                          {subject.semester && (
+                          {typeof subject.semester === 'string' && subject.semester && (
                             <div className="text-[10px] font-mono mt-1 px-1.5 py-0.5 rounded bg-indigo-600/20 text-indigo-400 inline-block">
                               {subject.semester}
                             </div>

@@ -9,15 +9,15 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const VAYNE_OS_API_URL = process.env.VAYNE_OS_API_URL || 'https://vayne-os-production.up.railway.app';
 const VAYNE_OS_SYNC_KEY = process.env.VAYNE_OS_SYNC_KEY;
-const VAYNE_OS_USER_ID = process.env.VAYNE_OS_USER_ID || '26f7e2f7-131c-409c-9612-e85fbb524641';
+const VAYNE_OS_USER_ID = process.env.VAYNE_OS_USER_ID;
 
 export async function POST(request: NextRequest) {
   try {
     // Check if sync is configured
-    if (!VAYNE_OS_SYNC_KEY) {
+    if (!VAYNE_OS_SYNC_KEY || !VAYNE_OS_USER_ID) {
       return NextResponse.json({
         success: false,
-        error: 'VAYNE OS sync not configured',
+        error: 'VAYNE OS sync not configured (missing VAYNE_OS_SYNC_KEY or VAYNE_OS_USER_ID)',
         configured: false
       });
     }
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   return NextResponse.json({
-    status: VAYNE_OS_SYNC_KEY ? 'configured' : 'not_configured',
+    status: (VAYNE_OS_SYNC_KEY && VAYNE_OS_USER_ID) ? 'configured' : 'not_configured',
     endpoint: `${VAYNE_OS_API_URL}/api/study-sync`,
     supportedTypes: ['session', 'topic_progress', 'quiz', 'exam_date']
   });

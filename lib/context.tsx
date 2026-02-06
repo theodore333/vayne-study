@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal } from './types';
 import { loadData, saveData, migrateData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
@@ -449,6 +449,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
   const [storageError, setStorageError] = useState<{ error: StorageError; message?: string } | null>(null);
 
+  // Refs for avoiding side effects inside setState updaters
+  const dataRef = useRef(data);
+  const prevAchievementCountRef = useRef(0);
+
+  // Keep dataRef in sync (used by syncNow to avoid stale closures)
+  useEffect(() => { dataRef.current = data; }, [data]);
+
   // Set up storage error callback
   useEffect(() => {
     setStorageErrorCallback((error, message) => {
@@ -475,6 +482,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSidebarCollapsedState(collapsed);
     try { localStorage.setItem('sidebar-collapsed', String(collapsed)); } catch { /* quota/access error */ }
   }, []);
+
+  // Persist data to localStorage + cloud whenever it changes (replaces side effects inside setState updaters)
+  useEffect(() => {
+    if (isLoading) return;
+    saveData(data);
+    debouncedSaveToCloud(data);
+  }, [data, isLoading]);
+
+  // Detect newly unlocked achievements by comparing count with previous render
+  useEffect(() => {
+    if (isLoading) return;
+    const currentAchievements = data.userProgress?.achievements || [];
+    if (currentAchievements.length > prevAchievementCountRef.current) {
+      const newOnes = currentAchievements.slice(prevAchievementCountRef.current);
+      setNewAchievements(prev => [...prev, ...newOnes]);
+    }
+    prevAchievementCountRef.current = currentAchievements.length;
+  }, [data, isLoading]);
 
   useEffect(() => {
     const initData = async () => {
@@ -510,6 +535,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       setData(sanitizeLoadedData(dataToUse));
+      prevAchievementCountRef.current = dataToUse.userProgress?.achievements?.length || 0;
 
       // Then try to load from cloud
       try {
@@ -552,6 +578,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }));
 
               setData(sanitizeLoadedData(migratedCloud));
+              prevAchievementCountRef.current = migratedCloud.userProgress?.achievements?.length || 0;
               saveData(migratedCloud);
             }
           }
@@ -567,26 +594,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     initData();
   }, []);
 
+  // Pure setState - persistence handled by useEffect([data]) above
   const updateData = useCallback((updater: (prev: AppData) => AppData) => {
-    setData(prev => {
-      const newData = updater(prev);
-      saveData(newData);
-      debouncedSaveToCloud(newData);
-      return newData;
-    });
+    setData(updater);
   }, []);
 
+  // Uses dataRef to always have latest data (no stale closure)
   const syncNow = useCallback(async () => {
     setIsSyncing(true);
     try {
       const { saveToCloud } = await import('./cloud-sync');
-      await saveToCloud(data);
+      await saveToCloud(dataRef.current);
       setLastSynced(new Date());
     } catch (error) {
       console.error('Sync failed:', error);
     }
     setIsSyncing(false);
-  }, [data]);
+  }, []);
 
   // Subject operations
   const addSubject = useCallback((name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null) => {
@@ -1005,7 +1029,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const unlocked = checkAchievements(newProgress, newSubjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        setNewAchievements(prev => [...prev, ...unlocked]);
       }
 
       return {
@@ -1151,7 +1174,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const unlocked = checkAchievements(newProgress, newSubjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        setNewAchievements(prev => [...prev, ...unlocked]);
       }
 
       return {
@@ -1755,7 +1777,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const unlocked = checkAchievements(newProgress, prev.subjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        setNewAchievements(prev => [...prev, ...unlocked]);
       }
 
       return {
@@ -1989,7 +2010,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (streak > newProgress.stats.longestStreak) {
           newProgress.stats = { ...newProgress.stats, longestStreak: streak };
         }
-        setNewAchievements(existing => [...existing, ...unlocked]);
       }
 
       return { ...prev, userProgress: newProgress };

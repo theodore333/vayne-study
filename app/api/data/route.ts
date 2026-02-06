@@ -1,33 +1,65 @@
 import { createClient, RedisClientType } from 'redis';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const DATA_KEY = 'vayne-study-data';
+const MAX_BODY_SIZE = 5 * 1024 * 1024; // 5MB
+
+// Cached Redis client (reused across requests)
+let cachedClient: RedisClientType | null = null;
+let connectingPromise: Promise<RedisClientType | null> | null = null;
 
 async function getRedisClient(): Promise<RedisClientType | null> {
   if (!process.env.REDIS_URL) {
-    console.log('[REDIS] No REDIS_URL configured, using localStorage only');
     return null;
   }
 
-  try {
-    const client = createClient({
-      url: process.env.REDIS_URL
-    });
-    await client.connect();
-    return client as RedisClientType;
-  } catch (error) {
-    console.error('[REDIS] Connection failed:', error);
-    return null;
+  // Return cached client if connected
+  if (cachedClient?.isOpen) {
+    return cachedClient;
   }
+
+  // If already connecting, wait for that
+  if (connectingPromise) return connectingPromise;
+
+  connectingPromise = (async () => {
+    try {
+      const client = createClient({ url: process.env.REDIS_URL });
+      client.on('error', (err) => {
+        console.error('[REDIS] Client error:', err);
+        cachedClient = null;
+      });
+      await client.connect();
+      cachedClient = client as RedisClientType;
+      return cachedClient;
+    } catch (error) {
+      console.error('[REDIS] Connection failed:', error);
+      cachedClient = null;
+      return null;
+    } finally {
+      connectingPromise = null;
+    }
+  })();
+
+  return connectingPromise;
 }
 
-export async function GET() {
-  let client: RedisClientType | null = null;
+function checkAuth(request: NextRequest): boolean {
+  const token = process.env.SYNC_AUTH_TOKEN;
+  if (!token) return true; // No token configured = open access (dev mode)
+
+  const auth = request.headers.get('authorization');
+  return auth === `Bearer ${token}`;
+}
+
+export async function GET(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
-    client = await getRedisClient();
+    const client = await getRedisClient();
 
     if (!client) {
-      // Redis not available, client will use localStorage
       return NextResponse.json({ data: null, redisAvailable: false });
     }
 
@@ -40,15 +72,21 @@ export async function GET() {
     return NextResponse.json({ data: JSON.parse(data), redisAvailable: true });
   } catch (error) {
     console.error('[REDIS] Error loading data:', error);
-    // Return null data instead of error - client will use localStorage
     return NextResponse.json({ data: null, redisAvailable: false });
-  } finally {
-    if (client) await client.disconnect();
   }
 }
 
-export async function POST(request: Request) {
-  let client: RedisClientType | null = null;
+export async function POST(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Check content length before parsing
+  const contentLength = parseInt(request.headers.get('content-length') || '0', 10);
+  if (contentLength > MAX_BODY_SIZE) {
+    return NextResponse.json({ error: 'Payload too large' }, { status: 413 });
+  }
+
   try {
     const body = await request.json();
 
@@ -56,11 +94,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No data provided' }, { status: 400 });
     }
 
-    client = await getRedisClient();
+    const client = await getRedisClient();
 
     if (!client) {
-      // Redis not available, but that's OK - client uses localStorage
-      console.log('[REDIS] Skipping save - Redis not available');
       return NextResponse.json({ success: true, redisAvailable: false });
     }
 
@@ -69,9 +105,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, redisAvailable: true });
   } catch (error) {
     console.error('[REDIS] Error saving data:', error);
-    // Return failure so client knows cloud save failed
     return NextResponse.json({ success: false, redisAvailable: false, error: 'Failed to save to cloud' });
-  } finally {
-    if (client) await client.disconnect();
   }
 }

@@ -1179,7 +1179,7 @@ function SubjectsContent() {
                                 >
                                   {topic.section === 'theoretical' ? '📖 Теор' : topic.section === 'practical' ? '🔬 Практ' : '⊘'}
                                 </button>
-                                {topic.avgGrade && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
+                                {typeof topic.avgGrade === 'number' && topic.avgGrade > 0 && <span>Оценка: {topic.avgGrade.toFixed(2)}</span>}
                                 {topic.quizCount > 0 && <span>{topic.quizCount} {topic.quizCount === 1 ? 'тест' : 'теста'}</span>}
                                 {(topic.readCount || 0) > 0 && (
                                   <span className="text-cyan-500">

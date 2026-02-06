@@ -7,6 +7,39 @@ import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
+// Sanitize data to prevent React error #310 (objects rendered as children)
+// Ensures all fields that get rendered in JSX are primitives, not objects
+function sanitizeData(data: AppData): AppData {
+  try {
+    return {
+      ...data,
+      subjects: (Array.isArray(data.subjects) ? data.subjects : []).map(s => ({
+        ...s,
+        name: typeof s.name === 'string' ? s.name : String(s.name ?? ''),
+        color: typeof s.color === 'string' ? s.color : '#6366f1',
+        semester: typeof s.semester === 'string' ? s.semester : (s.semester ? String(s.semester) : undefined),
+        examDate: typeof s.examDate === 'string' ? s.examDate : undefined,
+        examFormat: typeof s.examFormat === 'string' ? s.examFormat : undefined,
+        topics: (Array.isArray(s.topics) ? s.topics : []).map(t => ({
+          ...t,
+          name: typeof t.name === 'string' ? t.name : String(t.name ?? ''),
+          status: typeof t.status === 'string' ? t.status : 'gray',
+          material: typeof t.material === 'string' ? t.material : '',
+          grades: Array.isArray(t.grades) ? t.grades.filter(g => typeof g === 'number') : [],
+          avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : undefined,
+          quizCount: typeof t.quizCount === 'number' ? t.quizCount : 0,
+          readCount: typeof t.readCount === 'number' ? t.readCount : 0,
+          section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
+          size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : undefined,
+        } as Topic)),
+      } as Subject)),
+    };
+  } catch (e) {
+    console.error('[CONTEXT] sanitizeData failed:', e);
+    return data;
+  }
+}
+
 interface AppContextType {
   data: AppData;
   isLoading: boolean;
@@ -295,7 +328,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log('[CONTEXT] Loaded', topicsWithMaterial.length, 'topics with material');
       }
 
-      setData(localData);
+      setData(sanitizeData(localData));
 
       // Then try to load from cloud
       try {
@@ -310,7 +343,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // Cloud data has empty materials since they're stored separately
             const { getMaterialsCache } = await import('./storage');
             const materialsCache = getMaterialsCache();
-            const cloudDataWithMaterials = {
+            const cloudDataWithMaterials = sanitizeData({
               ...cloudData,
               subjects: cloudData.subjects.map(subject => ({
                 ...subject,
@@ -320,7 +353,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   material: materialsCache[topic.id] || topic.material || ''
                 }))
               }))
-            };
+            });
             setData(cloudDataWithMaterials);
             saveData(cloudDataWithMaterials); // Update localStorage
           }

@@ -29,7 +29,7 @@ import {
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
   Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
   ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain,
-  Info, Lightbulb, SplitSquareVertical, Sparkles
+  Info, Lightbulb, Sparkles
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { mergeAttributes, Node as TiptapNode, Mark as TiptapMark } from '@tiptap/core';
@@ -2200,13 +2200,7 @@ export default function ReaderMode({
           >
             <Heading3 size={18} />
           </ToolbarButton>
-          <ToolbarButton
-            onClick={splitParagraphBreaks}
-            title="Раздели параграф на отделни редове"
-          >
-            <SplitSquareVertical size={18} />
-          </ToolbarButton>
-          <ToolbarButton
+<ToolbarButton
             onClick={autoDetectHeaders}
             title="Авто-откриване на заглавия (===, номерирани, ГЛАВНИ БУКВИ)"
           >

@@ -115,7 +115,7 @@ export function QuizResults({
             <details className="group">
               <summary className="cursor-pointer text-sm text-orange-400 font-mono mb-2 hover:text-orange-300 transition-colors flex items-center justify-center gap-2">
                 <XCircle size={16} />
-                {questions.length - Math.round(score)} грешни въпроса
+                {wrongCount} грешни въпроса
                 <span className="text-xs text-slate-500">(цъкни за детайли)</span>
               </summary>
               <div className="mt-4 space-y-4 text-left">

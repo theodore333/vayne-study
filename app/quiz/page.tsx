@@ -321,25 +321,16 @@ function QuizContent() {
           }
         }
 
-        // Enter to submit - handled inline to avoid stale closure
+        // Enter to submit - call handleAnswer to record time + save answer
         if (e.key === 'Enter' && selectedAnswer) {
           e.preventDefault();
-          setShowExplanation(true);
+          handleAnswer();
         }
       } else {
-        // After showing explanation, Enter to go next - handled inline
+        // After showing explanation, Enter to go next - call handleNext to persist answer
         if (e.key === 'Enter') {
           e.preventDefault();
-          // Trigger next question logic
-          const nextIndex = quizState.currentIndex + 1;
-          if (nextIndex < quizState.questions.length) {
-            setQuizState(prev => ({ ...prev, currentIndex: nextIndex }));
-            setSelectedAnswer(null);
-            setOpenAnswer('');
-            setShowExplanation(false);
-          } else {
-            setQuizState(prev => ({ ...prev, showResult: true }));
-          }
+          handleNext();
         }
       }
     };
@@ -564,6 +555,9 @@ function QuizContent() {
     const newAnswers = [...quizState.answers];
     newAnswers[quizState.currentIndex] = answer;
 
+    // Persist the answer immediately so early stop captures it
+    setQuizState(prev => ({ ...prev, answers: newAnswers }));
+
     // Record time spent on this question
     timer.recordQuestionTime(quizState.currentIndex);
 
@@ -758,7 +752,7 @@ function QuizContent() {
   };
 
   const generateClozeCards = async () => {
-    if (isGeneratingCloze || clozeCards) return;
+    if (isGeneratingCloze) return;
 
     const topicName = isModuleQuiz ? module?.title : topic?.name;
 
@@ -1067,6 +1061,16 @@ function QuizContent() {
     setShowPreview(false);
     setSelectedTopics([]);
     setOpenEvaluations({}); // Reset AI evaluations
+    setGradeSaved(false);
+    setIsSavingGrade(false);
+    setMistakeAnalysis(null);
+    setIsAnalyzingMistakes(false);
+    setClozeCards(null);
+    setIsGeneratingCloze(false);
+    setClozeError(null);
+    setCountWarning(null);
+    setShowEarlyStopConfirm(false);
+    setShowBackConfirm(false);
   };
 
   // Toggle topic selection for multi-topic mode

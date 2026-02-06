@@ -501,6 +501,9 @@ export function saveData(data: AppData): StorageError {
             if (materialsCache[topic.id] !== topic.material) {
               setMaterial(topic.id, topic.material);
             }
+          } else if (materialsCache[topic.id]) {
+            // Material was cleared - remove from cache and IndexedDB
+            setMaterial(topic.id, '');
           }
           // Return topic without material (material is loaded lazily from IndexedDB)
           return {
@@ -544,9 +547,14 @@ export function clearData(): void {
   localStorage.removeItem(COMPRESSED_FLAG);
   localStorage.removeItem('vayne-last-decay-date');
 
-  // Also clear IndexedDB materials
+  // Reset in-memory materials cache
+  materialsCache = {};
+  materialsCacheLoaded = false;
+  materialsCachePromise = null;
+
+  // Clear IndexedDB materials (correct database name)
   try {
-    const request = indexedDB.deleteDatabase('vayne-materials-db');
+    const request = indexedDB.deleteDatabase('vayne-study-db');
     request.onerror = () => console.error('Failed to clear IndexedDB');
     request.onsuccess = () => {};
   } catch {

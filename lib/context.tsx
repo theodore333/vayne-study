@@ -712,13 +712,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const newXp = progress.xp + xpEarned;
       const newLevel = calculateLevel(newXp);
 
-      // Update stats
+      // Update stats (both increment on upgrade and decrement on downgrade)
       const newStats = { ...progress.stats };
       if (status !== 'gray' && oldStatus === 'gray') {
         newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
+      } else if (status === 'gray' && oldStatus !== 'gray') {
+        newStats.topicsCompleted = Math.max(0, (newStats.topicsCompleted || 0) - 1);
       }
       if (status === 'green' && oldStatus !== 'green') {
         newStats.greenTopics = (newStats.greenTopics || 0) + 1;
+      } else if (oldStatus === 'green' && status !== 'green') {
+        newStats.greenTopics = Math.max(0, (newStats.greenTopics || 0) - 1);
       }
 
       const newProgress: UserProgress = {
@@ -996,10 +1000,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       duration: 0,
       rating: null
     };
-    updateData(prev => ({
-      ...prev,
-      timerSessions: [...prev.timerSessions, session]
-    }));
+    updateData(prev => {
+      // Auto-stop any existing active session to prevent orphans
+      const sessions = prev.timerSessions.map(s => {
+        if (s.endTime === null) {
+          const endTime = new Date().toISOString();
+          const duration = Math.round((new Date(endTime).getTime() - new Date(s.startTime).getTime()) / 1000 / 60);
+          return { ...s, endTime, duration: Math.max(0, duration), rating: null };
+        }
+        return s;
+      });
+      return { ...prev, timerSessions: [...sessions, session] };
+    });
   }, [updateData]);
 
   const stopTimer = useCallback((rating: number | null) => {
@@ -1739,11 +1751,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const unlocked = checkAchievements(newProgress, prev.subjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        // Update longest streak stat if needed
+        // Update longest streak stat if needed (create new stats object to avoid mutating previous state)
         if (streak > newProgress.stats.longestStreak) {
-          newProgress.stats.longestStreak = streak;
+          newProgress.stats = { ...newProgress.stats, longestStreak: streak };
         }
-        setNewAchievements(prev => [...prev, ...unlocked]);
+        setNewAchievements(existing => [...existing, ...unlocked]);
       }
 
       return { ...prev, userProgress: newProgress };

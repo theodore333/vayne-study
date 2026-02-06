@@ -128,7 +128,7 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
     const retrievabilityBonus = 1 + (1 - R) * 0.5; // Bonus for reviewing when R is lower
     const ratingBonus = 1 + (rating - 1) * 0.15; // Easy = more growth
 
-    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS_PARAMS.topicMultiplier;
+    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus;
     // Cap growth to max 3.5x per review to prevent jumping from 1 day to 180 days in 3 quizzes
     newS = Math.min(currentFsrs.stability * 3.5, newS);
     newS = Math.min(FSRS_PARAMS.maxInterval, Math.max(FSRS_PARAMS.minInterval, newS));
@@ -543,8 +543,8 @@ export function applyDecay(topic: Topic): Topic {
     const rules = DECAY_RULES[decayStatus];
     if (!rules || rules.length === 0) break;
 
-    // Sort rules by days descending to check longest threshold first
-    const sortedRules = [...rules].sort((a, b) => b.days - a.days);
+    // Sort rules by days ascending to process gradual decay steps first
+    const sortedRules = [...rules].sort((a, b) => a.days - b.days);
 
     let decayed = false;
     for (const rule of sortedRules) {

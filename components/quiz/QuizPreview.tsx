@@ -65,7 +65,13 @@ export function QuizPreview({
     }
   };
 
+  const colorClass: Record<string, string> = {
+    amber: 'text-amber-400', cyan: 'text-cyan-400', blue: 'text-blue-400',
+    pink: 'text-pink-400', red: 'text-red-400', orange: 'text-orange-400',
+    purple: 'text-purple-400', slate: 'text-slate-400',
+  };
   const color = getModeColor();
+  const textColor = colorClass[color] || 'text-slate-400';
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -78,7 +84,7 @@ export function QuizPreview({
 
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-lg mx-auto">
         <div className="text-center mb-6">
-          <Brain size={40} className={`mx-auto mb-3 text-${color}-400`} />
+          <Brain size={40} className={`mx-auto mb-3 ${textColor}`} />
           <h2 className="text-xl font-bold text-slate-100 font-mono">Преглед на Quiz</h2>
           <p className="text-sm text-slate-400 font-mono mt-1">Провери и коригирай преди старт</p>
         </div>
@@ -107,7 +113,7 @@ export function QuizPreview({
               </div>
               <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
                 <span className="text-slate-400 font-mono text-sm">Режим</span>
-                <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
+                <span className={`${textColor} font-mono text-sm`}>{getModeLabel()}</span>
               </div>
             </>
           ) : (
@@ -120,7 +126,7 @@ export function QuizPreview({
               </div>
               <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
                 <span className="text-slate-400 font-mono text-sm">Режим</span>
-                <span className={`text-${color}-400 font-mono text-sm`}>{getModeLabel()}</span>
+                <span className={`${textColor} font-mono text-sm`}>{getModeLabel()}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-slate-800/50 rounded-lg">
                 <span className="text-slate-400 font-mono text-sm">Текущо Bloom ниво</span>
@@ -146,8 +152,8 @@ export function QuizPreview({
               -5
             </button>
             <button
-              onClick={() => setPreviewQuestionCount(Math.max(1, previewQuestionCount - 1))}
-              disabled={previewQuestionCount <= 1}
+              onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 1))}
+              disabled={previewQuestionCount <= 3}
               className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
             >
               -1

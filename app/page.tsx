@@ -121,10 +121,10 @@ export default function Dashboard() {
     );
   }
 
-  // Filter out archived and soft-deleted subjects
-  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
+  // Filter out archived and soft-deleted subjects (memoized to prevent downstream useMemos from recomputing)
+  const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
 
-  const alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals);
+  const alerts = useMemo(() => getAlerts(activeSubjects, data.schedule, data.studyGoals), [activeSubjects, data.schedule, data.studyGoals]);
   const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);
   const statusCounts = activeSubjects.reduce(
     (acc, subject) => {

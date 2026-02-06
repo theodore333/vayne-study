@@ -778,7 +778,7 @@ function ORRoomContent() {
                     {(finalSummary.keyLearnings as string[]).map((l, i) => (
                       <li key={i} className="flex items-start gap-2 text-slate-300 text-base">
                         <CheckCircle size={16} className="text-green-400 mt-1 flex-shrink-0" />
-                        {l}
+                        {String(l)}
                       </li>
                     ))}
                   </ul>
@@ -792,7 +792,7 @@ function ORRoomContent() {
                     {(finalSummary.surgicalSkills as string[]).map((s, i) => (
                       <li key={i} className="flex items-start gap-2 text-slate-300 text-base">
                         <Scissors size={16} className="text-blue-400 mt-1 flex-shrink-0" />
-                        {s}
+                        {String(s)}
                       </li>
                     ))}
                   </ul>

@@ -1407,14 +1407,14 @@ function CasesContent() {
  </div>
 
  <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-6 space-y-4">
- <p className="text-slate-200 text-base leading-relaxed">{caseSummary.summary}</p>
+ <p className="text-slate-200 text-base leading-relaxed">{String(caseSummary.summary || '')}</p>
 
  {caseSummary.keyLearnings.length > 0 && (
  <div>
  <h4 className="font-semibold mb-2 text-slate-100">Какво научи:</h4>
  <ul className="list-disc list-inside text-base text-slate-300 space-y-1 leading-relaxed">
  {caseSummary.keyLearnings.map((learning, i) => (
- <li key={i}>{learning}</li>
+ <li key={i}>{String(learning)}</li>
  ))}
  </ul>
  </div>
@@ -1425,13 +1425,13 @@ function CasesContent() {
  <h4 className="font-semibold mb-2 text-slate-100">За преговор:</h4>
  <ul className="list-disc list-inside text-base text-slate-300 space-y-1 leading-relaxed">
  {caseSummary.areasForReview.map((area, i) => (
- <li key={i}>{area}</li>
+ <li key={i}>{String(area)}</li>
  ))}
  </ul>
  </div>
  )}
 
- <p className="text-blue-400 italic text-base">{caseSummary.encouragement}</p>
+ <p className="text-blue-400 italic text-base">{String(caseSummary.encouragement || '')}</p>
  </div>
 
  {/* Per-step evaluations */}

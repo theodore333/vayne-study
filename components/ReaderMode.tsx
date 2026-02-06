@@ -1008,6 +1008,8 @@ export default function ReaderMode({
   const [isSaving, setIsSaving] = useState(false);
   const isSavingRef = useRef(false);
   const hasUnsavedChangesRef = useRef(false); // Use ref to avoid re-renders on every keystroke
+  const isEditorInitializedRef = useRef(false); // Prevents saving during initial content load
+  const originalMaterialLengthRef = useRef(topic.material?.length || 0); // Track original size
 
   // New features state
   const [showSearch, setShowSearch] = useState(false);
@@ -1245,7 +1247,16 @@ export default function ReaderMode({
         return false; // Let default handling take over
       },
     },
+    onCreate: () => {
+      // Mark editor as initialized after first content load
+      // This prevents onUpdate from marking changes during initial setup
+      setTimeout(() => {
+        isEditorInitializedRef.current = true;
+      }, 500);
+    },
     onUpdate: ({ editor }) => {
+      // Skip updates during initial content load to prevent false "unsaved changes"
+      if (!isEditorInitializedRef.current) return;
       // Use ref to avoid re-render on every keystroke - only update UI state when saving
       hasUnsavedChangesRef.current = true;
 
@@ -1320,14 +1331,26 @@ export default function ReaderMode({
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Save on unmount
+  // Save on unmount - with safety guards against saving empty content
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
       if (editor && hasUnsavedChangesRef.current) {
-        onSaveMaterialRef.current(editor.getHTML());
+        const html = editor.getHTML();
+        // Guard: never save empty/blank content over existing material
+        if (!html || html === '<p></p>' || html.trim().length < 10) {
+          console.warn('[ReaderMode] Blocked unmount save: content too short/empty');
+          return;
+        }
+        // Guard: if original material was substantial, don't save drastically shorter content
+        // (protects against editor failing to load content properly)
+        if (originalMaterialLengthRef.current > 100 && html.length < originalMaterialLengthRef.current * 0.1) {
+          console.warn('[ReaderMode] Blocked unmount save: content drastically shorter than original');
+          return;
+        }
+        onSaveMaterialRef.current(html);
       }
     };
   }, [editor]);

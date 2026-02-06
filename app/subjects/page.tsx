@@ -270,6 +270,22 @@ function SubjectsContent() {
     }
   }, [searchParams, data.subjects, activeSubjects]);
 
+  const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
+
+  // Memoize filtered topics for performance (must be before any early return - React hooks rule)
+  const filteredTopics = useMemo(() => {
+    if (!selectedSubject) return [];
+    return selectedSubject.topics.filter(topic => {
+      const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
+      const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
+      const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
+      const matchesSearch = searchQuery === '' ||
+        topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        topic.number.toString().includes(searchQuery);
+      return matchesStatus && matchesSize && matchesSection && matchesSearch;
+    });
+  }, [selectedSubject, statusFilter, sizeFilter, sectionFilter, searchQuery]);
+
   const sortOptions: { value: SortOption; label: string }[] = [
     { value: 'exam', label: 'Изпит (най-скоро)' },
     { value: 'name', label: 'Име (А-Я)' },
@@ -284,22 +300,6 @@ function SubjectsContent() {
       </div>
     );
   }
-
-  const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
-
-  // Memoize filtered topics for performance
-  const filteredTopics = useMemo(() => {
-    if (!selectedSubject) return [];
-    return selectedSubject.topics.filter(topic => {
-      const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
-      const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
-      const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
-      const matchesSearch = searchQuery === '' ||
-        topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        topic.number.toString().includes(searchQuery);
-      return matchesStatus && matchesSize && matchesSection && matchesSearch;
-    });
-  }, [selectedSubject, statusFilter, sizeFilter, sectionFilter, searchQuery]);
 
   const handleStartEdit = (subject: Subject) => {
     setEditingSubject(subject.id);

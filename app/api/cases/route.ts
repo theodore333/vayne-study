@@ -73,8 +73,9 @@ async function handleGenerateCase(anthropic: Anthropic, body: {
   subjectName: string;
   subjectType?: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
+  pharmacologyTopics?: Array<{ id: string; name: string; subjectId: string }>;
 }) {
-  const { material, topicName, subjectName, subjectType, difficulty } = body;
+  const { material, topicName, subjectName, subjectType, difficulty, pharmacologyTopics } = body;
 
   if (!material || material.length < 200) {
     return NextResponse.json({
@@ -123,7 +124,12 @@ ${material.substring(0, 4000)}
 
 Създай реалистичен клиничен случай БАЗИРАН на този материал.
 Случаят трябва да тества разбирането на ключовите концепции от материала.
-
+${pharmacologyTopics && pharmacologyTopics.length > 0 ? `
+ФАРМАКОЛОГИЯ: Студентът учи и фармакология. Избери 2-5 теми от списъка, РЕЛЕВАНТНИ за лечението на случая:
+${pharmacologyTopics.map(t => `- "${t.name}" (id: "${t.id}", subjectId: "${t.subjectId}")`).join('\n')}
+Включи ги в "relevantPharmacologyTopicIds" и "relevantPharmacologyTopicNames" в JSON-а.
+Лечебният план трябва да включва лекарства, покрити от тези теми.
+` : ''}
 Върни САМО валиден JSON:
 {
   "presentation": {
@@ -151,7 +157,9 @@ ${material.substring(0, 4000)}
     "treatmentPlan": [
       { "category": "medication", "description": "лекарство", "dosage": "доза", "priority": "immediate" },
       { "category": "monitoring", "description": "мониториране", "priority": "short_term" }
-    ]
+    ]${pharmacologyTopics && pharmacologyTopics.length > 0 ? `,
+    "relevantPharmacologyTopicIds": ["id на избрана тема 1", "id на избрана тема 2"],
+    "relevantPharmacologyTopicNames": ["име на избрана тема 1", "име на избрана тема 2"]` : ''}
   },
   "specialty": "специалност (напр. Кардиология, Пулмология)",
   "difficulty": "${difficulty}"
@@ -540,8 +548,10 @@ async function handleEvaluateTreatment(anthropic: Anthropic, body: {
   expectedTreatment: Array<{ category: string; description: string; dosage?: string; priority: string }>;
   actualDiagnosis: string;
   caseContext: string;
+  pharmacologyMaterial?: string;
+  pharmacologyTopicNames?: string[];
 }) {
-  const { studentTreatment, expectedTreatment, actualDiagnosis, caseContext } = body;
+  const { studentTreatment, expectedTreatment, actualDiagnosis, caseContext, pharmacologyMaterial, pharmacologyTopicNames } = body;
 
   const studentPlanText = studentTreatment
     .map(t => `- [${t.priority}] ${t.category}: ${t.description}${t.dosage ? ` (${t.dosage})` : ''}`)
@@ -551,9 +561,32 @@ async function handleEvaluateTreatment(anthropic: Anthropic, body: {
     .map(t => `- [${t.priority}] ${t.category}: ${t.description}${t.dosage ? ` (${t.dosage})` : ''}`)
     .join('\n');
 
+  const hasPharmacology = pharmacologyMaterial && pharmacologyMaterial.length > 50;
+
+  const pharmacologySection = hasPharmacology ? `
+
+ФАРМАКОЛОГИЧЕН МАТЕРИАЛ от курса на студента:
+"""
+${pharmacologyMaterial}
+"""
+
+Релевантни фармакологични теми: ${pharmacologyTopicNames?.join(', ') || 'N/A'}
+
+Освен стандартната оценка, ЗАДЪЛЖИТЕЛНО оцени фармакологичните знания на студента:
+6. Механизъм на действие - правилен ли е изборът на лекарства спрямо патофизиологията?
+7. Дозировка и начин на приложение - съвпадат ли с учебния материал?
+8. Лекарствени взаимодействия - има ли потенциални проблеми?
+9. Контраиндикации - пропуснати ли са важни контраиндикации?
+10. Фармакокинетика - уместен ли е изборът спрямо клиничната ситуация?` : '';
+
+  const pharmacologyJsonFields = hasPharmacology
+    ? `"pharmacologyFeedback": "Подробна оценка на фармакологичните знания, базирана на учебния материал - механизми, взаимодействия, контраиндикации",
+  "pharmacologyScore": <0-100>,`
+    : '';
+
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.opus.id, // Use Opus for complex treatment evaluation
-    max_tokens: 1200,
+    model: MODEL_MAP.opus.id,
+    max_tokens: hasPharmacology ? 2000 : 1200,
     messages: [{
       role: 'user',
       content: `Оцени план за лечение на студент.
@@ -566,6 +599,7 @@ ${expectedPlanText}
 
 План на студента:
 ${studentPlanText}
+${pharmacologySection}
 
 Оцени:
 1. Правилни ли са медикаментите/интервенциите?
@@ -582,7 +616,8 @@ ${studentPlanText}
   "areasToImprove": ["област за подобрение 1"],
   "missedElements": ["пропуснат елемент"],
   "safetyIssues": ["проблем с безопасността"] или [],
-  "suggestions": "Как да подобри плана"
+  "suggestions": "Как да подобри плана",
+  ${pharmacologyJsonFields}
 }`
     }]
   });

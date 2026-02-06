@@ -209,6 +209,16 @@ function CasesContent() {
  // Pick random topic
  const randomTopic = topicsWithMaterial[Math.floor(Math.random() * topicsWithMaterial.length)];
 
+ // Find pharmacology subjects for cross-subject integration
+ const pharmacologySubjects = data.subjects.filter(s =>
+ !s.archived && !s.deletedAt && s.name.toLowerCase().includes('фармакол')
+ );
+ const pharmacologyTopics = pharmacologySubjects.flatMap(s =>
+ s.topics
+ .filter(t => t.material && t.material.length > 100)
+ .map(t => ({ id: t.id, name: t.name, subjectId: s.id }))
+ );
+
  setIsGenerating(true);
  setError(null);
 
@@ -223,7 +233,8 @@ function CasesContent() {
  topicName: randomTopic.name,
  subjectName: subject.name,
  subjectType: subject.subjectType || 'clinical',
- difficulty
+ difficulty,
+ pharmacologyTopics: pharmacologyTopics.length > 0 ? pharmacologyTopics : undefined
  }),
  // 60s for case generation
  signal: abortControllerRef.current?.signal
@@ -243,7 +254,11 @@ function CasesContent() {
  createdAt: new Date().toISOString(),
  completedAt: null,
  presentation: result.case.presentation,
- hiddenData: result.case.hiddenData,
+ hiddenData: {
+ ...result.case.hiddenData,
+ relevantPharmacologyTopicIds: result.case.hiddenData?.relevantPharmacologyTopicIds || [],
+ relevantPharmacologyTopicNames: result.case.hiddenData?.relevantPharmacologyTopicNames || [],
+ },
  currentStep: 'presentation',
  historyMessages: [],
  selectedExams: [],
@@ -712,6 +727,26 @@ function CasesContent() {
  let evalStrengths: string[];
  let evalAreasToImprove: string[];
  let missedElements: string[];
+ let pharmacologyFeedback: string | undefined;
+ let pharmacologyTopicInfo: Array<{ id: string; name: string; subjectId: string }> = [];
+
+ // Load relevant pharmacology material
+ let pharmacologyMaterial = '';
+ const pharmaTopicIds = activeCase.hiddenData.relevantPharmacologyTopicIds || [];
+ if (pharmaTopicIds.length > 0) {
+ for (const s of data.subjects) {
+ for (const t of s.topics) {
+ if (pharmaTopicIds.includes(t.id) && t.material) {
+ pharmacologyTopicInfo.push({ id: t.id, name: t.name, subjectId: s.id });
+ const truncated = t.material.substring(0, 3000);
+ pharmacologyMaterial += `\n\n--- Тема: ${t.name} ---\n${truncated}`;
+ }
+ }
+ }
+ if (pharmacologyMaterial.length > 10000) {
+ pharmacologyMaterial = pharmacologyMaterial.substring(0, 10000) + '\n... (съкратено)';
+ }
+ }
 
  if (!apiKey || isDemo) {
  await new Promise(r => setTimeout(r, 800));
@@ -733,6 +768,12 @@ function CasesContent() {
  ...(!hasPCI ? ['PCI е стандарт'] : [])
  ];
  missedElements = [];
+ // Demo pharmacology feedback
+ pharmacologyTopicInfo = [
+ { id: 'demo-pharm-1', name: 'Антитромбоцитни средства', subjectId: 'demo' },
+ { id: 'demo-pharm-2', name: 'Антикоагуланти', subjectId: 'demo' }
+ ];
+ pharmacologyFeedback = 'Аспиринът инхибира COX-1, блокирайки TXA2 синтеза и тромбоцитната агрегация. Хепаринът потенцира антитромбин III. При STEMI е важна двойната антитромбоцитна терапия (аспирин + P2Y12 инхибитор).';
  } else {
  const response = await fetchWithTimeout('/api/cases', {
  method: 'POST',
@@ -743,9 +784,11 @@ function CasesContent() {
  studentTreatment: treatmentItems,
  expectedTreatment: activeCase.hiddenData.treatmentPlan,
  actualDiagnosis: activeCase.hiddenData.actualDiagnosis,
- caseContext: JSON.stringify(activeCase.presentation)
+ caseContext: JSON.stringify(activeCase.presentation),
+ pharmacologyMaterial: pharmacologyMaterial || undefined,
+ pharmacologyTopicNames: activeCase.hiddenData.relevantPharmacologyTopicNames || undefined
  }),
- 
+
  signal: abortControllerRef.current?.signal
  });
  const result = await response.json();
@@ -756,6 +799,7 @@ function CasesContent() {
  evalStrengths = result.evaluation.strengths || [];
  evalAreasToImprove = result.evaluation.areasToImprove || [];
  missedElements = result.evaluation.missedElements || [];
+ pharmacologyFeedback = result.evaluation.pharmacologyFeedback || undefined;
  }
 
  const evaluation: StepEvaluation = {
@@ -765,7 +809,9 @@ function CasesContent() {
  strengths: evalStrengths,
  areasToImprove: evalAreasToImprove,
  missedPoints: missedElements,
- timestamp: new Date().toISOString()
+ timestamp: new Date().toISOString(),
+ pharmacologyTopics: pharmacologyTopicInfo.length > 0 ? pharmacologyTopicInfo : undefined,
+ pharmacologyFeedback
  };
 
  setActiveCase(prev => prev ? {
@@ -1414,6 +1460,40 @@ function CasesContent() {
  <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
  <p className="text-sm text-blue-400 mb-1">Случаят беше базиран на:</p>
  <p className="font-semibold text-blue-300">{caseTopic.name}</p>
+ </div>
+ );
+ })()}
+
+ {/* Pharmacology topics covered */}
+ {(() => {
+ const treatmentEval = activeCase.evaluations.find(e => e.step === 'treatment');
+ if (!treatmentEval?.pharmacologyTopics?.length) return null;
+ return (
+ <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 space-y-2">
+ <p className="text-sm font-semibold text-purple-400">
+ <Pill className="w-4 h-4 inline mr-1.5" />
+ Покрити фармакологични теми:
+ </p>
+ <div className="space-y-1">
+ {treatmentEval.pharmacologyTopics.map(topic => (
+ topic.subjectId === 'demo' ? (
+ <span key={topic.id} className="block text-purple-300 text-sm">{topic.name}</span>
+ ) : (
+ <Link
+ key={topic.id}
+ href={`/subjects/${topic.subjectId}/topics/${topic.id}`}
+ className="block text-purple-300 hover:text-purple-200 text-sm underline"
+ >
+ {topic.name} →
+ </Link>
+ )
+ ))}
+ </div>
+ {treatmentEval.pharmacologyFeedback && (
+ <p className="text-base text-slate-300 mt-3 leading-relaxed border-t border-purple-500/20 pt-3">
+ {treatmentEval.pharmacologyFeedback}
+ </p>
+ )}
  </div>
  );
  })()}

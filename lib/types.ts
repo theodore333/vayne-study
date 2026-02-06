@@ -579,6 +579,8 @@ export interface StepEvaluation {
   areasToImprove: string[];
   missedPoints?: string[];
   timestamp: string;
+  pharmacologyTopics?: Array<{ id: string; name: string; subjectId: string }>;
+  pharmacologyFeedback?: string;
 }
 
 // Case difficulty
@@ -613,6 +615,8 @@ export interface InteractiveClinicalCase {
     investigationImages?: Record<string, string>;
     differentialDiagnoses: string[];
     treatmentPlan: TreatmentPlanItem[];
+    relevantPharmacologyTopicIds?: string[];
+    relevantPharmacologyTopicNames?: string[];
   };
 
   // Student's progress and responses

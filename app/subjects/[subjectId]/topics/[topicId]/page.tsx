@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check } from 'lucide-react';
@@ -344,25 +344,42 @@ export default function TopicDetailPage() {
   };
 
   // Handle saving material from ReaderMode
-  const handleSaveMaterialFromReader = (newMaterial: string) => {
-    console.log('[TOPIC PAGE] handleSaveMaterialFromReader called, length:', newMaterial?.length);
+  // Performance: Only persist to IndexedDB + localStorage on each save.
+  // Context sync (which triggers full app re-render + LZ-compress) is batched every 10s.
+  const contextSyncNeededRef = useRef(false);
+  const materialRef = useRef(material);
+  materialRef.current = material;
 
-    // Update local React state
+  const handleSaveMaterialFromReader = useCallback((newMaterial: string) => {
+    // Update local React state (cheap - only re-renders this component)
     setMaterial(newMaterial);
 
-    // DIRECT save to IndexedDB + localStorage via storage.ts
+    // Persist to IndexedDB + localStorage (fast, no re-render)
     saveMaterialToStorage(topicId, newMaterial);
-
-    // ALSO save directly to localStorage with topic-specific key (for fast reload)
     try {
       localStorage.setItem(`material-${topicId}`, newMaterial);
-    } catch (e) {
-      console.error('Direct localStorage save failed:', e);
-    }
+    } catch {}
 
-    // Also update context (for UI consistency)
-    updateTopicMaterial(subjectId, topicId, newMaterial);
-  };
+    // Mark that context needs sync (will happen on 10s interval or unmount)
+    contextSyncNeededRef.current = true;
+  }, [topicId]);
+
+  // Batch context sync every 10 seconds (instead of on every keystroke)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (contextSyncNeededRef.current) {
+        updateTopicMaterial(subjectId, topicId, materialRef.current);
+        contextSyncNeededRef.current = false;
+      }
+    }, 10000);
+    return () => {
+      clearInterval(interval);
+      // Sync on unmount so context is up-to-date when leaving the page
+      if (contextSyncNeededRef.current) {
+        updateTopicMaterial(subjectId, topicId, materialRef.current);
+      }
+    };
+  }, [subjectId, topicId, updateTopicMaterial]);
 
   // ReaderMode needs the full topic with current material
   const topicForReader = { ...topic, material };

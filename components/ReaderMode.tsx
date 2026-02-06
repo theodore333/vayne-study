@@ -1275,7 +1275,7 @@ export default function ReaderMode({
           isSavingRef.current = false;
           setIsSaving(false);
         }
-      }, 1000);
+      }, 2000);
     },
   });
 
@@ -1353,7 +1353,7 @@ export default function ReaderMode({
           }
         }
       }
-    }, 3000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [editor]);

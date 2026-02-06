@@ -7,6 +7,60 @@ import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
 import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
+// Lightweight sanitizer - runs ONLY at load time to fix primitive types
+// Does NOT run on every mutation (no perf impact)
+function sanitizeLoadedData(data: AppData): AppData {
+  try {
+    const s = (v: unknown, fb = ''): string => typeof v === 'string' ? v : fb;
+    const n = (v: unknown, fb = 0): number => typeof v === 'number' && !isNaN(v) ? v : fb;
+    const a = (v: unknown): any[] => Array.isArray(v) ? v : [];
+
+    return {
+      ...data,
+      subjects: a(data.subjects).map((subj: any) => ({
+        ...subj,
+        id: s(subj.id, generateId()),
+        name: s(subj.name, 'Без име'),
+        color: s(subj.color, '#6366f1'),
+        subjectType: s(subj.subjectType, 'preclinical'),
+        examDate: typeof subj.examDate === 'string' ? subj.examDate : null,
+        examFormat: typeof subj.examFormat === 'string' ? subj.examFormat : null,
+        createdAt: s(subj.createdAt, new Date().toISOString()),
+        topics: a(subj.topics).map((t: any) => ({
+          ...t,
+          id: s(t.id, generateId()),
+          name: s(t.name, 'Без име'),
+          number: n(t.number, 1),
+          status: s(t.status, 'gray'),
+          material: s(t.material),
+          materialImages: a(t.materialImages),
+          grades: a(t.grades).filter((g: any) => typeof g === 'number'),
+          avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : null,
+          quizCount: n(t.quizCount),
+          quizHistory: a(t.quizHistory),
+          lastReview: typeof t.lastReview === 'string' ? t.lastReview : null,
+          currentBloomLevel: n(t.currentBloomLevel, 1),
+          readCount: n(t.readCount),
+          lastRead: typeof t.lastRead === 'string' ? t.lastRead : null,
+          size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
+          sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
+          wrongAnswers: a(t.wrongAnswers),
+          highlights: a(t.highlights),
+        })),
+      })),
+      schedule: a(data.schedule),
+      timerSessions: a(data.timerSessions),
+      questionBanks: a(data.questionBanks),
+      developmentProjects: a(data.developmentProjects),
+      academicEvents: a(data.academicEvents),
+      dailyGoals: a(data.dailyGoals),
+    };
+  } catch (e) {
+    console.error('[SANITIZE] Failed:', e);
+    return data;
+  }
+}
+
 interface AppContextType {
   data: AppData;
   isLoading: boolean;
@@ -295,7 +349,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log('[CONTEXT] Loaded', topicsWithMaterial.length, 'topics with material');
       }
 
-      setData(localData);
+      setData(sanitizeLoadedData(localData));
 
       // Then try to load from cloud
       try {
@@ -337,7 +391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }))
               }));
 
-              setData(migratedCloud);
+              setData(sanitizeLoadedData(migratedCloud));
               saveData(migratedCloud);
             }
           }

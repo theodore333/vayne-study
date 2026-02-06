@@ -13,47 +13,59 @@ interface State {
   error: Error | null;
   errorInfo: ErrorInfo | null;
   retryCount: number;
+  isAutoRetrying: boolean;
 }
 
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null, errorInfo: null, retryCount: 0 };
+    this.state = { hasError: false, error: null, errorInfo: null, retryCount: 0, isAutoRetrying: false };
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    return { hasError: true, error };
+    // For error #310, mark as auto-retrying so we don't flash the error screen
+    const is310 = error.message?.includes('310');
+    return {
+      hasError: true,
+      error,
+      isAutoRetrying: is310 === true,
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.setState({ errorInfo });
     console.error('ErrorBoundary caught an error:', error, errorInfo);
 
-    // For error #310 (objects as children), auto-retry once after a brief delay
-    // This gives the sanitizer a chance to fix data on the next render cycle
+    // Log which component crashed from the stack
+    if (errorInfo?.componentStack) {
+      const firstComponent = errorInfo.componentStack.split('\n').find(l => l.trim().startsWith('at '));
+      if (firstComponent) {
+        console.error('[ErrorBoundary] Crashed in:', firstComponent.trim());
+      }
+    }
+
+    // For error #310, auto-retry silently (max 2 attempts)
     if (error.message?.includes('310') && this.state.retryCount < 2) {
-      console.warn('[ErrorBoundary] Auto-retrying after error #310 (attempt', this.state.retryCount + 1, ')');
-      setTimeout(() => {
+      console.warn('[ErrorBoundary] Auto-retrying error #310 silently (attempt', this.state.retryCount + 1, ')');
+      // Retry on next frame - fast enough to be invisible
+      requestAnimationFrame(() => {
         this.setState(prev => ({
           hasError: false,
           error: null,
           errorInfo: null,
           retryCount: prev.retryCount + 1,
+          isAutoRetrying: false,
         }));
-      }, 500);
-    }
-
-    // Log data diagnostics
-    if (typeof window !== 'undefined') {
-      const issues = (window as unknown as Record<string, unknown>).__dataIssues;
-      if (Array.isArray(issues) && issues.length > 0) {
-        console.error('[ErrorBoundary] Data issues found by sanitizer:', issues);
-      }
+      });
+    } else if (error.message?.includes('310')) {
+      // Retries exhausted - show the error screen
+      console.error('[ErrorBoundary] Error #310 retries exhausted, showing error screen');
+      this.setState({ isAutoRetrying: false });
     }
   }
 
   handleRetry = (): void => {
-    this.setState({ hasError: false, error: null, errorInfo: null, retryCount: 0 });
+    this.setState({ hasError: false, error: null, errorInfo: null, retryCount: 0, isAutoRetrying: false });
   };
 
   handleFullReload = (): void => {
@@ -66,13 +78,14 @@ class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
+      // During auto-retry for #310, render nothing (invisible to user)
+      if (this.state.isAutoRetrying) {
+        return null;
+      }
+
       if (this.props.fallback) {
         return this.props.fallback;
       }
-
-      const dataIssues = typeof window !== 'undefined'
-        ? (window as unknown as Record<string, unknown>).__dataIssues as string[] | undefined
-        : undefined;
 
       return (
         <div className="min-h-[400px] flex items-center justify-center p-6">
@@ -102,17 +115,6 @@ class ErrorBoundary extends Component<Props, State> {
                     {String(this.state.errorInfo.componentStack)}
                   </pre>
                 )}
-              </details>
-            )}
-
-            {Array.isArray(dataIssues) && dataIssues.length > 0 && (
-              <details className="mb-6 text-left" open>
-                <summary className="text-xs text-yellow-500 font-mono cursor-pointer hover:text-yellow-400">
-                  Открити проблеми с данните ({dataIssues.length})
-                </summary>
-                <pre className="mt-2 p-3 bg-yellow-900/20 border border-yellow-700/30 rounded-lg text-xs text-yellow-300 font-mono overflow-auto max-h-48 whitespace-pre-wrap">
-                  {dataIssues.join('\n')}
-                </pre>
               </details>
             )}
 

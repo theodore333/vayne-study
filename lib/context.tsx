@@ -11,10 +11,23 @@ import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComb
 // Ensures EVERY field that React might render is the correct primitive type
 function sanitizeLoadedData(data: AppData): AppData {
   try {
-    const s = (v: unknown, fb = ''): string => typeof v === 'string' ? v : fb;
-    const n = (v: unknown, fb = 0): number => typeof v === 'number' && !isNaN(v) ? v : fb;
+    const issues: string[] = [];
+    const s = (v: unknown, fb = '', field = ''): string => {
+      if (typeof v === 'string') return v;
+      if (v !== undefined && v !== null && v !== '') issues.push(`${field}: expected string, got ${typeof v} (${JSON.stringify(v)?.slice(0,50)})`);
+      return fb;
+    };
+    const n = (v: unknown, fb = 0, field = ''): number => {
+      if (typeof v === 'number' && !isNaN(v)) return v;
+      if (v !== undefined && v !== null && v !== 0) issues.push(`${field}: expected number, got ${typeof v} (${JSON.stringify(v)?.slice(0,50)})`);
+      return fb;
+    };
     const b = (v: unknown, fb = false): boolean => typeof v === 'boolean' ? v : fb;
-    const a = (v: unknown): any[] => Array.isArray(v) ? v : [];
+    const a = (v: unknown, field = ''): any[] => {
+      if (Array.isArray(v)) return v;
+      if (v !== undefined && v !== null) issues.push(`${field}: expected array, got ${typeof v}`);
+      return [];
+    };
     const o = (v: unknown, fb: any): any => (v && typeof v === 'object' && !Array.isArray(v)) ? v : fb;
     const sn = (v: unknown): string | null => typeof v === 'string' ? v : null;
 
@@ -25,10 +38,10 @@ function sanitizeLoadedData(data: AppData): AppData {
     const userProgress = {
       ...defaultUserProgress,
       ...rp,
-      xp: n(rp.xp),
-      level: n(rp.level, 1),
-      totalXpEarned: n(rp.totalXpEarned),
-      achievements: a(rp.achievements),
+      xp: n(rp.xp, 0, 'userProgress.xp'),
+      level: n(rp.level, 1, 'userProgress.level'),
+      totalXpEarned: n(rp.totalXpEarned, 0, 'userProgress.totalXpEarned'),
+      achievements: a(rp.achievements, 'userProgress.achievements'),
       combo: {
         count: n(rp.combo?.count),
         lastActionTime: sn(rp.combo?.lastActionTime),
@@ -61,10 +74,10 @@ function sanitizeLoadedData(data: AppData): AppData {
     // usageData
     const ru = o(d.usageData, {});
     const usageData = {
-      dailyCalls: n(ru.dailyCalls),
-      monthlyCost: n(ru.monthlyCost),
-      monthlyBudget: n(ru.monthlyBudget, 5),
-      lastReset: s(ru.lastReset, getTodayString()),
+      dailyCalls: n(ru.dailyCalls, 0, 'usageData.dailyCalls'),
+      monthlyCost: n(ru.monthlyCost, 0, 'usageData.monthlyCost'),
+      monthlyBudget: n(ru.monthlyBudget, 5, 'usageData.monthlyBudget'),
+      lastReset: s(ru.lastReset, getTodayString(), 'usageData.lastReset'),
     };
 
     // dailyStatus
@@ -123,30 +136,30 @@ function sanitizeLoadedData(data: AppData): AppData {
     };
 
     // subjects + topics
-    const subjects = a(d.subjects).map((subj: any) => ({
+    const subjects = a(d.subjects, 'subjects').map((subj: any) => ({
       ...subj,
-      id: s(subj.id, generateId()),
-      name: s(subj.name, 'Без име'),
-      color: s(subj.color, '#6366f1'),
-      subjectType: s(subj.subjectType, 'preclinical'),
+      id: s(subj.id, generateId(), `subject[${subj.id}].id`),
+      name: s(subj.name, 'Без име', `subject[${subj.id}].name`),
+      color: s(subj.color, '#6366f1', `subject[${subj.id}].color`),
+      subjectType: s(subj.subjectType, 'preclinical', `subject[${subj.id}].subjectType`),
       examDate: sn(subj.examDate),
       examFormat: sn(subj.examFormat),
-      createdAt: s(subj.createdAt, new Date().toISOString()),
-      topics: a(subj.topics).map((t: any) => ({
+      createdAt: s(subj.createdAt, new Date().toISOString(), `subject[${subj.id}].createdAt`),
+      topics: a(subj.topics, `subject[${subj.id}].topics`).map((t: any) => ({
         ...t,
-        id: s(t.id, generateId()),
-        name: s(t.name, 'Без име'),
-        number: n(t.number, 1),
-        status: s(t.status, 'gray'),
-        material: s(t.material),
-        materialImages: a(t.materialImages),
-        grades: a(t.grades).filter((g: any) => typeof g === 'number'),
+        id: s(t.id, generateId(), `topic.id`),
+        name: s(t.name, 'Без име', `topic[${t.id}].name`),
+        number: n(t.number, 1, `topic[${t.id}].number`),
+        status: s(t.status, 'gray', `topic[${t.id}].status`),
+        material: s(t.material, '', `topic[${t.id}].material`),
+        materialImages: a(t.materialImages, `topic[${t.id}].materialImages`),
+        grades: a(t.grades, `topic[${t.id}].grades`).filter((g: any) => typeof g === 'number'),
         avgGrade: typeof t.avgGrade === 'number' ? t.avgGrade : null,
-        quizCount: n(t.quizCount),
-        quizHistory: a(t.quizHistory),
+        quizCount: n(t.quizCount, 0, `topic[${t.id}].quizCount`),
+        quizHistory: a(t.quizHistory, `topic[${t.id}].quizHistory`),
         lastReview: sn(t.lastReview),
-        currentBloomLevel: n(t.currentBloomLevel, 1),
-        readCount: n(t.readCount),
+        currentBloomLevel: n(t.currentBloomLevel, 1, `topic[${t.id}].currentBloomLevel`),
+        readCount: n(t.readCount, 0, `topic[${t.id}].readCount`),
         lastRead: sn(t.lastRead),
         size: (t.size === 'small' || t.size === 'medium' || t.size === 'large') ? t.size : null,
         sizeSetBy: (t.sizeSetBy === 'ai' || t.sizeSetBy === 'user') ? t.sizeSetBy : null,
@@ -155,26 +168,31 @@ function sanitizeLoadedData(data: AppData): AppData {
       })),
     }));
 
+    // Log any issues found (helps diagnose error #310)
+    if (issues.length > 0) {
+      console.warn('[SANITIZE] Fixed', issues.length, 'field(s):', issues);
+    }
+
     return {
       ...d,
       subjects,
-      schedule: a(d.schedule),
+      schedule: a(d.schedule, 'schedule'),
       dailyStatus,
-      timerSessions: a(d.timerSessions),
+      timerSessions: a(d.timerSessions, 'timerSessions'),
       gpaData,
       usageData,
-      questionBanks: a(d.questionBanks),
+      questionBanks: a(d.questionBanks, 'questionBanks'),
       pomodoroSettings,
       studyGoals,
       academicPeriod,
       userProgress,
       clinicalCaseSessions,
       orRoomSessions,
-      developmentProjects: a(d.developmentProjects),
+      developmentProjects: a(d.developmentProjects, 'developmentProjects'),
       careerProfile: d.careerProfile === null || (typeof d.careerProfile === 'object' && d.careerProfile !== null) ? d.careerProfile : null,
-      academicEvents: a(d.academicEvents),
+      academicEvents: a(d.academicEvents, 'academicEvents'),
       lastOpenedTopic: d.lastOpenedTopic === null || (typeof d.lastOpenedTopic === 'object' && d.lastOpenedTopic !== null) ? d.lastOpenedTopic : null,
-      dailyGoals: a(d.dailyGoals),
+      dailyGoals: a(d.dailyGoals, 'dailyGoals'),
     } as AppData;
   } catch (e) {
     console.error('[SANITIZE] Failed:', e);

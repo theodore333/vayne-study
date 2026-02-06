@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain, GraduationCap, Plus } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain, GraduationCap, Plus, Download, Database, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus, MedicalStage } from '@/lib/types';
 import { MEDICAL_SPECIALTIES } from '@/lib/constants';
@@ -1248,6 +1248,121 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Backup & Restore */}
+      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-6">
+        <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-4 flex items-center gap-2">
+          <Database size={16} className="text-emerald-400" />
+          Резервно копие
+        </h3>
+
+        <div className="grid gap-3">
+          <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-lg border border-slate-700/50">
+            <div className="flex-1">
+              <p className="text-xs text-slate-400 font-mono mb-3">
+                Изтегли пълно копие на всичките ти данни (предмети, теми, материали, прогрес, настройки).
+              </p>
+              <button
+                onClick={async () => {
+                  try {
+                    const { getMaterialsCache } = await import('@/lib/storage');
+                    const materials = getMaterialsCache();
+                    const backup = {
+                      version: 2,
+                      exportedAt: new Date().toISOString(),
+                      appData: data,
+                      materials,
+                    };
+                    const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `vayne-backup-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (e) {
+                    console.error('Backup download failed:', e);
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors font-mono text-sm"
+              >
+                <Download size={16} />
+                Изтегли резервно копие
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-4 bg-slate-800/30 rounded-lg border border-slate-700/50">
+            <div className="flex-1">
+              <p className="text-xs text-slate-400 font-mono mb-3">
+                Възстанови от файл. Внимание: ще замени всичките текущи данни!
+              </p>
+              <label className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors font-mono text-sm cursor-pointer w-fit">
+                <Upload size={16} />
+                Възстанови от файл
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+
+                    if (!confirm('Това ще замени ВСИЧКИТЕ текущи данни с данните от файла. Сигурен ли си?')) {
+                      e.target.value = '';
+                      return;
+                    }
+
+                    try {
+                      const text = await file.text();
+                      const backup = JSON.parse(text);
+
+                      if (!backup.appData || !backup.version) {
+                        alert('Невалиден файл с резервно копие.');
+                        e.target.value = '';
+                        return;
+                      }
+
+                      const { migrateData, saveData } = await import('@/lib/storage');
+                      const { saveToCloud } = await import('@/lib/cloud-sync');
+                      const { setMaterialInIDB } = await import('@/lib/indexeddb-storage');
+
+                      // Restore app data
+                      const migrated = migrateData(backup.appData);
+                      saveData(migrated);
+
+                      // Restore materials to IndexedDB
+                      if (backup.materials && typeof backup.materials === 'object') {
+                        const entries = Object.entries(backup.materials) as [string, string][];
+                        for (const [topicId, content] of entries) {
+                          if (typeof content === 'string' && content.length > 0) {
+                            await setMaterialInIDB(topicId, content);
+                          }
+                        }
+                      }
+
+                      // Push to cloud
+                      await saveToCloud(migrated);
+
+                      alert(`Възстановени: ${migrated.subjects.length} предмета. Страницата ще се презареди.`);
+                      window.location.reload();
+                    } catch (err) {
+                      console.error('Restore failed:', err);
+                      alert('Грешка при възстановяване: ' + (err instanceof Error ? err.message : 'Невалиден файл'));
+                      e.target.value = '';
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-600 font-mono mt-3">
+          Автоматични резервни копия се пазят в IndexedDB (последните 3).
+          При загуба на localStorage данните се възстановяват автоматично.
+        </p>
       </div>
 
       {/* Model Info */}

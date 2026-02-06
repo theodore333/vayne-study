@@ -492,14 +492,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.log('[CONTEXT] Loaded', topicsWithMaterial.length, 'topics with material');
       }
 
-      setData(sanitizeLoadedData(localData));
+      // If local data is empty, try to recover from IndexedDB backup
+      let dataToUse = localData;
+      if (localData.subjects.length === 0) {
+        try {
+          const { getLatestBackup } = await import('./indexeddb-storage');
+          const backup = await getLatestBackup();
+          if (backup) {
+            const restored = migrateData(JSON.parse(backup.data));
+            console.warn(`[CONTEXT] Local data empty - recovered from IndexedDB backup (${backup.type}, ${new Date(backup.id).toLocaleString()}, ${backup.subjectCount} subjects)`);
+            dataToUse = restored;
+            saveData(restored); // Re-persist to localStorage
+          }
+        } catch (e) {
+          console.error('[CONTEXT] Backup recovery failed:', e);
+        }
+      }
+
+      setData(sanitizeLoadedData(dataToUse));
 
       // Then try to load from cloud
       try {
         const cloudData = await loadFromCloud();
         if (cloudData) {
           // Merge: use cloud data but keep local if newer
-          const localTime = new Date(localData.dailyStatus.date).getTime();
+          const localTime = new Date(dataToUse.dailyStatus.date).getTime();
           const cloudTime = new Date((cloudData as any).dailyStatus?.date || '2000-01-01').getTime();
 
           if (cloudTime >= localTime) {
@@ -508,20 +525,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             // SAFETY: Never let cloud data wipe out local data
             // If local has more subjects or topics, local wins
-            const localTopicCount = localData.subjects.reduce((sum, s) => sum + s.topics.length, 0);
+            const localTopicCount = dataToUse.subjects.reduce((sum, s) => sum + s.topics.length, 0);
             const cloudTopicCount = migratedCloud.subjects.reduce((sum, s) => sum + s.topics.length, 0);
-            const localBankCount = (localData.questionBanks || []).length;
+            const localBankCount = (dataToUse.questionBanks || []).length;
             const cloudBankCount = (migratedCloud.questionBanks || []).length;
 
-            if (migratedCloud.subjects.length < localData.subjects.length ||
+            if (migratedCloud.subjects.length < dataToUse.subjects.length ||
                 cloudTopicCount < localTopicCount * 0.5 ||
                 cloudBankCount < localBankCount) {
               console.warn('[CONTEXT] Cloud data has LESS content than local - keeping local data.',
-                `Local: ${localData.subjects.length} subjects, ${localTopicCount} topics, ${localBankCount} banks.`,
+                `Local: ${dataToUse.subjects.length} subjects, ${localTopicCount} topics, ${localBankCount} banks.`,
                 `Cloud: ${migratedCloud.subjects.length} subjects, ${cloudTopicCount} topics, ${cloudBankCount} banks.`
               );
               // Push local data TO cloud instead (local is richer)
-              debouncedSaveToCloud(localData);
+              debouncedSaveToCloud(dataToUse);
             } else {
               // Cloud is safe to use - merge materials from local IndexedDB cache
               const { getMaterialsCache } = await import('./storage');

@@ -5,7 +5,7 @@ import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
-import { getMaterialFromIDB, setMaterialInIDB, getAllMaterialsFromIDB, migrateFromLocalStorage, isIndexedDBAvailable } from './indexeddb-storage';
+import { getMaterialFromIDB, setMaterialInIDB, getAllMaterialsFromIDB, migrateFromLocalStorage, isIndexedDBAvailable, saveBackupSnapshot } from './indexeddb-storage';
 
 // Storage error types
 export type StorageError = 'quota_exceeded' | 'unknown_error' | null;
@@ -536,6 +536,9 @@ export function saveData(data: AppData): StorageError {
       localStorage.setItem(COMPRESSED_FLAG, 'false');
     }
 
+    // Auto-backup to IndexedDB (debounced - max once per 60s)
+    debouncedBackupSnapshot(data);
+
     return null;
   } catch (error) {
     console.error('Error saving data:', error);
@@ -548,8 +551,28 @@ export function saveData(data: AppData): StorageError {
   }
 }
 
-export function clearData(): void {
+// Debounced auto-backup: saves snapshot to IndexedDB max once per 60s
+let backupTimeout: ReturnType<typeof setTimeout> | null = null;
+function debouncedBackupSnapshot(data: AppData): void {
+  if (backupTimeout) return; // Already scheduled
+  backupTimeout = setTimeout(() => {
+    backupTimeout = null;
+    saveBackupSnapshot(data, 'auto').catch(() => {});
+  }, 60000);
+}
+
+export async function clearData(): Promise<void> {
   if (typeof window === 'undefined') return;
+
+  // Pre-backup before clearing: save current data to IndexedDB as safety net
+  try {
+    const currentData = loadData();
+    if (currentData.subjects.length > 0) {
+      await saveBackupSnapshot(currentData, 'pre-clear');
+      console.log('[STORAGE] Pre-clear backup saved to IndexedDB');
+    }
+  } catch { /* best effort */ }
+
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem(MATERIALS_KEY);
   localStorage.removeItem(COMPRESSED_FLAG);
@@ -560,12 +583,11 @@ export function clearData(): void {
   materialsCacheLoaded = false;
   materialsCachePromise = null;
 
-  // Clear IndexedDB materials (correct database name)
+  // Clear IndexedDB materials ONLY (keep backups store)
   try {
-    const request = indexedDB.deleteDatabase('vayne-study-db');
-    request.onerror = () => console.error('Failed to clear IndexedDB');
-    request.onsuccess = () => {};
+    const { clearMaterialsStore } = await import('./indexeddb-storage');
+    await clearMaterialsStore();
   } catch {
-    // IndexedDB not available (e.g., server-side)
+    // IndexedDB not available
   }
 }

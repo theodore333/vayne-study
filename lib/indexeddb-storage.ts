@@ -4,8 +4,10 @@
  */
 
 const DB_NAME = 'vayne-study-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const MATERIALS_STORE = 'materials';
+const BACKUPS_STORE = 'backups';
+const MAX_AUTO_BACKUPS = 3;
 
 let dbInstance: IDBDatabase | null = null;
 let dbInitPromise: Promise<IDBDatabase> | null = null;
@@ -42,6 +44,11 @@ function initDB(): Promise<IDBDatabase> {
       // Create materials store if it doesn't exist
       if (!db.objectStoreNames.contains(MATERIALS_STORE)) {
         db.createObjectStore(MATERIALS_STORE, { keyPath: 'topicId' });
+      }
+
+      // Create backups store (added in v2)
+      if (!db.objectStoreNames.contains(BACKUPS_STORE)) {
+        db.createObjectStore(BACKUPS_STORE, { keyPath: 'id' });
       }
     };
   });
@@ -212,4 +219,119 @@ export async function getIDBStorageUsage(): Promise<{ used: number; available: n
 export function isIndexedDBAvailable(): boolean {
   if (typeof window === 'undefined') return false;
   return !!window.indexedDB;
+}
+
+/**
+ * Clear only the materials store (preserves backups)
+ */
+export async function clearMaterialsStore(): Promise<void> {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(MATERIALS_STORE, 'readwrite');
+    tx.objectStore(MATERIALS_STORE).clear();
+  } catch { /* non-critical */ }
+}
+
+// --- Backup Snapshots ---
+
+export interface BackupSnapshot {
+  id: number; // timestamp
+  type: 'auto' | 'pre-clear';
+  data: string; // JSON-stringified AppData
+  subjectCount: number;
+  topicCount: number;
+}
+
+/**
+ * Save a backup snapshot to IndexedDB, keeping max 3 auto snapshots
+ */
+export async function saveBackupSnapshot(data: unknown, type: 'auto' | 'pre-clear' = 'auto'): Promise<boolean> {
+  try {
+    const db = await initDB();
+    const dataStr = JSON.stringify(data);
+    const parsed = data as any;
+    const subjects = Array.isArray(parsed?.subjects) ? parsed.subjects : [];
+
+    const snapshot: BackupSnapshot = {
+      id: Date.now(),
+      type,
+      data: dataStr,
+      subjectCount: subjects.length,
+      topicCount: subjects.reduce((sum: number, s: any) => sum + (Array.isArray(s?.topics) ? s.topics.length : 0), 0),
+    };
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(BACKUPS_STORE, 'readwrite');
+      const store = tx.objectStore(BACKUPS_STORE);
+
+      // Save the new snapshot
+      const putReq = store.put(snapshot);
+      putReq.onerror = () => resolve(false);
+
+      tx.oncomplete = () => {
+        // Clean up old auto backups (keep only MAX_AUTO_BACKUPS)
+        pruneOldBackups().catch(() => {});
+        resolve(true);
+      };
+      tx.onerror = () => resolve(false);
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function pruneOldBackups(): Promise<void> {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(BACKUPS_STORE, 'readwrite');
+    const store = tx.objectStore(BACKUPS_STORE);
+    const allReq = store.getAll();
+
+    allReq.onsuccess = () => {
+      const all = allReq.result as BackupSnapshot[];
+      const autos = all.filter(b => b.type === 'auto').sort((a, b) => b.id - a.id);
+
+      // Delete excess auto backups
+      for (let i = MAX_AUTO_BACKUPS; i < autos.length; i++) {
+        store.delete(autos[i].id);
+      }
+
+      // Also delete pre-clear backups older than 7 days
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const oldPreClears = all.filter(b => b.type === 'pre-clear' && b.id < weekAgo);
+      for (const b of oldPreClears) {
+        store.delete(b.id);
+      }
+    };
+  } catch { /* non-critical */ }
+}
+
+/**
+ * Get all backup snapshots, sorted newest first
+ */
+export async function getBackupSnapshots(): Promise<BackupSnapshot[]> {
+  try {
+    const db = await initDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(BACKUPS_STORE, 'readonly');
+      const store = tx.objectStore(BACKUPS_STORE);
+      const req = store.getAll();
+
+      req.onsuccess = () => {
+        const all = (req.result as BackupSnapshot[]).sort((a, b) => b.id - a.id);
+        resolve(all);
+      };
+      req.onerror = () => resolve([]);
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get the latest backup snapshot (any type)
+ */
+export async function getLatestBackup(): Promise<BackupSnapshot | null> {
+  const all = await getBackupSnapshots();
+  return all.length > 0 ? all[0] : null;
 }

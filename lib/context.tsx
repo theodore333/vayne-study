@@ -262,13 +262,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Load sidebar state from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    if (saved === 'true') setSidebarCollapsedState(true);
+    try {
+      const saved = localStorage.getItem('sidebar-collapsed');
+      if (saved === 'true') setSidebarCollapsedState(true);
+    } catch { /* localStorage unavailable */ }
   }, []);
 
   const setSidebarCollapsed = useCallback((collapsed: boolean) => {
     setSidebarCollapsedState(collapsed);
-    localStorage.setItem('sidebar-collapsed', String(collapsed));
+    try { localStorage.setItem('sidebar-collapsed', String(collapsed)); } catch { /* quota/access error */ }
   }, []);
 
   useEffect(() => {
@@ -1014,27 +1016,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
-  const stopTimer = useCallback((rating: number | null) => {
-    updateData(prev => {
-      const sessions = [...prev.timerSessions];
-      const activeIndex = sessions.findIndex(s => s.endTime === null);
-      if (activeIndex === -1) return prev;
-
-      const endTime = new Date().toISOString();
-      const startTime = new Date(sessions[activeIndex].startTime);
-      const duration = Math.round((new Date(endTime).getTime() - startTime.getTime()) / 1000 / 60);
-
-      sessions[activeIndex] = {
-        ...sessions[activeIndex],
-        endTime,
-        duration,
-        rating
-      };
-
-      return { ...prev, timerSessions: sessions };
-    });
-  }, [updateData]);
-
   const stopTimerWithNote = useCallback((rating: number | null, distractionNote?: string) => {
     updateData(prev => {
       const sessions = [...prev.timerSessions];
@@ -1057,6 +1038,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
+  const stopTimer = useCallback((rating: number | null) => {
+    stopTimerWithNote(rating, undefined);
+  }, [stopTimerWithNote]);
+
   // Add completed Pomodoro session directly
   const addPomodoroSession = useCallback((durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string, rating?: number | null) => {
     const endTime = new Date();
@@ -1069,7 +1054,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
       duration: durationMinutes,
-      rating: rating || null,
+      rating: rating ?? null,
       distractionNote: note || undefined
     };
 

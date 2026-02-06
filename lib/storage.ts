@@ -212,11 +212,6 @@ export async function initMaterialsCache(): Promise<void> {
           materialsCache[topicId] = content;
         }
       }
-      for (const [topicId, content] of Object.entries(lsMaterials)) {
-        if (!materialsCache[topicId] && content && content.length > 0) {
-          materialsCache[topicId] = content;
-        }
-      }
 
       materialsCacheLoaded = true;
     } catch (error) {

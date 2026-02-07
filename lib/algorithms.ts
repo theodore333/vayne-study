@@ -1980,16 +1980,27 @@ export function getNextExamReadiness(
   const gradeNormalized = ((predictedGrade - 2) / 4) * 100;
   const readinessPercent = Math.round(coverage * 0.4 + gradeNormalized * 0.6);
 
-  // Determine status
+  // Determine status - scale thresholds by time remaining
+  // Far-away exams (>90 days) should not show panic statuses
   let status: 'ready' | 'on_track' | 'at_risk' | 'behind';
-  if (readinessPercent >= 80) {
-    status = 'ready';
-  } else if (readinessPercent >= 60) {
-    status = 'on_track';
-  } else if (readinessPercent >= 40) {
-    status = 'at_risk';
+  if (closestDays > 90) {
+    // Very far away: only "behind" if truly 0 effort
+    if (readinessPercent >= 30) status = 'ready';
+    else if (readinessPercent >= 10) status = 'on_track';
+    else if (coverage > 0) status = 'on_track';
+    else status = 'at_risk';
+  } else if (closestDays > 30) {
+    // Medium distance: relaxed thresholds
+    if (readinessPercent >= 60) status = 'ready';
+    else if (readinessPercent >= 30) status = 'on_track';
+    else if (readinessPercent >= 15) status = 'at_risk';
+    else status = 'behind';
   } else {
-    status = 'behind';
+    // Close exam (≤30 days): strict thresholds
+    if (readinessPercent >= 80) status = 'ready';
+    else if (readinessPercent >= 60) status = 'on_track';
+    else if (readinessPercent >= 40) status = 'at_risk';
+    else status = 'behind';
   }
 
   return {

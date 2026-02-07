@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, BookOpen, Calendar, Flame, Zap, BarChart3 } from 'lucide-react';
+import { Plus, BookOpen, Calendar, Flame, Zap, BarChart3, Download, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
 import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
@@ -37,6 +37,19 @@ export default function Dashboard() {
   const { data, isLoading, addDailyGoal, toggleDailyGoal, deleteDailyGoal } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
+  const [showBackupReminder, setShowBackupReminder] = useState(false);
+
+  // Check if backup reminder should show (> 7 days since last backup)
+  useEffect(() => {
+    if (data.subjects.length === 0) return; // No data = no reminder
+    const lastBackup = localStorage.getItem('vayne-last-backup');
+    if (!lastBackup) {
+      setShowBackupReminder(true);
+      return;
+    }
+    const daysSince = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSince > 7) setShowBackupReminder(true);
+  }, [data.subjects.length]);
 
   // Fetch Anki stats if enabled
   useEffect(() => {
@@ -120,6 +133,43 @@ export default function Dashboard() {
         totalQuizzes={analyticsSummary.totalQuizzes}
         avgScore={analyticsSummary.averageQuizScore}
       />
+
+      {/* Backup reminder */}
+      {showBackupReminder && (
+        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+          <Download size={16} className="text-amber-400 shrink-0" />
+          <span className="flex-1 text-xs text-amber-300 font-mono">
+            Не си свалял backup повече от 7 дни.
+          </span>
+          <button
+            onClick={async () => {
+              try {
+                const { getMaterialsCache } = await import('@/lib/storage');
+                const materials = getMaterialsCache();
+                const backup = { version: 2, exportedAt: new Date().toISOString(), appData: data, materials };
+                const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `vayne-backup-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                localStorage.setItem('vayne-last-backup', new Date().toISOString());
+                setShowBackupReminder(false);
+              } catch (e) { console.error('Backup failed:', e); }
+            }}
+            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-mono transition-colors"
+          >
+            Свали
+          </button>
+          <button
+            onClick={() => setShowBackupReminder(false)}
+            className="p-0.5 hover:bg-slate-700 rounded transition-colors"
+          >
+            <X size={14} className="text-slate-500" />
+          </button>
+        </div>
+      )}
 
       {/* ROW 1: Continue Study (conditional) */}
       <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />

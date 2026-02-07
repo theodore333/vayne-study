@@ -1281,6 +1281,7 @@ export default function SettingsPage() {
                     a.download = `vayne-backup-${new Date().toISOString().split('T')[0]}.json`;
                     a.click();
                     URL.revokeObjectURL(url);
+                    localStorage.setItem('vayne-last-backup', new Date().toISOString());
                   } catch (e) {
                     console.error('Backup download failed:', e);
                   }

@@ -1086,7 +1086,7 @@ ${pharmacologyMaterial ? `\nФАРМАКОЛОГИЧЕН МАТЕРИАЛ:\n${ph
 
   const response = await anthropic.messages.create({
     model: MODEL_MAP.opus.id,
-    max_tokens: 1500,
+    max_tokens: 4096,
     messages: [{
       role: 'user',
       content: `Оцени стъпка "${step}" от хирургична симулация.
@@ -1098,7 +1098,7 @@ ${material ? `Учебен материал:\n${material.substring(0, 2000)}\n` 
 
 ${stepPrompts[step] || 'Оцени представянето на студента.'}
 
-Върни САМО валиден JSON:
+Върни САМО валиден JSON (без markdown, без обяснения):
 {
   "score": <0-100>,
   "feedback": "Подробна обратна връзка на български",
@@ -1107,8 +1107,8 @@ ${stepPrompts[step] || 'Оцени представянето на студен�
   "missedPoints": ["пропуснат момент 1"],
   "suggestedImages": [
     {
-      "description": "Описание на изображение, което би помогнало за учене",
-      "type": "anatomy" или "imaging" или "instrument" или "pathology",
+      "description": "Описание на изображение за учене",
+      "type": "anatomy|imaging|instrument|pathology|ecg",
       "topicId": "",
       "subjectId": ""
     }
@@ -1119,8 +1119,9 @@ ${stepPrompts[step] || 'Оцени представянето на студен�
 }
 
 ВАЖНО:
-- suggestedImages - предложи 1-3 изображения (ЕКГ, рентген, анатомични снимки, инструменти), които студентът да качи в материалите си за по-добро запомняне.
-- Използвай ЛАТИНСКА анатомична и медицинска терминология както в българските учебници (a. femoralis, n. vagus, m. rectus abdominis и т.н.)`
+- suggestedImages - предложи 1-3 изображения (ЕКГ, рентген, анатомични снимки, инструменти) за по-добро запомняне.
+- Използвай ЛАТИНСКА анатомична и медицинска терминология (a. femoralis, n. vagus, m. rectus abdominis и т.н.)
+- type ТРЯБВА да е точно една от: "anatomy", "imaging", "instrument", "pathology", "ecg"`
     }]
   });
 
@@ -1132,12 +1133,22 @@ ${stepPrompts[step] || 'Оцени представянето на студен�
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let evaluation;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +

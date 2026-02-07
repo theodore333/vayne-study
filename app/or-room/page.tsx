@@ -231,7 +231,7 @@ function ORRoomContent() {
           pharmacologyTopics: pharmacologyTopics.slice(0, 30),
           anatomyTopics: anatomyTopics.slice(0, 30)
         }),
-        timeout: 60000,
+        timeout: 120000,
         signal: abortControllerRef.current?.signal
       });
 
@@ -345,16 +345,20 @@ function ORRoomContent() {
             complicationScenario: activeCase.hiddenData.complicationScenario,
             keyAnatomy: activeCase.hiddenData.keyAnatomy
           }),
-          timeout: 30000,
+          timeout: 60000,
           signal: abortControllerRef.current?.signal
         });
 
         if (res.ok) {
           const result = await res.json();
+          // Strip markdown formatting (bold, italic, emoji markers)
+          const cleanResponse = result.response
+            .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
+            .replace(/_{1,3}([^_]+)_{1,3}/g, '$1');
           const surgeonMsg: ORMessage = {
             id: generateId(),
             role: 'surgeon',
-            content: result.response,
+            content: cleanResponse,
             timestamp: new Date().toISOString()
           };
 
@@ -506,7 +510,7 @@ function ORRoomContent() {
             pharmacologyMaterial: pharmacologyMaterial || undefined,
             anatomyMaterial: anatomyMaterial || undefined
           }),
-          timeout: 45000,
+          timeout: 90000,
           signal: abortControllerRef.current?.signal
         });
 
@@ -665,7 +669,7 @@ function ORRoomContent() {
               anatomy: anatomyTopics
             }
           }),
-          timeout: 45000,
+          timeout: 90000,
           signal: abortControllerRef.current?.signal
         });
 

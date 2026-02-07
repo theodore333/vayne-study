@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo, ReactNode } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, AlertTriangle, BookOpen, Calendar, Layers, RefreshCw, BarChart3, Zap } from 'lucide-react';
+import { Plus, AlertTriangle, BookOpen, Calendar, Flame, Zap, BarChart3 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
 import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
@@ -10,29 +10,20 @@ import { STATUS_CONFIG } from '@/lib/constants';
 import { Subject, TopicStatus } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
-import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
+import { checkAnkiConnect, getCollectionStats, type CollectionStats, getSelectedDecks } from '@/lib/anki';
 
 // Dashboard Widgets
-import StreakCalendar from '@/components/dashboard/StreakCalendar';
 const WeeklyBarChart = dynamic(() => import('@/components/dashboard/WeeklyBarChart'), {
   ssr: false,
   loading: () => <div className="h-40 bg-slate-800/30 rounded-lg animate-pulse" />
 });
-import GoalProgressRings from '@/components/dashboard/GoalProgressRings';
 import ContinueStudyWidget from '@/components/dashboard/ContinueStudyWidget';
 import QuickActionsRow from '@/components/dashboard/QuickActionsRow';
-import AcademicEventsWidget from '@/components/dashboard/AcademicEventsWidget';
-import SubjectHealthIndicator from '@/components/dashboard/SubjectHealthIndicator';
 import ExamReadinessWidget from '@/components/dashboard/ExamReadinessWidget';
 import DailyGoalsChecklist from '@/components/dashboard/DailyGoalsChecklist';
 import FSRSReviewWidget from '@/components/dashboard/FSRSReviewWidget';
-import WeaknessWidget from '@/components/dashboard/WeaknessWidget';
-
-// Component prop types
-interface StatusOverviewProps {
-  statusCounts: Record<TopicStatus, number>;
-  totalTopics: number;
-}
+import StudyProgressPanel from '@/components/dashboard/StudyProgressPanel';
+import AttentionPanel from '@/components/dashboard/AttentionPanel';
 
 interface SubjectsSectionProps {
   subjects: Subject[];
@@ -129,93 +120,68 @@ export default function Dashboard() {
     );
   }
 
-  const totalTopics = activeSubjects.reduce((sum, s) => sum + s.topics.length, 0);
-  const statusCounts = activeSubjects.reduce(
-    (acc, subject) => {
-      subject.topics.forEach(topic => { acc[topic.status]++; });
-      return acc;
-    },
-    { green: 0, yellow: 0, orange: 0, gray: 0 }
-  );
-
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <PageHeader onAddClick={() => setShowAddSubject(true)} />
+    <div className="max-w-6xl mx-auto space-y-5">
+      {/* ROW 0: Enhanced Header */}
+      <PageHeader
+        onAddClick={() => setShowAddSubject(true)}
+        currentStreak={currentStreak}
+        level={analyticsSummary.level}
+        xpTotal={analyticsSummary.xpTotal}
+        totalQuizzes={analyticsSummary.totalQuizzes}
+        avgScore={analyticsSummary.averageQuizScore}
+      />
 
-      {/* HERO ROW: Streak Calendar + Exam Readiness + Continue */}
+      {/* ROW 1: Continue Study (conditional) */}
+      <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
+
+      {/* ROW 2: Command Center */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StreakCalendar
-          timerSessions={data.timerSessions}
-          dailyGoalMinutes={data.studyGoals.dailyMinutes}
-          currentStreak={currentStreak}
-          longestStreak={longestStreak}
-        />
         <ExamReadinessWidget readiness={nextExamReadiness} />
-        <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
-      </div>
-
-      {/* QUICK ACTIONS ROW */}
-      <QuickActionsRow subjects={activeSubjects} />
-
-      {/* PROGRESS ROW: Goal Rings + Weekly Bar Chart */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <GoalProgressRings
-          timerSessions={data.timerSessions}
-          studyGoals={data.studyGoals}
-        />
-        <WeeklyBarChart
-          timerSessions={data.timerSessions}
-          dailyGoal={data.studyGoals.dailyMinutes}
-        />
-      </div>
-
-      {/* WIDGETS ROW: FSRS Reviews + Subject Health + Daily Goals */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <FSRSReviewWidget reviews={fsrsReviews} />
-        <SubjectHealthIndicator
-          healthStatuses={subjectHealthStatuses || []}
-          maxItems={3}
-        />
-        <DailyGoalsChecklist
-          goals={data.dailyGoals || []}
-          onAddGoal={addDailyGoal}
-          onToggleGoal={toggleDailyGoal}
-          onDeleteGoal={deleteDailyGoal}
-        />
+        <QuickActionsRow subjects={activeSubjects} />
       </div>
 
-      {/* ANALYSIS ROW: Weakness + Academic Events */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <WeaknessWidget subjects={activeSubjects} />
-        <AcademicEventsWidget
-          events={data.academicEvents || []}
-          subjects={activeSubjects}
-          maxEvents={4}
-        />
+      {/* ROW 3: Study Progress */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="md:col-span-7">
+          <WeeklyBarChart
+            timerSessions={data.timerSessions}
+            dailyGoal={data.studyGoals.dailyMinutes}
+            ankiStats={ankiStats}
+          />
+        </div>
+        <div className="md:col-span-5">
+          <StudyProgressPanel
+            timerSessions={data.timerSessions}
+            studyGoals={data.studyGoals}
+            dailyGoalMinutes={data.studyGoals.dailyMinutes}
+            currentStreak={currentStreak}
+            longestStreak={longestStreak}
+          />
+        </div>
       </div>
 
-      {/* Quick Stats: Level + Quizzes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <QuickStatWidget
-          icon={<Zap size={18} className="text-yellow-400" />}
-          label="Ниво"
-          value={`Lv. ${analyticsSummary.level}`}
-          subValue={`${analyticsSummary.xpTotal} XP`}
-          color="yellow"
-          href="/analytics"
-        />
-        <QuickStatWidget
-          icon={<BarChart3 size={18} className="text-blue-400" />}
-          label="Тестове"
-          value={analyticsSummary.totalQuizzes.toString()}
-          subValue={`Ср: ${analyticsSummary.averageQuizScore}%`}
-          color="blue"
-          href="/analytics"
-        />
+      {/* ROW 4: Goals & Attention */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="md:col-span-5">
+          <DailyGoalsChecklist
+            goals={data.dailyGoals || []}
+            onAddGoal={addDailyGoal}
+            onToggleGoal={toggleDailyGoal}
+            onDeleteGoal={deleteDailyGoal}
+          />
+        </div>
+        <div className="md:col-span-7">
+          <AttentionPanel
+            healthStatuses={subjectHealthStatuses || []}
+            subjects={activeSubjects}
+            events={data.academicEvents || []}
+          />
+        </div>
       </div>
 
-      {ankiStats && <AnkiWidget stats={ankiStats} onRefresh={refreshAnkiStats} loading={ankiLoading} />}
-      <StatusOverview statusCounts={statusCounts} totalTopics={totalTopics} />
+      {/* ROW 5: Subjects */}
       <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
       {alerts.length > 0 && <AlertsSection alerts={alerts} />}
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
@@ -223,87 +189,47 @@ export default function Dashboard() {
   );
 }
 
-function PageHeader({ onAddClick }: { onAddClick: () => void }) {
+function PageHeader({ onAddClick, currentStreak, level, xpTotal, totalQuizzes, avgScore }: {
+  onAddClick: () => void;
+  currentStreak: number;
+  level: number;
+  xpTotal: number;
+  totalQuizzes: number;
+  avgScore: number;
+}) {
   return (
     <div className="flex items-center justify-between">
       <div>
         <h1 className="text-2xl font-bold text-slate-100 font-mono">Табло</h1>
         <p className="text-sm text-slate-500 font-mono mt-1">Общ преглед на прогреса</p>
       </div>
-      <button onClick={onAddClick} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-mono text-sm">
-        <Plus size={18} /> Нов предмет
-      </button>
-    </div>
-  );
-}
-
-function StatusOverview({ statusCounts, totalTopics }: StatusOverviewProps) {
-  return (
-    <div className="p-6 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
-      <h2 className="text-lg font-semibold text-slate-100 font-mono mb-4">Разпределение по статус</h2>
-      <div className="grid grid-cols-4 gap-4">
-        {(['gray', 'orange', 'yellow', 'green'] as const).map((status) => {
-          const count = statusCounts[status];
-          const config = STATUS_CONFIG[status as keyof typeof STATUS_CONFIG];
-          const pct = totalTopics > 0 ? Math.round((count / totalTopics) * 100) : 0;
-          return (
-            <div key={status} className="text-center">
-              <div className="text-4xl mb-2">{config.emoji}</div>
-              <div className="text-2xl font-bold font-mono" style={{ color: config.text }}>{count}</div>
-              <div className="text-xs text-slate-500 font-mono">{config.label} ({pct}%)</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-interface AnkiWidgetProps {
-  stats: CollectionStats;
-  onRefresh: () => void;
-  loading: boolean;
-}
-
-function AnkiWidget({ stats, onRefresh, loading }: AnkiWidgetProps) {
-  return (
-    <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-blue-500/30">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-blue-500/20">
-            <Layers size={20} className="text-blue-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki</h3>
-            <p className="text-xs text-slate-500 font-mono">Due карти днес</p>
-          </div>
+      <div className="flex items-center gap-3">
+        {/* Inline stat badges */}
+        <div className="hidden md:flex items-center gap-2">
+          {currentStreak > 0 && (
+            <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 text-xs font-mono font-medium">
+              <Flame size={13} fill={currentStreak >= 3 ? 'currentColor' : 'none'} />
+              {currentStreak}д
+            </span>
+          )}
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-yellow-500/15 text-yellow-400 text-xs font-mono font-medium">
+            <Zap size={13} />
+            Lv.{level}
+          </span>
+          <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-500/15 text-blue-400 text-xs font-mono font-medium" title={`Ср: ${avgScore}%`}>
+            <BarChart3 size={13} />
+            {totalQuizzes}
+          </span>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={loading}
-          className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-          title="Обнови"
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+        <button onClick={onAddClick} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-mono text-sm">
+          <Plus size={18} /> Нов предмет
         </button>
       </div>
-      <div className="grid grid-cols-3 gap-4">
-        <div className="text-center">
-          <div className="text-3xl font-bold font-mono text-blue-400">{stats.dueToday}</div>
-          <div className="text-xs text-slate-500 font-mono">Due</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold font-mono text-cyan-400">{stats.newToday}</div>
-          <div className="text-xs text-slate-500 font-mono">New</div>
-        </div>
-        <div className="text-center">
-          <div className="text-3xl font-bold font-mono text-slate-400">{stats.totalCards.toLocaleString()}</div>
-          <div className="text-xs text-slate-500 font-mono">Total</div>
-        </div>
-      </div>
     </div>
   );
 }
+
+
 
 function SubjectsSection({ subjects, onAddClick }: SubjectsSectionProps) {
   if (subjects.length === 0) {
@@ -375,35 +301,3 @@ function AlertsSection({ alerts }: AlertsSectionProps) {
   );
 }
 
-interface QuickStatWidgetProps {
-  icon: ReactNode;
-  label: string;
-  value: string;
-  subValue: string;
-  color: 'orange' | 'purple' | 'yellow' | 'blue' | 'green';
-  href: string;
-}
-
-function QuickStatWidget({ icon, label, value, subValue, color, href }: QuickStatWidgetProps) {
-  const colors = {
-    orange: 'border-orange-500/30 hover:border-orange-500/50 bg-orange-500/10',
-    purple: 'border-purple-500/30 hover:border-purple-500/50 bg-purple-500/10',
-    yellow: 'border-yellow-500/30 hover:border-yellow-500/50 bg-yellow-500/10',
-    blue: 'border-blue-500/30 hover:border-blue-500/50 bg-blue-500/10',
-    green: 'border-green-500/30 hover:border-green-500/50 bg-green-500/10',
-  };
-
-  return (
-    <Link
-      href={href}
-      className={`p-4 rounded-xl border ${colors[color]} transition-all hover:scale-[1.02]`}
-    >
-      <div className="flex items-center gap-2 mb-2">
-        {icon}
-        <span className="text-xs text-slate-400 font-mono">{label}</span>
-      </div>
-      <div className="text-xl font-bold text-slate-100 font-mono">{value}</div>
-      <div className="text-xs text-slate-500 font-mono">{subValue}</div>
-    </Link>
-  );
-}

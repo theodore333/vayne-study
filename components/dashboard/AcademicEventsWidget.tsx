@@ -10,9 +10,10 @@ interface AcademicEventsWidgetProps {
   events: AcademicEvent[];
   subjects: Subject[];
   maxEvents?: number;
+  compact?: boolean;
 }
 
-export default function AcademicEventsWidget({ events, subjects, maxEvents = 4 }: AcademicEventsWidgetProps) {
+export default function AcademicEventsWidget({ events, subjects, maxEvents = 4, compact }: AcademicEventsWidgetProps) {
   const upcomingEvents = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -53,6 +54,70 @@ export default function AcademicEventsWidget({ events, subjects, maxEvents = 4 }
     return `след ${days}д`;
   };
 
+  const eventsList = (
+    <div className="space-y-2">
+      {upcomingEvents.map(({ event, daysUntil, subject, config, urgency }) => (
+        <div
+          key={event.id}
+          className={`flex items-center gap-3 ${compact ? 'p-2' : 'p-3'} rounded-lg transition-all ${
+            urgency === 'high'
+              ? 'bg-red-500/10 border border-red-500/30'
+              : urgency === 'medium'
+              ? 'bg-yellow-500/10 border border-yellow-500/30'
+              : 'bg-slate-800/50 border border-transparent'
+          }`}
+        >
+          <span className={`${compact ? 'text-base' : 'text-xl'} flex-shrink-0`}>{config.icon}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-slate-200 truncate">
+                {event.name || config.label}
+              </span>
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: subject?.color }}
+              />
+            </div>
+            <span className="text-xs text-slate-500 font-mono truncate block">
+              {subject?.name}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {urgency === 'high' && (
+              <AlertTriangle size={14} className="text-red-400" />
+            )}
+            <span className={`text-xs font-mono font-semibold ${
+              urgency === 'high'
+                ? 'text-red-400'
+                : urgency === 'medium'
+                ? 'text-yellow-400'
+                : 'text-slate-400'
+            }`}>
+              {formatDaysUntil(daysUntil)}
+            </span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-xs font-semibold text-slate-400 font-mono flex items-center gap-1.5">
+            <Calendar size={13} className="text-purple-400" />
+            Предстоящи
+          </h4>
+          <Link href="/schedule" className="text-[10px] text-purple-400 hover:text-purple-300 font-mono transition-colors">
+            Виж всички
+          </Link>
+        </div>
+        {eventsList}
+      </>
+    );
+  }
+
   return (
     <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
@@ -67,51 +132,7 @@ export default function AcademicEventsWidget({ events, subjects, maxEvents = 4 }
           Виж всички
         </Link>
       </div>
-
-      <div className="space-y-2">
-        {upcomingEvents.map(({ event, daysUntil, subject, config, urgency }) => (
-          <div
-            key={event.id}
-            className={`flex items-center gap-3 p-3 rounded-lg transition-all ${
-              urgency === 'high'
-                ? 'bg-red-500/10 border border-red-500/30'
-                : urgency === 'medium'
-                ? 'bg-yellow-500/10 border border-yellow-500/30'
-                : 'bg-slate-800/50 border border-transparent'
-            }`}
-          >
-            <span className="text-xl flex-shrink-0">{config.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-slate-200 truncate">
-                  {event.name || config.label}
-                </span>
-                <span
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: subject?.color }}
-                />
-              </div>
-              <span className="text-xs text-slate-500 font-mono truncate block">
-                {subject?.name}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {urgency === 'high' && (
-                <AlertTriangle size={14} className="text-red-400" />
-              )}
-              <span className={`text-xs font-mono font-semibold ${
-                urgency === 'high'
-                  ? 'text-red-400'
-                  : urgency === 'medium'
-                  ? 'text-yellow-400'
-                  : 'text-slate-400'
-              }`}>
-                {formatDaysUntil(daysUntil)}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
+      {eventsList}
     </div>
   );
 }

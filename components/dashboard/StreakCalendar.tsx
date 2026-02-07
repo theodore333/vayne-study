@@ -9,11 +9,12 @@ interface StreakCalendarProps {
   dailyGoalMinutes: number;
   currentStreak: number;
   longestStreak: number;
+  compact?: boolean;
 }
 
 const DAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Нд'];
 
-export default function StreakCalendar({ timerSessions, dailyGoalMinutes, currentStreak, longestStreak }: StreakCalendarProps) {
+export default function StreakCalendar({ timerSessions, dailyGoalMinutes, currentStreak, longestStreak, compact }: StreakCalendarProps) {
   const isOnFire = currentStreak >= 3;
   const isRecord = currentStreak >= longestStreak && currentStreak > 0;
 
@@ -66,41 +67,36 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
     return 'bg-green-800/60';
   };
 
-  return (
-    <div className={`relative overflow-hidden rounded-xl p-5 border transition-all ${
-      isOnFire
-        ? 'bg-gradient-to-br from-orange-900/30 to-slate-900/80 border-orange-500/30'
-        : 'bg-[rgba(20,20,35,0.8)] border-[#1e293b]'
-    }`}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Flame
-            size={20}
-            className={isOnFire ? 'text-orange-400' : 'text-slate-500'}
-            fill={isOnFire ? 'currentColor' : 'none'}
-          />
-          <span className="text-sm font-semibold text-slate-300 font-mono">Study Streak</span>
-          {isRecord && currentStreak > 0 && (
-            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 rounded-full">
-              <Trophy size={10} className="text-yellow-400" />
-              <span className="text-[9px] text-yellow-400 font-mono">Рекорд!</span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className={`text-2xl font-bold font-mono ${isOnFire ? 'text-orange-400' : 'text-slate-400'}`}>
-            {currentStreak}
-          </span>
-          <span className="text-xs text-slate-500 font-mono">
-            {currentStreak === 1 ? 'ден' : 'дни'}
-          </span>
-        </div>
+  const header = (
+    <div className={`flex items-center justify-between ${compact ? 'mb-3' : 'mb-4'}`}>
+      <div className="flex items-center gap-2">
+        <Flame
+          size={compact ? 16 : 20}
+          className={isOnFire ? 'text-orange-400' : 'text-slate-500'}
+          fill={isOnFire ? 'currentColor' : 'none'}
+        />
+        <span className="text-sm font-semibold text-slate-300 font-mono">Study Streak</span>
+        {isRecord && currentStreak > 0 && (
+          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 rounded-full">
+            <Trophy size={10} className="text-yellow-400" />
+            <span className="text-[9px] text-yellow-400 font-mono">Рекорд!</span>
+          </div>
+        )}
       </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`${compact ? 'text-xl' : 'text-2xl'} font-bold font-mono ${isOnFire ? 'text-orange-400' : 'text-slate-400'}`}>
+          {currentStreak}
+        </span>
+        <span className="text-xs text-slate-500 font-mono">
+          {currentStreak === 1 ? 'ден' : 'дни'}
+        </span>
+      </div>
+    </div>
+  );
 
-      {/* Calendar grid */}
+  const calendarGrid = (
+    <>
       <div className="flex gap-1">
-        {/* Day labels */}
         <div className="flex flex-col gap-1 mr-1">
           {[0, 2, 4, 6].map(i => (
             <div key={i} className="h-3 flex items-center" style={i > 0 ? { marginTop: i === 2 ? '4px' : '4px' } : {}}>
@@ -108,8 +104,6 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
             </div>
           ))}
         </div>
-
-        {/* Grid */}
         <div className="flex-1 grid grid-rows-7 grid-flow-col gap-[3px]">
           {grid.flat().map((cell, i) => {
             if (!cell) return <div key={i} className="w-full aspect-square rounded-sm bg-slate-900" />;
@@ -123,8 +117,6 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
           })}
         </div>
       </div>
-
-      {/* Footer */}
       <div className="flex items-center justify-between mt-3 text-[10px] font-mono text-slate-500">
         <span>{studyDays} от {calendarData.length} дни</span>
         <div className="flex items-center gap-1">
@@ -138,6 +130,21 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
           <span>Повече</span>
         </div>
       </div>
+    </>
+  );
+
+  if (compact) {
+    return <>{header}{calendarGrid}</>;
+  }
+
+  return (
+    <div className={`relative overflow-hidden rounded-xl p-5 border transition-all ${
+      isOnFire
+        ? 'bg-gradient-to-br from-orange-900/30 to-slate-900/80 border-orange-500/30'
+        : 'bg-[rgba(20,20,35,0.8)] border-[#1e293b]'
+    }`}>
+      {header}
+      {calendarGrid}
     </div>
   );
 }

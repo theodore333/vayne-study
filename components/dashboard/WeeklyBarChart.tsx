@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, Layers } from 'lucide-react';
 
 interface DayData {
   date: string;
@@ -10,14 +10,21 @@ interface DayData {
   isToday: boolean;
 }
 
+interface AnkiStats {
+  dueToday: number;
+  newToday: number;
+  totalCards: number;
+}
+
 interface WeeklyBarChartProps {
   timerSessions: Array<{ startTime: string; duration: number }>;
   dailyGoal: number;
+  ankiStats?: AnkiStats | null;
 }
 
 const DAY_NAMES = ['Нд', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 
-export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarChartProps) {
+export default function WeeklyBarChart({ timerSessions, dailyGoal, ankiStats }: WeeklyBarChartProps) {
   const safeSessions = timerSessions || [];
   const safeGoal = dailyGoal || 120;
 
@@ -111,6 +118,23 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal }: WeeklyBarCh
           <span className="w-2 h-0.5 border-t border-dashed border-slate-500" /> Дневна цел
         </span>
       </div>
+
+      {/* Anki stats footer */}
+      {ankiStats && (
+        <div className="border-t border-slate-700/50 mt-4 pt-3">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <Layers size={13} className="text-blue-400" />
+              <span className="text-[11px] text-slate-400 font-mono font-medium">Anki</span>
+            </div>
+            <div className="flex gap-4 text-[11px] font-mono">
+              <span className="text-blue-400">{ankiStats.dueToday} <span className="text-slate-500">due</span></span>
+              <span className="text-cyan-400">{ankiStats.newToday} <span className="text-slate-500">new</span></span>
+              <span className="text-slate-400">{ankiStats.totalCards.toLocaleString()} <span className="text-slate-500">total</span></span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ interface GoalProgressRingsProps {
     weeklyMinutes: number;
     monthlyMinutes: number;
   };
+  compact?: boolean;
 }
 
 interface RingProps {
@@ -77,7 +78,7 @@ function ProgressRing({ percentage, size, strokeWidth, color, label, current, go
   );
 }
 
-export default function GoalProgressRings({ timerSessions, studyGoals }: GoalProgressRingsProps) {
+export default function GoalProgressRings({ timerSessions, studyGoals, compact }: GoalProgressRingsProps) {
   const safeSessions = timerSessions || [];
   const safeGoals = {
     dailyMinutes: studyGoals?.dailyMinutes || 120,
@@ -131,42 +132,57 @@ export default function GoalProgressRings({ timerSessions, studyGoals }: GoalPro
     };
   }, [safeSessions, safeGoals.dailyMinutes, safeGoals.weeklyMinutes, safeGoals.monthlyMinutes]);
 
+  const rings = (
+    <div className="flex justify-around items-start">
+      <ProgressRing
+        percentage={progress.daily.percentage}
+        size={compact ? 68 : 80}
+        strokeWidth={compact ? 5 : 6}
+        color="#3b82f6"
+        label="Днес"
+        current={progress.daily.current}
+        goal={progress.daily.goal}
+      />
+      <ProgressRing
+        percentage={progress.weekly.percentage}
+        size={compact ? 68 : 80}
+        strokeWidth={compact ? 5 : 6}
+        color="#8b5cf6"
+        label="Седмица"
+        current={progress.weekly.current}
+        goal={progress.weekly.goal}
+      />
+      <ProgressRing
+        percentage={progress.monthly.percentage}
+        size={compact ? 68 : 80}
+        strokeWidth={compact ? 5 : 6}
+        color="#06b6d4"
+        label="Месец"
+        current={progress.monthly.current}
+        goal={progress.monthly.goal}
+      />
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <>
+        <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2 mb-3">
+          <Target size={16} className="text-purple-400" />
+          Цели за учене
+        </h3>
+        {rings}
+      </>
+    );
+  }
+
   return (
     <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
       <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2 mb-4">
         <Target size={16} className="text-purple-400" />
         Цели за учене
       </h3>
-
-      <div className="flex justify-around items-start">
-        <ProgressRing
-          percentage={progress.daily.percentage}
-          size={80}
-          strokeWidth={6}
-          color="#3b82f6"
-          label="Днес"
-          current={progress.daily.current}
-          goal={progress.daily.goal}
-        />
-        <ProgressRing
-          percentage={progress.weekly.percentage}
-          size={80}
-          strokeWidth={6}
-          color="#8b5cf6"
-          label="Седмица"
-          current={progress.weekly.current}
-          goal={progress.weekly.goal}
-        />
-        <ProgressRing
-          percentage={progress.monthly.percentage}
-          size={80}
-          strokeWidth={6}
-          color="#06b6d4"
-          label="Месец"
-          current={progress.monthly.current}
-          goal={progress.monthly.goal}
-        />
-      </div>
+      {rings}
     </div>
   );
 }

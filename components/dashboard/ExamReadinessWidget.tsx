@@ -25,19 +25,7 @@ export default function ExamReadinessWidget({ readiness }: ExamReadinessWidgetPr
     };
   }, [readiness?.status]);
 
-  if (!readiness) {
-    return (
-      <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <GraduationCap size={16} className="text-purple-400" />
-          <h3 className="text-sm font-semibold text-slate-300 font-mono">Следващ изпит</h3>
-        </div>
-        <p className="text-sm text-slate-500 font-mono">
-          Няма предстоящи изпити
-        </p>
-      </div>
-    );
-  }
+  if (!readiness) return null;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);

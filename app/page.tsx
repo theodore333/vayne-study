@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, AlertTriangle, BookOpen, Calendar, Flame, Zap, BarChart3 } from 'lucide-react';
+import { Plus, BookOpen, Calendar, Flame, Zap, BarChart3 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
 import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
@@ -18,11 +18,10 @@ const WeeklyBarChart = dynamic(() => import('@/components/dashboard/WeeklyBarCha
   loading: () => <div className="h-40 bg-slate-800/30 rounded-lg animate-pulse" />
 });
 import ContinueStudyWidget from '@/components/dashboard/ContinueStudyWidget';
-import QuickActionsRow from '@/components/dashboard/QuickActionsRow';
 import ExamReadinessWidget from '@/components/dashboard/ExamReadinessWidget';
-import DailyGoalsChecklist from '@/components/dashboard/DailyGoalsChecklist';
 import FSRSReviewWidget from '@/components/dashboard/FSRSReviewWidget';
 import StudyProgressPanel from '@/components/dashboard/StudyProgressPanel';
+import ActionPanel from '@/components/dashboard/ActionPanel';
 import AttentionPanel from '@/components/dashboard/AttentionPanel';
 
 interface SubjectsSectionProps {
@@ -34,20 +33,10 @@ interface SubjectCardProps {
   subject: Subject;
 }
 
-interface Alert {
-  type: 'critical' | 'warning' | 'info';
-  message: string;
-}
-
-interface AlertsSectionProps {
-  alerts: Alert[];
-}
-
 export default function Dashboard() {
   const { data, isLoading, addDailyGoal, toggleDailyGoal, deleteDailyGoal } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
   const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
-  const [ankiLoading, setAnkiLoading] = useState(false);
 
   // Fetch Anki stats if enabled
   useEffect(() => {
@@ -58,7 +47,6 @@ export default function Dashboard() {
   }, []);
 
   const refreshAnkiStats = async () => {
-    setAnkiLoading(true);
     try {
       const connected = await checkAnkiConnect();
       if (connected) {
@@ -71,10 +59,9 @@ export default function Dashboard() {
     } catch {
       setAnkiStats(null);
     }
-    setAnkiLoading(false);
   };
 
-  // All hooks must be before any early return (React hooks rule)
+  // All hooks before any early return
   const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
   const alerts = useMemo(() => getAlerts(activeSubjects, data.schedule, data.studyGoals), [activeSubjects, data.schedule, data.studyGoals]);
   const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
@@ -82,31 +69,34 @@ export default function Dashboard() {
   const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals), [activeSubjects, data.studyGoals]);
   const analyticsSummary = useMemo(() => getAnalyticsSummary(data.timerSessions, activeSubjects, data.userProgress), [data.timerSessions, activeSubjects, data.userProgress]);
   const subjectHealthStatuses = useMemo(() => {
-    try {
-      return getSubjectHealth(activeSubjects);
-    } catch (e) {
-      console.error('getSubjectHealth error:', e);
-      return [];
-    }
+    try { return getSubjectHealth(activeSubjects); }
+    catch (e) { console.error('getSubjectHealth error:', e); return []; }
   }, [activeSubjects]);
   const nextExamReadiness = useMemo(() => {
-    try {
-      return getNextExamReadiness(activeSubjects, data.questionBanks || []);
-    } catch (e) {
-      console.error('getNextExamReadiness error:', e);
-      return null;
-    }
+    try { return getNextExamReadiness(activeSubjects, data.questionBanks || []); }
+    catch (e) { console.error('getNextExamReadiness error:', e); return null; }
   }, [activeSubjects, data.questionBanks]);
+
+  // Determine which adaptive cards to show
+  const hasAttention = (subjectHealthStatuses?.length > 0) ||
+    activeSubjects.some(s => s.topics.some(t => t.wrongAnswers?.length)) ||
+    (data.academicEvents?.length > 0) ||
+    alerts.length > 0;
+
+  // Count adaptive cards for grid sizing
+  const adaptiveCardCount = 1 + // ActionPanel always
+    (nextExamReadiness ? 1 : 0) +
+    (fsrsReviews.length > 0 ? 1 : 0) +
+    (hasAttention ? 1 : 0);
+
+  const gridCols = adaptiveCardCount <= 1 ? 'grid-cols-1'
+    : adaptiveCardCount === 2 ? 'grid-cols-1 md:grid-cols-2'
+    : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   if (isLoading) {
     return (
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         <div className="h-8 w-64 bg-slate-800/50 rounded animate-pulse" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-32 bg-slate-800/30 rounded-xl animate-pulse" />
-          ))}
-        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
           <div className="h-48 bg-slate-800/30 rounded-xl animate-pulse" />
@@ -122,12 +112,11 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-5">
-      {/* ROW 0: Enhanced Header */}
+      {/* ROW 0: Header */}
       <PageHeader
         onAddClick={() => setShowAddSubject(true)}
         currentStreak={currentStreak}
         level={analyticsSummary.level}
-        xpTotal={analyticsSummary.xpTotal}
         totalQuizzes={analyticsSummary.totalQuizzes}
         avgScore={analyticsSummary.averageQuizScore}
       />
@@ -135,14 +124,7 @@ export default function Dashboard() {
       {/* ROW 1: Continue Study (conditional) */}
       <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
 
-      {/* ROW 2: Command Center */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <ExamReadinessWidget readiness={nextExamReadiness} />
-        <FSRSReviewWidget reviews={fsrsReviews} />
-        <QuickActionsRow subjects={activeSubjects} />
-      </div>
-
-      {/* ROW 3: Study Progress */}
+      {/* ROW 2: Study Progress */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         <div className="md:col-span-7">
           <WeeklyBarChart
@@ -155,45 +137,44 @@ export default function Dashboard() {
           <StudyProgressPanel
             timerSessions={data.timerSessions}
             studyGoals={data.studyGoals}
-            dailyGoalMinutes={data.studyGoals.dailyMinutes}
             currentStreak={currentStreak}
             longestStreak={longestStreak}
           />
         </div>
       </div>
 
-      {/* ROW 4: Goals & Attention */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-        <div className="md:col-span-5">
-          <DailyGoalsChecklist
-            goals={data.dailyGoals || []}
-            onAddGoal={addDailyGoal}
-            onToggleGoal={toggleDailyGoal}
-            onDeleteGoal={deleteDailyGoal}
-          />
-        </div>
-        <div className="md:col-span-7">
+      {/* ROW 3: Adaptive grid — only renders widgets that have data */}
+      <div className={`grid ${gridCols} gap-4`}>
+        <ActionPanel
+          subjects={activeSubjects}
+          goals={data.dailyGoals || []}
+          onAddGoal={addDailyGoal}
+          onToggleGoal={toggleDailyGoal}
+          onDeleteGoal={deleteDailyGoal}
+        />
+        <ExamReadinessWidget readiness={nextExamReadiness} />
+        <FSRSReviewWidget reviews={fsrsReviews} />
+        {hasAttention && (
           <AttentionPanel
             healthStatuses={subjectHealthStatuses || []}
             subjects={activeSubjects}
             events={data.academicEvents || []}
+            alerts={alerts}
           />
-        </div>
+        )}
       </div>
 
-      {/* ROW 5: Subjects */}
+      {/* ROW 4: Subjects */}
       <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
-      {alerts.length > 0 && <AlertsSection alerts={alerts} />}
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
     </div>
   );
 }
 
-function PageHeader({ onAddClick, currentStreak, level, xpTotal, totalQuizzes, avgScore }: {
+function PageHeader({ onAddClick, currentStreak, level, totalQuizzes, avgScore }: {
   onAddClick: () => void;
   currentStreak: number;
   level: number;
-  xpTotal: number;
   totalQuizzes: number;
   avgScore: number;
 }) {
@@ -204,7 +185,6 @@ function PageHeader({ onAddClick, currentStreak, level, xpTotal, totalQuizzes, a
         <p className="text-sm text-slate-500 font-mono mt-1">Общ преглед на прогреса</p>
       </div>
       <div className="flex items-center gap-3">
-        {/* Inline stat badges */}
         <div className="hidden md:flex items-center gap-2">
           {currentStreak > 0 && (
             <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 text-xs font-mono font-medium">
@@ -228,8 +208,6 @@ function PageHeader({ onAddClick, currentStreak, level, xpTotal, totalQuizzes, a
     </div>
   );
 }
-
-
 
 function SubjectsSection({ subjects, onAddClick }: SubjectsSectionProps) {
   if (subjects.length === 0) {
@@ -284,20 +262,3 @@ function SubjectCard({ subject }: SubjectCardProps) {
     </Link>
   );
 }
-
-function AlertsSection({ alerts }: AlertsSectionProps) {
-  return (
-    <div className="p-6 rounded-xl bg-red-900/20 border border-red-800/30">
-      <h2 className="text-lg font-semibold text-red-400 font-mono mb-4 flex items-center gap-2"><AlertTriangle size={20} />Внимание</h2>
-      <ul className="space-y-2">
-        {alerts.map((a, i) => (
-          <li key={i} className="flex items-center gap-3">
-            <span className={"w-2 h-2 rounded-full " + (a.type === "critical" ? "bg-red-500" : a.type === "warning" ? "bg-orange-500" : "bg-blue-500")} />
-            <span className="text-slate-300 font-mono text-sm">{a.message}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-

@@ -144,13 +144,13 @@ export async function getCollectionStats(selectedDecks?: string[]): Promise<Coll
   try {
     const deckNames = await getDeckNames();
 
-    // If no decks selected, use all decks
+    // If no decks selected, use only top-level decks (not subdecks)
     const decksToUse = selectedDecks && selectedDecks.length > 0
       ? selectedDecks
-      : deckNames;
+      : deckNames.filter(n => !n.includes('::'));
 
-    // Build query for selected decks
-    const deckQuery = decksToUse.map(d => `"deck:${d}"`).join(' OR ');
+    // Build query with correct Anki syntax: deck:"Name" not "deck:Name"
+    const deckQuery = decksToUse.map(d => `deck:"${d}"`).join(' OR ');
 
     const allCards = await invoke<number[]>('findCards', { query: deckQuery });
     const dueCards = await invoke<number[]>('findCards', { query: `(${deckQuery}) is:due` });

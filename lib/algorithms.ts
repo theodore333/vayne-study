@@ -850,11 +850,11 @@ export function calculatePredictedGrade(
     statusCounts.orange * 0.3
   ) / totalTopics;
 
-  // 2. Mastery Score - average quiz grade
-  const gradedTopics = topics.filter(t => t.avgGrade !== null);
+  // 2. Mastery Score - average quiz grade (0 when no data, not 3.5)
+  const gradedTopics = topics.filter(t => t.avgGrade != null && t.avgGrade > 0);
   const avgQuizGrade = gradedTopics.length > 0
     ? gradedTopics.reduce((sum, t) => sum + (t.avgGrade || 0), 0) / gradedTopics.length
-    : 3.5;
+    : 0;
 
   // 3. Consistency Score - topics reviewed in last 7 days
   const recentlyReviewedCount = topics.filter(t => {

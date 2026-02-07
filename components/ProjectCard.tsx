@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp, Check, Circle, Clock, Lightbulb, MoreVertical, Trash2, Edit2, Pause, Play, CheckCircle, Brain } from 'lucide-react';
+import { ChevronDown, ChevronUp, Check, Circle, Clock, Lightbulb, MoreVertical, Trash2, Edit2, Pause, Play, CheckCircle, Brain, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 import { DevelopmentProject, ProjectModule, ProjectStatus } from '@/lib/types';
 import { PROJECT_TYPE_CONFIG, PROJECT_CATEGORY_CONFIG, PROJECT_PRIORITY_CONFIG } from '@/lib/constants';
 import { useApp } from '@/lib/context';
@@ -74,9 +75,15 @@ export default function ProjectCard({ project, onEdit }: ProjectCardProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">{typeConfig.icon}</span>
-              <h3 className="text-base font-semibold text-slate-100 font-mono truncate">
+              <Link
+                href={`/projects/${project.id}`}
+                className="text-base font-semibold text-slate-100 font-mono truncate hover:text-cyan-400 transition-colors"
+              >
                 {project.name}
-              </h3>
+              </Link>
+              <Link href={`/projects/${project.id}`} className="text-slate-500 hover:text-cyan-400 transition-colors shrink-0">
+                <ExternalLink size={14} />
+              </Link>
             </div>
 
             {/* Badges */}

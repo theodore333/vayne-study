@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Rocket, Plus, Trash2, GripVertical } from 'lucide-react';
+import { X, Rocket, Plus, Trash2, GripVertical, Sparkles } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { PROJECT_TYPE_CONFIG, PROJECT_CATEGORY_CONFIG } from '@/lib/constants';
-import { DevelopmentProject, ProjectType, ProjectCategory, ProjectPriority, ProjectModule } from '@/lib/types';
+import { DevelopmentProject, ProjectType, ProjectCategory, ProjectPriority, ProjectModule, TopicSize } from '@/lib/types';
+import AIProjectPlannerModal from './AIProjectPlannerModal';
 
 interface Props {
   onClose: () => void;
@@ -25,6 +26,7 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
   // Module management (for new projects)
   const [newModules, setNewModules] = useState<Array<{ title: string; order: number }>>([]);
   const [newModuleTitle, setNewModuleTitle] = useState('');
+  const [showAIPlanner, setShowAIPlanner] = useState(false);
 
   // Close on Escape
   useEffect(() => {
@@ -266,9 +268,19 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
 
           {/* Modules */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
-              Модули / Раздели
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-slate-300 font-mono">
+                Модули / Раздели
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowAIPlanner(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 rounded-lg transition-colors text-xs font-mono"
+              >
+                <Sparkles size={13} />
+                AI Планер
+              </button>
+            </div>
 
             {/* Existing modules (edit mode) */}
             {editProject && editProject.modules.length > 0 && (
@@ -353,6 +365,49 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
           </button>
         </form>
       </div>
+      {/* AI Planner Modal */}
+      {showAIPlanner && (
+        <AIProjectPlannerModal
+          onClose={() => setShowAIPlanner(false)}
+          onConfirm={(modules) => {
+            if (editProject) {
+              // Add to existing project
+              modules.forEach((mod, i) => {
+                addProjectModule(editProject.id, {
+                  title: mod.title,
+                  order: editProject.modules.length + i + 1,
+                  status: 'available',
+                  material: '',
+                  materialImages: [],
+                  grades: [],
+                  avgGrade: null,
+                  quizCount: 0,
+                  quizHistory: [],
+                  currentBloomLevel: 1,
+                  lastReview: null,
+                  wrongAnswers: [],
+                  readCount: 0,
+                  lastRead: null,
+                  size: mod.suggestedSize,
+                  sizeSetBy: 'ai',
+                  highlights: []
+                });
+              });
+            } else {
+              // Add to new modules list
+              setNewModules(prev => [
+                ...prev,
+                ...modules.map((m, i) => ({ title: m.title, order: prev.length + i + 1 }))
+              ]);
+            }
+          }}
+          projectType={type}
+          existingModules={editProject
+            ? editProject.modules.map(m => m.title)
+            : newModules.map(m => m.title)
+          }
+        />
+      )}
     </div>
   );
 }

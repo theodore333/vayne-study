@@ -1,6 +1,7 @@
 'use client';
 
-import { AlertTriangle, Eye } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Eye, X } from 'lucide-react';
 import SubjectHealthIndicator from './SubjectHealthIndicator';
 import WeaknessWidget from './WeaknessWidget';
 import AcademicEventsWidget from './AcademicEventsWidget';
@@ -19,28 +20,78 @@ interface AttentionPanelProps {
   alerts?: Alert[];
 }
 
+const DISMISSED_KEY = 'vayne-dismissed-alerts';
+
+function getDismissedAlerts(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function setDismissedAlerts(dismissed: Record<string, string>) {
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed));
+}
+
 export default function AttentionPanel({ healthStatuses, subjects, events, alerts = [] }: AttentionPanelProps) {
+  const [dismissed, setDismissed] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const stored = getDismissedAlerts();
+    // Clean up dismissals older than 24h
+    const now = Date.now();
+    const cleaned: Record<string, string> = {};
+    for (const [key, ts] of Object.entries(stored)) {
+      if (now - new Date(ts).getTime() < 24 * 60 * 60 * 1000) {
+        cleaned[key] = ts;
+      }
+    }
+    if (Object.keys(cleaned).length !== Object.keys(stored).length) {
+      setDismissedAlerts(cleaned);
+    }
+    setDismissed(cleaned);
+  }, []);
+
+  const dismissAlert = (alertKey: string) => {
+    const updated = { ...dismissed, [alertKey]: new Date().toISOString() };
+    setDismissed(updated);
+    setDismissedAlerts(updated);
+  };
+
+  // Filter out dismissed alerts; critical alerts CANNOT be dismissed
+  const visibleAlerts = alerts.filter(a => {
+    if (a.type === 'critical') return true;
+    return !dismissed[a.message];
+  });
+
   const hasHealth = healthStatuses.length > 0;
   const hasWeaknesses = subjects.some(s => s.topics.some(t => t.wrongAnswers?.length));
   const hasEvents = events.length > 0;
-  const hasAlerts = alerts.length > 0;
+  const hasAlerts = visibleAlerts.length > 0;
   const hasAnything = hasHealth || hasWeaknesses || hasEvents || hasAlerts;
 
-  // Return null when nothing to show — no more "Всичко е наред!" wasting space
   if (!hasAnything) return null;
 
   const sections: React.ReactNode[] = [];
 
-  // Alerts first (most important)
   if (hasAlerts) {
     sections.push(
       <div key="alerts" className="space-y-1.5">
-        {alerts.map((a, i) => (
-          <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50">
+        {visibleAlerts.map((a, i) => (
+          <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-slate-800/50 group">
             <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
               a.type === 'critical' ? 'bg-red-500' : a.type === 'warning' ? 'bg-orange-500' : 'bg-blue-500'
             }`} />
-            <span className="text-xs text-slate-300 font-mono">{a.message}</span>
+            <span className="flex-1 text-xs text-slate-300 font-mono">{a.message}</span>
+            {a.type !== 'critical' && (
+              <button
+                onClick={() => dismissAlert(a.message)}
+                className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-slate-700 rounded transition-all"
+                title="Скрий за 24ч"
+              >
+                <X size={12} className="text-slate-500 hover:text-slate-300" />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -72,7 +123,7 @@ export default function AttentionPanel({ healthStatuses, subjects, events, alert
         <span className="text-sm font-semibold text-slate-300 font-mono">Внимание</span>
         {hasAlerts && (
           <span className="px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-mono">
-            {alerts.length}
+            {visibleAlerts.length}
           </span>
         )}
       </div>

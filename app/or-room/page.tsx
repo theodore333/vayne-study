@@ -4,16 +4,17 @@ import { useState, useEffect, Suspense, useCallback, useRef } from 'react';
 import {
   Scissors, Play, ArrowLeft, Send, CheckCircle, Clock,
   ChevronRight, AlertCircle, User, Syringe, Activity,
-  ClipboardList, Shield, BookOpen
+  ClipboardList, Shield, BookOpen, Camera
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import {
   OR_STEPS, ORStep, InteractiveORCase, ORMessage, ORStepEvaluation,
-  SuggestedImage
+  SuggestedImage, TopicImage
 } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import { generateId } from '@/lib/algorithms';
+import { saveImage, getImagesForTopic, deleteImage, resizeImage } from '@/lib/image-storage';
 
 // Demo OR case for testing without API key
 const DEMO_CASE: InteractiveORCase = {
@@ -382,10 +383,26 @@ function ORRoomContent() {
     // Build student data for evaluation
     let studentData: Record<string, unknown> = {};
 
+    // Briefing has no student input to evaluate — auto-pass
+    if (step === 'briefing') {
+      setIsEvaluating(false);
+      const briefingEval: ORStepEvaluation = {
+        step: 'briefing',
+        score: 100,
+        feedback: 'Запознахте се с брифинга. Продължете към подготовката на операцията.',
+        strengths: ['Прочетохте информацията за пациента'],
+        areasToImprove: [],
+        timestamp: new Date().toISOString()
+      };
+      setActiveCase(prev => prev ? {
+        ...prev,
+        evaluations: [...prev.evaluations, briefingEval]
+      } : null);
+      setStepCompleted(true);
+      return;
+    }
+
     switch (step) {
-      case 'briefing':
-        studentData = { confirmed: true };
-        break;
       case 'setup':
         studentData = { anesthesiaType, positioning, teamConfirmed };
         // Save choices
@@ -757,7 +774,7 @@ function ORRoomContent() {
                     )}
                     {/* Suggested images per step */}
                     {ev.suggestedImages && ev.suggestedImages.length > 0 && (
-                      <SuggestedImagesCard images={ev.suggestedImages} />
+                      <SuggestedImagesCard images={ev.suggestedImages} topicId={activeCase.topicId} subjectId={activeCase.subjectId} />
                     )}
                   </div>
                 );
@@ -824,7 +841,7 @@ function ORRoomContent() {
 
               {/* Summary suggested images */}
               {(finalSummary.suggestedImages as SuggestedImage[])?.length > 0 && (
-                <SuggestedImagesCard images={finalSummary.suggestedImages as SuggestedImage[]} />
+                <SuggestedImagesCard images={finalSummary.suggestedImages as SuggestedImage[]} topicId={activeCase.topicId} subjectId={activeCase.subjectId} />
               )}
             </div>
           )}
@@ -1169,7 +1186,7 @@ function ORRoomContent() {
                       </div>
                     )}
                     {lastEval.suggestedImages && lastEval.suggestedImages.length > 0 && (
-                      <SuggestedImagesCard images={lastEval.suggestedImages} />
+                      <SuggestedImagesCard images={lastEval.suggestedImages} topicId={activeCase.topicId} subjectId={activeCase.subjectId} />
                     )}
                   </div>
                 );
@@ -1193,7 +1210,7 @@ function ORRoomContent() {
                 ) : (
                   <>
                     <CheckCircle size={18} />
-                    Завърши стъпката
+                    {step === 'briefing' ? 'Прочетох, продължавам' : 'Завърши стъпката'}
                   </>
                 )}
               </button>
@@ -1365,8 +1382,12 @@ function ORRoomContent() {
   );
 }
 
-// Suggested Images Card component
-function SuggestedImagesCard({ images }: { images: SuggestedImage[] }) {
+// Suggested Images Card component with upload
+function SuggestedImagesCard({ images, topicId, subjectId }: { images: SuggestedImage[]; topicId: string; subjectId: string }) {
+  const [uploadedImages, setUploadedImages] = useState<TopicImage[]>([]);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
+  const fileInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
   const typeLabels: Record<string, string> = {
     ecg: 'ЕКГ',
     anatomy: 'Анатомия',
@@ -1383,31 +1404,113 @@ function SuggestedImagesCard({ images }: { images: SuggestedImage[] }) {
     pathology: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
   };
 
+  // Load existing uploaded images for this topic
+  useEffect(() => {
+    if (!topicId) return;
+    getImagesForTopic(topicId).then(setUploadedImages);
+  }, [topicId]);
+
+  const handleUpload = async (idx: number, suggestion: SuggestedImage) => {
+    const file = fileInputRefs.current[idx]?.files?.[0];
+    if (!file) return;
+    try {
+      const data = await resizeImage(file);
+      const img: TopicImage = {
+        id: crypto.randomUUID(),
+        topicId,
+        subjectId,
+        type: suggestion.type,
+        description: suggestion.description,
+        data,
+        createdAt: new Date().toISOString()
+      };
+      await saveImage(img);
+      setUploadedImages(prev => [...prev, img]);
+    } catch (err) {
+      console.error('Image upload failed:', err);
+    }
+    if (fileInputRefs.current[idx]) fileInputRefs.current[idx]!.value = '';
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteImage(id);
+    setUploadedImages(prev => prev.filter(img => img.id !== id));
+  };
+
   return (
-    <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-      <h5 className="text-sm font-medium text-amber-400 mb-2 flex items-center gap-2">
-        <Shield size={14} /> Предложени изображения за качване
-      </h5>
-      <div className="space-y-2">
-        {images.map((img, i) => (
-          <div key={i} className="flex items-start gap-3 bg-slate-900/30 rounded-lg p-3">
-            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${typeColors[img.type] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>
-              {typeLabels[img.type] || img.type}
-            </span>
-            <p className="text-slate-300 text-sm flex-1">{img.description}</p>
-            {img.topicId && (
-              <Link
-                href={`/subjects?id=${img.subjectId}`}
-                className="text-amber-400 text-xs hover:underline flex-shrink-0"
-              >
-                Отвори тема
-              </Link>
-            )}
-          </div>
-        ))}
+    <>
+      <div className="mt-3 bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
+        <h5 className="text-sm font-medium text-amber-400 mb-2 flex items-center gap-2">
+          <Shield size={14} /> Изображения за учене
+        </h5>
+        <div className="space-y-3">
+          {images.map((img, i) => {
+            const matchingImages = uploadedImages.filter(u => u.type === img.type && u.description === img.description);
+            return (
+              <div key={i} className="bg-slate-900/30 rounded-lg p-3">
+                <div className="flex items-start gap-3">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${typeColors[img.type] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>
+                    {typeLabels[img.type] || img.type}
+                  </span>
+                  <p className="text-slate-300 text-sm flex-1">{img.description}</p>
+                  <button
+                    onClick={() => fileInputRefs.current[i]?.click()}
+                    className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs rounded-lg border border-amber-500/30 transition-colors flex-shrink-0 flex items-center gap-1"
+                  >
+                    <Camera size={12} />
+                    Качи
+                  </button>
+                  <input
+                    ref={el => { fileInputRefs.current[i] = el; }}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={() => handleUpload(i, img)}
+                  />
+                </div>
+                {matchingImages.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {matchingImages.map(uploaded => (
+                      <div key={uploaded.id} className="relative group">
+                        <img
+                          src={uploaded.data}
+                          alt={uploaded.description}
+                          className="h-24 rounded-lg border border-slate-600 cursor-pointer hover:border-amber-400 transition-colors object-cover"
+                          onClick={() => setZoomImage(uploaded.data)}
+                        />
+                        <button
+                          onClick={() => handleDelete(uploaded.id)}
+                          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-amber-400/60 text-xs mt-2">Качете изображения за по-добро визуално учене.</p>
       </div>
-      <p className="text-amber-400/60 text-xs mt-2">Качете тези изображения в материалите си за визуално учене.</p>
-    </div>
+
+      {/* Fullscreen zoom modal */}
+      {zoomImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center cursor-pointer"
+          onClick={() => setZoomImage(null)}
+        >
+          <img src={zoomImage} alt="Zoom" className="max-w-[95vw] max-h-[95vh] object-contain rounded-lg" />
+          <button
+            className="absolute top-4 right-4 w-10 h-10 bg-slate-800 rounded-full text-white text-xl flex items-center justify-center hover:bg-slate-700"
+            onClick={() => setZoomImage(null)}
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

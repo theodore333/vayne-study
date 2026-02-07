@@ -4,9 +4,10 @@
  */
 
 const DB_NAME = 'vayne-study-db';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const MATERIALS_STORE = 'materials';
 const BACKUPS_STORE = 'backups';
+export const IMAGES_STORE = 'images';
 const MAX_AUTO_BACKUPS = 7;
 
 let dbInstance: IDBDatabase | null = null;
@@ -15,7 +16,7 @@ let dbInitPromise: Promise<IDBDatabase> | null = null;
 /**
  * Initialize the IndexedDB database
  */
-function initDB(): Promise<IDBDatabase> {
+export function initDB(): Promise<IDBDatabase> {
   if (dbInstance) return Promise.resolve(dbInstance);
   if (dbInitPromise) return dbInitPromise;
 
@@ -49,6 +50,13 @@ function initDB(): Promise<IDBDatabase> {
       // Create backups store (added in v2)
       if (!db.objectStoreNames.contains(BACKUPS_STORE)) {
         db.createObjectStore(BACKUPS_STORE, { keyPath: 'id' });
+      }
+
+      // Create images store (added in v3)
+      if (!db.objectStoreNames.contains(IMAGES_STORE)) {
+        const imgStore = db.createObjectStore(IMAGES_STORE, { keyPath: 'id' });
+        imgStore.createIndex('topicId', 'topicId', { unique: false });
+        imgStore.createIndex('type', 'type', { unique: false });
       }
     };
   });

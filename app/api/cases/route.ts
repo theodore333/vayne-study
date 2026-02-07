@@ -230,7 +230,7 @@ async function handlePatientResponse(anthropic: Anthropic, body: {
   const genderWord = presentation.gender === 'male' ? 'мъж' : 'жена';
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.haiku.id, // Fast and cheap for chat
+    model: MODEL_MAP.opus.id,
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -260,8 +260,8 @@ ${historyText || '(начало на разговора)'}
   const textContent = response.content.find(c => c.type === 'text');
   const patientResponse = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.haiku.inputCost +
-                response.usage.output_tokens * MODEL_MAP.haiku.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     response: patientResponse,
@@ -303,7 +303,7 @@ async function handleRevealExam(anthropic: Anthropic, body: {
 
   // Use Haiku for formatting (quick and cheap)
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.haiku.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -321,8 +321,8 @@ ${findings.map(f => `${f.system}: ${f.finding} (${f.isNormal ? 'норма' : '�
   const textContent = response.content.find(c => c.type === 'text');
   const formattedFindings = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.haiku.inputCost +
-                response.usage.output_tokens * MODEL_MAP.haiku.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     findings,
@@ -345,7 +345,7 @@ async function handleProcessInvestigation(anthropic: Anthropic, body: {
   const { investigation, caseContext, presentation, actualDiagnosis } = body;
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.sonnet.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -399,8 +399,8 @@ suggestedImages - предложи 1-2 изображения (ЕКГ, рент�
     };
   }
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.sonnet.inputCost +
-                response.usage.output_tokens * MODEL_MAP.sonnet.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     ...result,
@@ -428,7 +428,7 @@ async function handleEvaluateDdx(anthropic: Anthropic, body: {
     .join('\n');
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.sonnet.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 1000,
     messages: [{
       role: 'user',
@@ -478,8 +478,8 @@ ${studentDdxText}
     return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.sonnet.inputCost +
-                response.usage.output_tokens * MODEL_MAP.sonnet.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     evaluation,
@@ -501,7 +501,7 @@ async function handleEvaluateDiagnosis(anthropic: Anthropic, body: {
   const { studentDiagnosis, actualDiagnosis, studentDdx, caseContext } = body;
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.sonnet.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -540,8 +540,8 @@ DDx на студента: ${studentDdx.map(d => d.diagnosis).join(', ')}
     return NextResponse.json({ error: 'Грешка при оценка' }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.sonnet.inputCost +
-                response.usage.output_tokens * MODEL_MAP.sonnet.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     evaluation,
@@ -935,7 +935,7 @@ ${keyAnatomy?.join('\n') || 'N/A'}
 Току-що възникна усложнение! Опиши какво виждаш/се случва. Чакай студента да реагира. Оценявай действията му.`;
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.haiku.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 600,
     messages: [{
       role: 'user',
@@ -964,8 +964,8 @@ ${historyText || '(начало)'}
   const textContent = response.content.find(c => c.type === 'text');
   const surgeonResponse = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.haiku.inputCost +
-                response.usage.output_tokens * MODEL_MAP.haiku.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     response: surgeonResponse,
@@ -1037,7 +1037,7 @@ ${pharmacologyMaterial ? `\nФАРМАКОЛОГИЧЕН МАТЕРИАЛ:\n${ph
   };
 
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.sonnet.id,
+    model: MODEL_MAP.opus.id,
     max_tokens: 1500,
     messages: [{
       role: 'user',
@@ -1092,8 +1092,8 @@ ${stepPrompts[step] || 'Оцени представянето на студен�
     return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.sonnet.inputCost +
-                response.usage.output_tokens * MODEL_MAP.sonnet.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
+                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
 
   return NextResponse.json({
     evaluation,

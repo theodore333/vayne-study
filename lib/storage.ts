@@ -592,10 +592,12 @@ export async function clearData(): Promise<void> {
   materialsCacheLoaded = false;
   materialsCachePromise = null;
 
-  // Clear IndexedDB materials ONLY (keep backups store)
+  // Clear IndexedDB materials and images (keep backups store)
   try {
     const { clearMaterialsStore } = await import('./indexeddb-storage');
     await clearMaterialsStore();
+    const { clearImagesStore } = await import('./image-storage');
+    await clearImagesStore();
   } catch {
     // IndexedDB not available
   }

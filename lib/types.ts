@@ -594,6 +594,16 @@ export interface SuggestedImage {
   type: 'ecg' | 'anatomy' | 'imaging' | 'instrument' | 'pathology';
 }
 
+export interface TopicImage {
+  id: string;
+  topicId: string;
+  subjectId: string;
+  type: 'ecg' | 'anatomy' | 'imaging' | 'instrument' | 'pathology';
+  description: string;
+  data: string; // base64 data URI
+  createdAt: string;
+}
+
 // Case difficulty
 export type CaseDifficulty = 'beginner' | 'intermediate' | 'advanced';
 

@@ -580,6 +580,12 @@ export async function clearData(): Promise<void> {
   localStorage.removeItem(MATERIALS_KEY);
   localStorage.removeItem(COMPRESSED_FLAG);
   localStorage.removeItem('vayne-last-decay-date');
+  localStorage.removeItem('vayne-last-backup');
+  localStorage.removeItem('vayne-dismissed-alerts');
+  localStorage.removeItem('vayne-sidebar-expanded');
+  localStorage.removeItem('vayne-study-backup-corrupted');
+  localStorage.removeItem('vayne-idb-migrated');
+  // Note: claude-api-key and anki-* are intentionally kept (user config)
 
   // Reset in-memory materials cache
   materialsCache = {};

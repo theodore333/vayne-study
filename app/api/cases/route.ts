@@ -8,6 +8,31 @@ const MODEL_MAP = {
   haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 0.8, outputCost: 4 }
 };
 
+// Repair truncated JSON by closing open brackets/braces
+function repairTruncatedJson(text: string): string {
+  // Remove trailing incomplete string value
+  text = text.replace(/,\s*"[^"]*$/, '');
+  text = text.replace(/:\s*"[^"]*$/, ': ""');
+  // Count open vs close
+  const opens: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{' || ch === '[') opens.push(ch);
+    if (ch === '}' || ch === ']') opens.pop();
+  }
+  // Close remaining open brackets
+  while (opens.length > 0) {
+    const last = opens.pop();
+    text += last === '{' ? '}' : ']';
+  }
+  return text;
+}
+
 // Subject type prompts for case generation
 const SUBJECT_TYPE_CASE_PROMPTS: Record<string, string> = {
   preclinical: `Създай случай, който демонстрира патофизиологичните механизми.
@@ -109,7 +134,7 @@ async function handleGenerateCase(anthropic: Anthropic, body: {
 
   const response = await anthropic.messages.create({
     model: MODEL_MAP.opus.id,
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{
       role: 'user',
       content: `Ти си медицински преподавател, който създава интерактивен клиничен случай за български студент по медицина.
@@ -190,15 +215,27 @@ ${pharmacologyTopics.map(t => `- "${t.name}" (id: "${t.id}", subjectId: "${t.sub
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  // Auto-repair truncated JSON
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let caseData;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     caseData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({
-      error: 'Грешка при парсване на случая',
-      raw: responseText.substring(0, 500)
-    }, { status: 500 });
+    // Try repair even if stop_reason wasn't max_tokens
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      caseData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({
+        error: 'Грешка при парсване на случая',
+        raw: responseText.substring(0, 500)
+      }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
@@ -789,7 +826,7 @@ async function handleGenerateORCase(anthropic: Anthropic, body: {
 
   const response = await anthropic.messages.create({
     model: MODEL_MAP.opus.id,
-    max_tokens: 4096,
+    max_tokens: 8192,
     messages: [{
       role: 'user',
       content: `Ти си хирургичен преподавател, който създава интерактивна операционна симулация за български студент по медицина.
@@ -881,15 +918,26 @@ ${anatomySection}
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  // Auto-repair truncated JSON
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let caseData;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     caseData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({
-      error: 'Грешка при парсване на случая',
-      raw: responseText.substring(0, 500)
-    }, { status: 500 });
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      caseData = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({
+        error: 'Грешка при парсване на случая',
+        raw: responseText.substring(0, 500)
+      }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +

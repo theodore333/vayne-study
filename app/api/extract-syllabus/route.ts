@@ -23,35 +23,42 @@ export async function POST(request: NextRequest) {
       const match = file.match(/^data:([^;]+);base64,(.+)$/);
       if (!match) continue;
 
-      const mediaType = match[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+      const mediaType = match[1];
       const base64Data = match[2];
 
-      // Check if it's an image
-      if (mediaType.startsWith('image/')) {
+      if (mediaType === 'application/pdf') {
+        // Claude API supports PDF natively via document type
+        content.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf' as const,
+            data: base64Data
+          }
+        } as any);
+      } else if (mediaType.startsWith('image/')) {
         content.push({
           type: 'image',
           source: {
             type: 'base64',
-            media_type: mediaType,
+            media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
             data: base64Data
           }
         });
       }
-      // For PDFs, we'd need different handling - for now, just note it
-      // PDF support would require pdf-parse or similar
     }
 
     // Add the extraction prompt
     content.push({
       type: 'text',
-      text: `Ти си OCR система. Твоята единствена задача е да ТРАНСКРИБИРАШ текста от ${files.length > 1 ? 'тези изображения' : 'това изображение'}.
+      text: `Ти си OCR система. Твоята единствена задача е да ТРАНСКРИБИРАШ текста от ${files.length > 1 ? 'тези документи' : 'този документ'}.
 
 КРИТИЧНО ВАЖНИ ПРАВИЛА:
 1. САМО ТРАНСКРИБИРАЙ - копирай ДОСЛОВНО текста който виждаш
 2. НЕ ИЗМИСЛЯЙ нищо - ако не можеш да прочетеш дума, напиши [нечетливо]
 3. НЕ ДОБАВЯЙ теми от собствени познания - само това което е НАПИСАНО в изображението
 4. НЕ ДОПЪЛВАЙ непълни теми - остави ги както са
-5. Ако изображението е размазано или нечетливо, кажи "Изображението е нечетливо"
+5. Ако документът е размазан или нечетлив, кажи "Документът е нечетлив"
 
 Ако има секции (напр. "Практичен изпит", "Теоритичен изпит"), маркирай ги с ##
 

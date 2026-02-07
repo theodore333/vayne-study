@@ -1,6 +1,36 @@
 import { initDB, IMAGES_STORE } from './indexeddb-storage';
 import type { TopicImage } from './types';
 
+// Common stop words to exclude from auto-tags
+const STOP_WORDS = new Set(['на', 'в', 'за', 'от', 'по', 'с', 'и', 'до', 'при', 'към', 'без', 'след', 'между', 'под', 'над', 'чрез', 'a', 'the', 'of', 'for', 'in', 'with', 'and', 'or', '-', '–', '—']);
+
+/**
+ * Extract searchable tags from a description
+ * e.g. "Лапароскопски инструменти - грасер, ендолупи" → ["лапароскопски", "инструменти", "грасер", "ендолупи"]
+ */
+export function extractTags(description: string): string[] {
+  return description
+    .toLowerCase()
+    .replace(/[().,;:!?"""'']/g, ' ')
+    .split(/[\s,\-–—/]+/)
+    .map(w => w.trim())
+    .filter(w => w.length >= 2 && !STOP_WORDS.has(w));
+}
+
+/**
+ * Check if an image matches a suggestion by tag overlap
+ */
+export function imageMatchesSuggestion(image: TopicImage, suggestionDesc: string, suggestionType: string): boolean {
+  // Must match type
+  if (image.type !== suggestionType) return false;
+  // If same topic, always match by type alone
+  // For cross-topic matching, need tag overlap
+  const suggestionTags = extractTags(suggestionDesc);
+  const imageTags = image.tags || extractTags(image.description);
+  // At least 1 meaningful tag overlap
+  return imageTags.some(t => suggestionTags.includes(t));
+}
+
 /**
  * Resize an image file to max width and return as base64 data URI
  */
@@ -77,6 +107,25 @@ export async function getImagesForTopic(topicId: string, type?: string): Promise
     });
   } catch (err) {
     console.error('getImagesForTopic exception:', err);
+    return [];
+  }
+}
+
+/**
+ * Get ALL images from IndexedDB (for cross-topic matching)
+ */
+export async function getAllImages(): Promise<TopicImage[]> {
+  try {
+    const db = await initDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IMAGES_STORE, 'readonly');
+      const store = tx.objectStore(IMAGES_STORE);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result as TopicImage[]);
+      req.onerror = () => { console.error('getAllImages error:', req.error); resolve([]); };
+    });
+  } catch (err) {
+    console.error('getAllImages exception:', err);
     return [];
   }
 }

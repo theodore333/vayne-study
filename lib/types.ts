@@ -600,6 +600,7 @@ export interface TopicImage {
   subjectId: string;
   type: 'ecg' | 'anatomy' | 'imaging' | 'instrument' | 'pathology';
   description: string;
+  tags: string[]; // searchable keywords (e.g. ["лапароскопия", "инструменти", "грасер"])
   data: string; // base64 data URI
   createdAt: string;
 }

@@ -14,7 +14,7 @@ import {
 } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import { generateId } from '@/lib/algorithms';
-import { saveImage, getImagesForTopic, deleteImage, resizeImage } from '@/lib/image-storage';
+import { saveImage, getAllImages, deleteImage, resizeImage, extractTags, imageMatchesSuggestion } from '@/lib/image-storage';
 
 // Demo OR case for testing without API key
 const DEMO_CASE: InteractiveORCase = {
@@ -1408,23 +1408,24 @@ function SuggestedImagesCard({ images, topicId, subjectId }: { images: Suggested
     pathology: 'bg-orange-500/20 text-orange-300 border-orange-500/30'
   };
 
-  // Load existing uploaded images for this topic
+  // Load ALL images (cross-topic matching by tags)
   useEffect(() => {
-    if (!topicId) return;
-    getImagesForTopic(topicId).then(setUploadedImages);
-  }, [topicId]);
+    getAllImages().then(setUploadedImages);
+  }, []);
 
   const handleUpload = async (idx: number, suggestion: SuggestedImage) => {
     const file = fileInputRefs.current[idx]?.files?.[0];
     if (!file) return;
     try {
       const data = await resizeImage(file);
+      const tags = extractTags(suggestion.description);
       const img: TopicImage = {
         id: crypto.randomUUID(),
         topicId,
         subjectId,
         type: suggestion.type,
         description: suggestion.description,
+        tags,
         data,
         createdAt: new Date().toISOString()
       };
@@ -1449,7 +1450,10 @@ function SuggestedImagesCard({ images, topicId, subjectId }: { images: Suggested
         </h5>
         <div className="space-y-3">
           {images.map((img, i) => {
-            const matchingImages = uploadedImages.filter(u => u.type === img.type && u.description === img.description);
+            const matchingImages = uploadedImages.filter(u =>
+              (u.topicId === topicId && u.type === img.type) ||
+              imageMatchesSuggestion(u, img.description, img.type)
+            );
             return (
               <div key={i} className="bg-slate-900/30 rounded-lg p-3">
                 <div className="flex items-start gap-3">
@@ -1488,6 +1492,13 @@ function SuggestedImagesCard({ images, topicId, subjectId }: { images: Suggested
                         >
                           ×
                         </button>
+                        {uploaded.tags && uploaded.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-0.5 mt-1 max-w-[120px]">
+                            {uploaded.tags.slice(0, 3).map((tag, ti) => (
+                              <span key={ti} className="px-1 py-0 bg-slate-700/80 text-slate-400 text-[9px] rounded">{tag}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1496,6 +1507,44 @@ function SuggestedImagesCard({ images, topicId, subjectId }: { images: Suggested
             );
           })}
         </div>
+
+        {/* Show uploaded images that weren't matched to any suggestion */}
+        {(() => {
+          const matchedIds = new Set<string>();
+          for (const img of images) {
+            for (const u of uploadedImages) {
+              if ((u.topicId === topicId && u.type === img.type) || imageMatchesSuggestion(u, img.description, img.type)) {
+                matchedIds.add(u.id);
+              }
+            }
+          }
+          const unmatched = uploadedImages.filter(u => !matchedIds.has(u.id) && u.topicId === topicId);
+          if (unmatched.length === 0) return null;
+          return (
+            <div className="mt-3 pt-3 border-t border-amber-500/20">
+              <p className="text-xs text-amber-400/60 mb-2">Други качени изображения:</p>
+              <div className="flex flex-wrap gap-2">
+                {unmatched.map(uploaded => (
+                  <div key={uploaded.id} className="relative group">
+                    <img
+                      src={uploaded.data}
+                      alt={uploaded.description}
+                      className="h-20 rounded-lg border border-slate-600 cursor-pointer hover:border-amber-400 transition-colors object-cover"
+                      onClick={() => setZoomImage(uploaded.data)}
+                    />
+                    <button
+                      onClick={() => handleDelete(uploaded.id)}
+                      className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         <p className="text-amber-400/60 text-xs mt-2">Качете изображения за по-добро визуално учене.</p>
       </div>
 

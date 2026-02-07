@@ -18,7 +18,7 @@ import {
  SuggestedImage, TopicImage
 } from '@/lib/types';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
-import { saveImage, getImagesForTopic, deleteImage, resizeImage } from '@/lib/image-storage';
+import { saveImage, getAllImages, deleteImage, resizeImage, extractTags, imageMatchesSuggestion } from '@/lib/image-storage';
 import { generateId } from '@/lib/algorithms';
 
 // Demo case for testing
@@ -1797,21 +1797,22 @@ function CasesSuggestedImagesCard({ images, topicId, subjectId }: { images: Sugg
   };
 
   useEffect(() => {
-    if (!topicId) return;
-    getImagesForTopic(topicId).then(setUploadedImages);
-  }, [topicId]);
+    getAllImages().then(setUploadedImages);
+  }, []);
 
   const handleUpload = async (idx: number, suggestion: SuggestedImage) => {
     const file = fileInputRefs.current[idx]?.files?.[0];
     if (!file) return;
     try {
       const data = await resizeImage(file);
+      const tags = extractTags(suggestion.description);
       const img: TopicImage = {
         id: crypto.randomUUID(),
         topicId,
         subjectId,
         type: suggestion.type,
         description: suggestion.description,
+        tags,
         data,
         createdAt: new Date().toISOString()
       };
@@ -1836,7 +1837,10 @@ function CasesSuggestedImagesCard({ images, topicId, subjectId }: { images: Sugg
         </p>
         <div className="space-y-3">
           {images.map((img, i) => {
-            const matchingImages = uploadedImages.filter(u => u.type === img.type && u.description === img.description);
+            const matchingImages = uploadedImages.filter(u =>
+              (u.topicId === topicId && u.type === img.type) ||
+              imageMatchesSuggestion(u, img.description, img.type)
+            );
             return (
               <div key={i} className="bg-slate-900/30 rounded-lg p-3">
                 <div className="flex items-start gap-3">
@@ -1875,6 +1879,13 @@ function CasesSuggestedImagesCard({ images, topicId, subjectId }: { images: Sugg
                         >
                           ×
                         </button>
+                        {uploaded.tags && uploaded.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-0.5 mt-1 max-w-[120px]">
+                            {uploaded.tags.slice(0, 3).map((tag, ti) => (
+                              <span key={ti} className="px-1 py-0 bg-slate-700/80 text-slate-400 text-[9px] rounded">{tag}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

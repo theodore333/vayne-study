@@ -49,7 +49,7 @@ export default function QuickActionsRow({ subjects }: QuickActionsRowProps) {
         {/* Quick Quiz */}
         <Link
           href={randomWeakTopic
-            ? `/quiz?subjectId=${randomWeakTopic.subject.id}&topicId=${randomWeakTopic.topic.id}&preset=quick`
+            ? `/quiz?subject=${randomWeakTopic.subject.id}&topic=${randomWeakTopic.topic.id}&preset=quick`
             : '/quiz'}
           className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors group"
         >

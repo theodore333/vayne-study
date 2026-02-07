@@ -158,7 +158,7 @@ async function handleFreeRecallHint(
   hintContext: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-6', // Use Haiku for hints (cheaper)
+    model: 'claude-opus-4-6',
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -434,7 +434,7 @@ ${i + 1}. Оригинален въпрос: "${wa.question}"
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-6', // Use Sonnet for faster drill questions
+    model: 'claude-opus-4-6',
     max_tokens: 6144,
     messages: [{
       role: 'user',
@@ -1096,7 +1096,7 @@ async function handleOpenHint(
   };
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-6', // Haiku for speed and cost
+    model: 'claude-opus-4-6',
     max_tokens: 400,
     messages: [{
       role: 'user',

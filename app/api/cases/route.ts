@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 // Model configuration
 const MODEL_MAP = {
-  opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
+  opus: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
   sonnet: { id: 'claude-sonnet-4-5-20250929', inputCost: 3, outputCost: 15 },
   haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 0.8, outputCost: 4 }
 };

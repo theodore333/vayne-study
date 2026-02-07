@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, ReactNode } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, AlertTriangle, BookOpen, Target, Calendar, Layers, RefreshCw, Flame, Brain, BarChart3, Zap } from 'lucide-react';
+import { Plus, AlertTriangle, BookOpen, Calendar, Layers, RefreshCw, BarChart3, Zap } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, calculatePredictedGrade, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
 import { getCurrentStreak, getLongestStreak, getAnalyticsSummary } from '@/lib/analytics';
@@ -13,7 +13,7 @@ import Link from 'next/link';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 
 // Dashboard Widgets
-import StudyStreakWidget from '@/components/dashboard/StudyStreakWidget';
+import StreakCalendar from '@/components/dashboard/StreakCalendar';
 const WeeklyBarChart = dynamic(() => import('@/components/dashboard/WeeklyBarChart'), {
   ssr: false,
   loading: () => <div className="h-40 bg-slate-800/30 rounded-lg animate-pulse" />
@@ -25,22 +25,10 @@ import AcademicEventsWidget from '@/components/dashboard/AcademicEventsWidget';
 import SubjectHealthIndicator from '@/components/dashboard/SubjectHealthIndicator';
 import ExamReadinessWidget from '@/components/dashboard/ExamReadinessWidget';
 import DailyGoalsChecklist from '@/components/dashboard/DailyGoalsChecklist';
+import FSRSReviewWidget from '@/components/dashboard/FSRSReviewWidget';
+import WeaknessWidget from '@/components/dashboard/WeaknessWidget';
 
 // Component prop types
-interface StatsGridProps {
-  subjects: Subject[];
-  totalTopics: number;
-  alertsCount: number;
-}
-
-interface StatCardProps {
-  icon: ReactNode;
-  bgColor: string;
-  label: string;
-  value: string | number;
-  valueClass?: string;
-}
-
 interface StatusOverviewProps {
   statusCounts: Record<TopicStatus, number>;
   totalTopics: number;
@@ -154,9 +142,14 @@ export default function Dashboard() {
     <div className="max-w-6xl mx-auto space-y-6">
       <PageHeader onAddClick={() => setShowAddSubject(true)} />
 
-      {/* HERO ROW: Streak + Exam Readiness + Continue */}
+      {/* HERO ROW: Streak Calendar + Exam Readiness + Continue */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StudyStreakWidget currentStreak={currentStreak} longestStreak={longestStreak} />
+        <StreakCalendar
+          timerSessions={data.timerSessions}
+          dailyGoalMinutes={data.studyGoals.dailyMinutes}
+          currentStreak={currentStreak}
+          longestStreak={longestStreak}
+        />
         <ExamReadinessWidget readiness={nextExamReadiness} />
         <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
       </div>
@@ -176,13 +169,9 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* WIDGETS ROW: Academic Events + Subject Health + Daily Goals */}
+      {/* WIDGETS ROW: FSRS Reviews + Subject Health + Daily Goals */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <AcademicEventsWidget
-          events={data.academicEvents || []}
-          subjects={activeSubjects}
-          maxEvents={4}
-        />
+        <FSRSReviewWidget reviews={fsrsReviews} />
         <SubjectHealthIndicator
           healthStatuses={subjectHealthStatuses || []}
           maxItems={3}
@@ -195,26 +184,18 @@ export default function Dashboard() {
         />
       </div>
 
-      <StatsGrid subjects={activeSubjects} totalTopics={totalTopics} alertsCount={alerts.length} />
+      {/* ANALYSIS ROW: Weakness + Academic Events */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <WeaknessWidget subjects={activeSubjects} />
+        <AcademicEventsWidget
+          events={data.academicEvents || []}
+          subjects={activeSubjects}
+          maxEvents={4}
+        />
+      </div>
 
-      {/* Quick Analytics Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <QuickStatWidget
-          icon={<Flame size={18} className="text-orange-400" />}
-          label="Streak"
-          value={`${currentStreak} дни`}
-          subValue={`Рекорд: ${longestStreak}`}
-          color="orange"
-          href="/analytics"
-        />
-        <QuickStatWidget
-          icon={<Brain size={18} className="text-purple-400" />}
-          label="FSRS ревю"
-          value={fsrsReviews.length.toString()}
-          subValue="теми за преговор"
-          color="purple"
-          href="/today"
-        />
+      {/* Quick Stats: Level + Quizzes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <QuickStatWidget
           icon={<Zap size={18} className="text-yellow-400" />}
           label="Ниво"
@@ -252,28 +233,6 @@ function PageHeader({ onAddClick }: { onAddClick: () => void }) {
       <button onClick={onAddClick} className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors font-mono text-sm">
         <Plus size={18} /> Нов предмет
       </button>
-    </div>
-  );
-}
-
-function StatsGrid({ subjects, totalTopics, alertsCount }: StatsGridProps) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <StatCard icon={<BookOpen size={20} className="text-blue-400" />} bgColor="bg-blue-500/20" label="Предмети" value={subjects.length} />
-      <StatCard icon={<Target size={20} className="text-purple-400" />} bgColor="bg-purple-500/20" label="Теми" value={totalTopics} />
-      <StatCard icon={<AlertTriangle size={20} className="text-red-400" />} bgColor="bg-red-500/20" label="Известия" value={alertsCount} valueClass="text-red-400" />
-    </div>
-  );
-}
-
-function StatCard({ icon, bgColor, label, value, valueClass = "text-slate-100" }: StatCardProps) {
-  return (
-    <div className="p-5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={"p-2 rounded-lg " + bgColor}>{icon}</div>
-        <span className="text-sm text-slate-400 font-mono">{label}</span>
-      </div>
-      <div className={"text-3xl font-bold font-mono " + valueClass}>{value}</div>
     </div>
   );
 }

@@ -351,10 +351,11 @@ function ORRoomContent() {
 
         if (res.ok) {
           const result = await res.json();
-          // Strip markdown formatting (bold, italic, emoji markers)
+          // Strip markdown formatting and role prefix (AI sometimes prepends "Хирург:")
           const cleanResponse = result.response
             .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
-            .replace(/_{1,3}([^_]+)_{1,3}/g, '$1');
+            .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
+            .replace(/^(?:Хирург|Surgeon)\s*:\s*/i, '');
           const surgeonMsg: ORMessage = {
             id: generateId(),
             role: 'surgeon',
@@ -514,7 +515,11 @@ function ORRoomContent() {
           signal: abortControllerRef.current?.signal
         });
 
-        if (!res.ok) throw new Error('Evaluation failed');
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          console.error('Evaluation API error:', errBody);
+          throw new Error(errBody.error || 'Evaluation failed');
+        }
 
         const result = await res.json();
         evaluation = {
@@ -524,14 +529,51 @@ function ORRoomContent() {
         };
       } catch (err) {
         console.error('Step evaluation error:', err);
-        evaluation = {
-          step: step as ORStep,
-          score: 50,
-          feedback: 'Не успяхме да оценим тази стъпка.',
-          strengths: [],
-          areasToImprove: [],
-          timestamp: new Date().toISOString()
-        };
+        // Retry once on failure
+        try {
+          const topic2 = data.subjects
+            .flatMap(s => s.topics || [])
+            .find(t => t.id === activeCase.topicId);
+          const retryRes = await fetchWithTimeout('/api/cases', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiKey,
+              mode: 'evaluate_or_step',
+              step,
+              caseContext: JSON.stringify({
+                procedureName: activeCase.procedureName,
+                patient: activeCase.patient,
+                specialty: activeCase.specialty,
+                difficulty: activeCase.difficulty
+              }),
+              studentData,
+              hiddenData: activeCase.hiddenData,
+              material: topic2?.material?.substring(0, 2000)
+            }),
+            timeout: 120000,
+            signal: abortControllerRef.current?.signal
+          });
+          if (retryRes.ok) {
+            const retryResult = await retryRes.json();
+            evaluation = {
+              step: step as ORStep,
+              ...retryResult.evaluation,
+              timestamp: new Date().toISOString()
+            };
+          } else {
+            throw new Error('Retry failed');
+          }
+        } catch {
+          evaluation = {
+            step: step as ORStep,
+            score: 50,
+            feedback: `Не успяхме да оценим тази стъпка. (${err instanceof Error ? err.message : 'Unknown error'})`,
+            strengths: [],
+            areasToImprove: [],
+            timestamp: new Date().toISOString()
+          };
+        }
       }
     } else {
       evaluation = {

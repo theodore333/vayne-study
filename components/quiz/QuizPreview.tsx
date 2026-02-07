@@ -23,6 +23,7 @@ interface QuizPreviewProps {
   setPreviewQuestionCount: (count: number) => void;
   selectedModel: 'opus' | 'sonnet' | 'haiku';
   setSelectedModel: (model: 'opus' | 'sonnet' | 'haiku') => void;
+  hasMaterial: boolean;
   isGenerating: boolean;
   elapsedSeconds: number;
   error: string | null;
@@ -36,7 +37,7 @@ export function QuizPreview({
   topicName, topicBloomLevel,
   previewQuestionCount, setPreviewQuestionCount,
   selectedModel, setSelectedModel,
-  isGenerating, elapsedSeconds, error,
+  hasMaterial, isGenerating, elapsedSeconds, error,
   onBack, onGenerate, onCancel
 }: QuizPreviewProps) {
   const getModeLabel = () => {
@@ -132,6 +133,14 @@ export function QuizPreview({
                 <span className="text-slate-400 font-mono text-sm">Текущо Bloom ниво</span>
                 <span className="text-purple-400 font-mono text-sm">
                   {topicBloomLevel} - {BLOOM_LEVELS.find(b => b.level === topicBloomLevel)?.name}
+                </span>
+              </div>
+              <div className={`flex justify-between items-center p-3 rounded-lg ${
+                hasMaterial ? 'bg-green-500/10 border border-green-500/20' : 'bg-amber-500/10 border border-amber-500/20'
+              }`}>
+                <span className="text-slate-400 font-mono text-sm">Източник</span>
+                <span className={`font-mono text-sm font-semibold ${hasMaterial ? 'text-green-400' : 'text-amber-400'}`}>
+                  {hasMaterial ? 'От материала' : 'Общи знания'}
                 </span>
               </div>
             </>

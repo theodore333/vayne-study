@@ -52,7 +52,7 @@ function QuizContent() {
       const [subjId, topId] = pair.split(':');
       const subj = data.subjects.find(s => s.id === subjId);
       const top = subj?.topics.find(t => t.id === topId);
-      if (!subj || !top || !top.material) return null;
+      if (!subj || !top) return null;
       return { subject: subj, topic: top };
     }).filter(Boolean) as Array<{ subject: typeof data.subjects[0]; topic: typeof data.subjects[0]['topics'][0] }>;
   }, [isMultiMode, topicsParam, data.subjects]);
@@ -357,12 +357,9 @@ function QuizContent() {
       return;
     }
 
-    const hasValidMaterial = isMultiMode
-      ? multiTopics.length > 0
-      : (topic?.material && topic.material.trim().length > 0);
-
-    if (!hasValidMaterial && mode !== 'free_recall') {
-      setQuizState(prev => ({ ...prev, error: 'Няма добавен материал към темата.' }));
+    // free_recall requires material (compares student recall against it)
+    if (mode === 'free_recall' && !topic?.material?.trim()) {
+      setQuizState(prev => ({ ...prev, error: 'Free Recall изисква добавен материал към темата.' }));
       return;
     }
 
@@ -1106,17 +1103,24 @@ function QuizContent() {
                   {subj.name}
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {subj.topics.filter(t => t.material).map(t => (
+                  {subj.topics.map(t => (
                     <Link
                       key={t.id}
                       href={`/quiz?subject=${subj.id}&topic=${t.id}`}
-                      className="p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 transition-all"
+                      className={`p-3 bg-slate-800/50 border rounded-lg hover:border-pink-500/50 hover:bg-pink-500/5 transition-all ${
+                        t.material ? 'border-slate-700' : 'border-slate-700/50 border-dashed'
+                      }`}
                     >
                       <div className="flex items-start gap-2">
                         <span className="shrink-0">{STATUS_CONFIG[t.status].emoji}</span>
                         <span className="text-slate-200 font-mono text-sm line-clamp-2" title={`#${t.number} ${t.name}`}>
                           #{t.number} {t.name}
                         </span>
+                        {!t.material && (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-mono">
+                            общи
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-500 font-mono">
                         <span>Bloom: {t.currentBloomLevel || 1}</span>
@@ -1125,9 +1129,9 @@ function QuizContent() {
                     </Link>
                   ))}
                 </div>
-                {subj.topics.filter(t => t.material).length === 0 && (
+                {subj.topics.length === 0 && (
                   <p className="text-sm text-slate-600 font-mono">
-                    Няма теми с добавен материал
+                    Няма добавени теми
                   </p>
                 )}
               </div>
@@ -1369,6 +1373,7 @@ function QuizContent() {
         setPreviewQuestionCount={setPreviewQuestionCount}
         selectedModel={selectedModel}
         setSelectedModel={setSelectedModel}
+        hasMaterial={isMultiMode ? multiTopics.some(({ topic: t }) => t.material?.trim()) : !!(topic?.material && topic.material.trim().length > 0)}
         isGenerating={quizState.isGenerating}
         elapsedSeconds={gen.elapsedSeconds}
         error={quizState.error}
@@ -1474,7 +1479,7 @@ function QuizContent() {
           matchExamFormat={matchExamFormat}
           setMatchExamFormat={setMatchExamFormat}
           isGenerating={quizState.isGenerating}
-          hasValidMaterial={isMultiMode ? multiTopics.length > 0 : !!(topic?.material && topic.material.trim().length > 0)}
+          hasMaterial={isMultiMode ? multiTopics.length > 0 : !!(topic?.material && topic.material.trim().length > 0)}
           onOpenPreview={openPreview}
         />
       </div>

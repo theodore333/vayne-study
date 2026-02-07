@@ -121,13 +121,10 @@ export async function POST(request: Request) {
     }
 
 
-    if (!material) {
-      return NextResponse.json({ error: 'Missing material' }, { status: 400 });
-    }
-
     // Standard quiz generation (assessment, mid_order, higher_order, custom)
+    // material can be empty — generates from general medical knowledge
     return handleStandardQuiz(anthropic, {
-      material,
+      material: material || '',
       topicName,
       subjectName,
       subjectType,
@@ -161,7 +158,7 @@ async function handleFreeRecallHint(
   hintContext: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101', // Use Haiku for hints (cheaper)
+    model: 'claude-opus-4-6', // Use Haiku for hints (cheaper)
     max_tokens: 500,
     messages: [{
       role: 'user',
@@ -214,7 +211,7 @@ async function handleFreeRecallEvaluation(
   userRecall: string
 ) {
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101',
+    model: 'claude-opus-4-6',
     max_tokens: 4096,
     messages: [{
       role: 'user',
@@ -323,7 +320,7 @@ PRIORITY: Focus questions heavily on these weak concepts! The student has demons
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101',
+    model: 'claude-opus-4-6',
     max_tokens: 6144,
     messages: [{
       role: 'user',
@@ -336,10 +333,7 @@ ${examFormat ? `Exam Format: ${examFormat}` : ''}
 ${historyAnalysis}
 ${wrongAnswersAnalysis}
 
-Study Material:
-"""
-${material}
-"""
+${material?.trim() ? `Study Material:\n"""\n${material}\n"""` : `No study material provided. Use standard medical curriculum knowledge for "${topicName}" (${subjectName}).`}
 
 Perform a comprehensive gap analysis:
 1. Identify the most critical concepts that would be tested in an exam
@@ -440,7 +434,7 @@ ${i + 1}. Оригинален въпрос: "${wa.question}"
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101', // Use Sonnet for faster drill questions
+    model: 'claude-opus-4-6', // Use Sonnet for faster drill questions
     max_tokens: 6144,
     messages: [{
       role: 'user',
@@ -539,7 +533,7 @@ async function handleEvaluateOpen(
   }
 
   // All evaluations use Opus for quality
-  const modelId = 'claude-opus-4-5-20251101';
+  const modelId = 'claude-opus-4-6';
 
   // Determine strictness based on Bloom level
   const strictnessGuide = bloomLevel >= 5
@@ -641,9 +635,9 @@ ${strictnessGuide}
 
 // Model mapping - Opus for all quiz modes (quality is priority)
 const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
-  opus: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
-  sonnet: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 },
-  haiku: { id: 'claude-opus-4-5-20251101', inputCost: 15, outputCost: 75 }
+  opus: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
+  sonnet: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
+  haiku: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 }
 };
 
 async function handleStandardQuiz(
@@ -778,6 +772,25 @@ ${trend === 'declining' ? '- Student performance is DECLINING. Include some easi
 ${trend === 'improving' ? '- Student is IMPROVING. Challenge them with slightly harder questions than their current level.' : ''}`;
   }
 
+  // Determine material mode
+  const hasMaterial = material && material.trim().length > 0;
+
+  const materialSection = hasMaterial
+    ? `Study Material (PROVIDED BY STUDENT):
+"""
+${material}
+"""
+
+CRITICAL RULE — STRICT MATERIAL MODE:
+You MUST generate questions ONLY from the study material above. Do NOT add questions from your own medical knowledge.
+Every question must be directly answerable from the provided text. If the material is short, generate fewer but precise questions rather than inventing content.
+If a concept is mentioned but not explained in the material, you may ask about it at Bloom level 1-2 only (recall/understand).`
+    : `GENERAL KNOWLEDGE MODE:
+No study material was provided. Generate questions based on standard medical curriculum knowledge for this topic.
+The student is a Bulgarian medical student testing their general knowledge of "${topicName}" (subject: ${subjectName}).
+Use established medical textbook knowledge. Focus on core concepts, key mechanisms, clinical relevance.
+Questions should be appropriate for a university-level medical education exam.`;
+
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 8192,
@@ -792,15 +805,12 @@ ${examFormatInstructions}
 ${bloomInstructions}
 ${masteryInstructions}
 
-Study Material:
-"""
-${material}
-"""
+${materialSection}
 
 Generate ${targetQuestionCount}.
 
 IMPORTANT QUESTION COUNT REQUIREMENT:
-${questionCount ? `You MUST generate EXACTLY ${questionCount} questions. Count them carefully before responding. If you generate fewer or more, you have FAILED the task.` : 'Intelligently select the number based on material complexity.'}
+${questionCount ? `You MUST generate EXACTLY ${questionCount} questions. Count them carefully before responding. If you generate fewer or more, you have FAILED the task.` : hasMaterial ? 'Intelligently select the number based on material complexity.' : 'Intelligently select the number based on topic breadth and complexity.'}
 
 Intelligently select:
 - The most important concepts to test
@@ -927,7 +937,7 @@ async function handleAnalyzeMistakes(
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101', // Use Haiku for cost efficiency
+    model: 'claude-opus-4-6', // Use Haiku for cost efficiency
     max_tokens: 1500,
     messages: [{
       role: 'user',
@@ -1043,7 +1053,7 @@ async function handleOpenHint(
   };
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-5-20251101', // Haiku for speed and cost
+    model: 'claude-opus-4-6', // Haiku for speed and cost
     max_tokens: 400,
     messages: [{
       role: 'user',

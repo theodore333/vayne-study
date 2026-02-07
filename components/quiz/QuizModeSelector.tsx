@@ -24,7 +24,7 @@ interface QuizModeSelectorProps {
   matchExamFormat: boolean;
   setMatchExamFormat: (match: boolean) => void;
   isGenerating: boolean;
-  hasValidMaterial: boolean;
+  hasMaterial: boolean;
   onOpenPreview: () => void;
 }
 
@@ -37,7 +37,7 @@ export function QuizModeSelector({
   crossTopicDrill, setCrossTopicDrill,
   subjectWeaknessStats, topicWrongAnswers,
   examFormat, matchExamFormat, setMatchExamFormat,
-  isGenerating, hasValidMaterial, onOpenPreview
+  isGenerating, hasMaterial, onOpenPreview
 }: QuizModeSelectorProps) {
   return (
     <>
@@ -302,10 +302,19 @@ export function QuizModeSelector({
         )}
       </div>
 
+      {/* Material mode indicator */}
+      {mode && mode !== 'free_recall' && !hasMaterial && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
+          <p className="text-xs text-amber-300 font-mono">
+            <span className="font-bold">Общи знания</span> — няма добавен материал. Въпросите ще са от стандартния медицински курс, не от конкретния ти конспект.
+          </p>
+        </div>
+      )}
+
       {/* Start Button */}
       <button
         onClick={mode === 'free_recall' ? () => {} : onOpenPreview}
-        disabled={isGenerating || !mode || (!hasValidMaterial && mode !== 'free_recall')}
+        disabled={isGenerating || !mode || (mode === 'free_recall' && !hasMaterial)}
         className={`w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 ${
           mode === 'free_recall'
             ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'

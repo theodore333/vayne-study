@@ -2,12 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const { apiKey, wrongAnswers, topicName } = await request.json();
   if (!apiKey) {
-    return NextResponse.json({ error: 'API key not configured' }, { status: 500 });
+    return NextResponse.json({ error: 'Missing API key' }, { status: 400 });
   }
-
-  const { wrongAnswers, topicName } = await request.json();
   if (!wrongAnswers || !Array.isArray(wrongAnswers) || wrongAnswers.length === 0) {
     return NextResponse.json({ error: 'No wrong answers provided' }, { status: 400 });
   }
@@ -53,7 +51,7 @@ ${wrongAnswersText}
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-opus-4-6',
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }]

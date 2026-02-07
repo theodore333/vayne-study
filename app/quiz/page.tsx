@@ -338,6 +338,19 @@ function QuizContent() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [quizState.questions, quizState.currentIndex, quizState.showResult, showExplanation, selectedAnswer]);
 
+  // Auto-save grade when quiz results appear (feedback loop: quiz → topic status)
+  useEffect(() => {
+    if (!quizState.showResult || gradeSaved || isSavingGrade) return;
+    if (quizState.questions.length === 0) return;
+    // Auto-save for topic quizzes (not module)
+    if (!isModuleQuiz && subjectId && topicId && topic && subject) {
+      handleSaveGrade();
+    } else if (isModuleQuiz && projectId && moduleId && module) {
+      handleSaveGrade();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizState.showResult]);
+
   // Format time helper
   // formatTime is now in useQuizTimer hook
   // Open preview screen and set initial question count
@@ -752,6 +765,12 @@ function QuizContent() {
   const generateClozeCards = async () => {
     if (isGeneratingCloze) return;
 
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      setClozeError('API ключът не е конфигуриран. Добави го в Настройки.');
+      return;
+    }
+
     const topicName = isModuleQuiz ? module?.title : topic?.name;
 
     // Collect wrong answers with student's actual answer
@@ -795,7 +814,7 @@ function QuizContent() {
       const response = await fetchWithTimeout('/api/anki-cards', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wrongAnswers, topicName }),
+        body: JSON.stringify({ apiKey, wrongAnswers, topicName }),
         signal: gen.abortControllerRef.current?.signal,
         timeout: 30000
       });

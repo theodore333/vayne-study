@@ -937,8 +937,8 @@ async function handleAnalyzeMistakes(
 `).join('\n');
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-6', // Use Haiku for cost efficiency
-    max_tokens: 1500,
+    model: 'claude-opus-4-6',
+    max_tokens: 4096,
     messages: [{
       role: 'user',
       content: `Ти си експерт по медицинско образование. Анализирай грешките на студент от тест по "${topicName}" (${subjectName}).
@@ -948,7 +948,7 @@ ${mistakesText}
 
 Анализирай pattern-ите в грешките и дай КОНКРЕТНИ, ДЕЙСТВАЩИ съвети.
 
-Отговори САМО с валиден JSON в този формат:
+Отговори САМО с валиден JSON (без markdown, без \`\`\`, без текст преди/след JSON):
 {
   "summary": "Кратко обобщение на проблемните области (1-2 изречения)",
   "weakConcepts": ["концепция1", "концепция2"],
@@ -971,7 +971,7 @@ ${mistakesText}
 
 Pattern types: "conceptual_gap" (не разбира концепция), "detail_miss" (пропуска детайли), "confusion" (бърка подобни неща), "application_error" (не може да приложи), "recall_failure" (не помни)
 
-ВАЖНО: Бъди КОНКРЕТЕН - използвай имената на концепциите от грешките, не общи съвети!`
+ВАЖНО: Бъди КОНКРЕТЕН - използвай имената на концепциите от грешките, не общи съвети! Отговори САМО с JSON.`
     }]
   });
 
@@ -993,7 +993,50 @@ Pattern types: "conceptual_gap" (не разбира концепция), "detai
   responseText = responseText
     .replace(/,\s*}/g, '}')  // Remove trailing commas before }
     .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-    .replace(/[\x00-\x1F\x7F]/g, ' '); // Remove control characters
+    .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === '\n' || ch === '\t' || ch === '\r' ? ch : ' '); // Remove control chars but keep newlines/tabs
+
+  // Handle truncated JSON (if response was cut off)
+  if (response.stop_reason === 'max_tokens') {
+    // Try to close open JSON structures
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (const ch of responseText) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{' || ch === '[') depth++;
+      if (ch === '}' || ch === ']') depth--;
+    }
+    // If we're inside a string, close it
+    if (inString) responseText += '"';
+    // Close any open arrays/brackets
+    // Trim trailing partial values (after last comma)
+    responseText = responseText.replace(/,\s*"[^"]*$/, '');
+    responseText = responseText.replace(/,\s*$/, '');
+    // Re-count depth after trimming
+    depth = 0; inString = false; escaped = false;
+    for (const ch of responseText) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{' || ch === '[') depth++;
+      if (ch === '}' || ch === ']') depth--;
+    }
+    while (depth > 0) {
+      // Check what needs closing — find last opener
+      const lastOpen = Math.max(responseText.lastIndexOf('{'), responseText.lastIndexOf('['));
+      const lastClose = Math.max(responseText.lastIndexOf('}'), responseText.lastIndexOf(']'));
+      if (lastOpen > lastClose) {
+        responseText += responseText[lastOpen] === '{' ? '}' : ']';
+      } else {
+        responseText += '}';
+      }
+      depth--;
+    }
+  }
 
   let analysis;
   try {

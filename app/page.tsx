@@ -174,7 +174,10 @@ export default function Dashboard() {
       {/* ROW 1: Continue Study (conditional) */}
       <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
 
-      {/* ROW 2: Study Progress */}
+      {/* ROW 2: Subjects — primary navigation */}
+      <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
+
+      {/* ROW 3: Study Progress */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
         <div className="md:col-span-7">
           <WeeklyBarChart
@@ -193,7 +196,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ROW 3: Adaptive grid — only renders widgets that have data */}
+      {/* ROW 4: Adaptive grid — only renders widgets that have data */}
       <div className={`grid ${gridCols} gap-4`}>
         <ActionPanel
           subjects={activeSubjects}
@@ -213,9 +216,6 @@ export default function Dashboard() {
           />
         )}
       </div>
-
-      {/* ROW 4: Subjects */}
-      <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
     </div>
   );

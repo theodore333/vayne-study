@@ -56,7 +56,7 @@ export default function ActionPanel({ subjects, goals, onAddGoal, onToggleGoal, 
           </div>
           <span className="text-xs font-medium text-slate-300 font-mono">Помодоро</span>
         </Link>
-        <Link href={randomWeakTopic ? `/quiz?subjectId=${randomWeakTopic.subject.id}&topicId=${randomWeakTopic.topic.id}&preset=quick` : '/quiz'} className="flex-1 flex items-center gap-2 p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors group">
+        <Link href={randomWeakTopic ? `/quiz?subject=${randomWeakTopic.subject.id}&topic=${randomWeakTopic.topic.id}&preset=quick` : '/quiz'} className="flex-1 flex items-center gap-2 p-2.5 rounded-lg bg-slate-800/50 hover:bg-slate-700/50 transition-colors group">
           <div className="p-1 bg-purple-500/20 rounded-md group-hover:bg-purple-500/30">
             <Brain size={14} className="text-purple-400" />
           </div>

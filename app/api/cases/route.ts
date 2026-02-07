@@ -75,9 +75,9 @@ export async function POST(request: Request) {
   }
 }
 
-// Generate a new clinical case from material
+// Generate a new clinical case from material or general knowledge
 async function handleGenerateCase(anthropic: Anthropic, body: {
-  material: string;
+  material?: string;
   topicName: string;
   subjectName: string;
   subjectType?: string;
@@ -85,12 +85,7 @@ async function handleGenerateCase(anthropic: Anthropic, body: {
   pharmacologyTopics?: Array<{ id: string; name: string; subjectId: string }>;
 }) {
   const { material, topicName, subjectName, subjectType, difficulty, pharmacologyTopics } = body;
-
-  if (!material || material.length < 200) {
-    return NextResponse.json({
-      error: 'Материалът е твърде кратък за генериране на случай (мин. 200 символа)'
-    }, { status: 400 });
-  }
+  const hasMaterial = material && material.trim().length >= 200;
 
   const subjectTypePrompt = subjectType && SUBJECT_TYPE_CASE_PROMPTS[subjectType]
     ? SUBJECT_TYPE_CASE_PROMPTS[subjectType]
@@ -126,13 +121,18 @@ ${subjectTypePrompt}
 
 ${difficultyPrompt}
 
-Учебен материал:
+${hasMaterial ? `Учебен материал (PROVIDED BY STUDENT):
 """
-${material.substring(0, 4000)}
+${material!.substring(0, 4000)}
 """
 
-Създай реалистичен клиничен случай БАЗИРАН на този материал.
-Случаят трябва да тества разбирането на ключовите концепции от материала.
+СТРОГ РЕЖИМ — САМО ОТ МАТЕРИАЛА:
+Създай клиничен случай БАЗИРАН ИЗКЛЮЧИТЕЛНО на горния материал.
+Случаят ТРЯБВА да тества концепции, които присъстват в материала.
+НЕ добавяй заболявания, лекарства или механизми, които НЕ са споменати в материала.` : `РЕЖИМ ОБЩИ ЗНАНИЯ:
+Няма предоставен учебен материал.
+Създай реалистичен клиничен случай базиран на стандартните медицински познания за тази тема.
+Използвай типична клинична презентация, подходяща за ниво студент по медицина.`}
 ${pharmacologyTopics && pharmacologyTopics.length > 0 ? `
 ФАРМАКОЛОГИЯ: Студентът учи и фармакология. Избери 2-5 теми от списъка, РЕЛЕВАНТНИ за лечението на случая:
 ${pharmacologyTopics.map(t => `- "${t.name}" (id: "${t.id}", subjectId: "${t.subjectId}")`).join('\n')}
@@ -763,7 +763,7 @@ suggestedImages - предложи 2-3 изображения (ЕКГ, рент�
 
 // Generate a new OR room case
 async function handleGenerateORCase(anthropic: Anthropic, body: {
-  material: string;
+  material?: string;
   topicName: string;
   subjectName: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
@@ -771,12 +771,7 @@ async function handleGenerateORCase(anthropic: Anthropic, body: {
   anatomyTopics?: Array<{ id: string; name: string; subjectId: string }>;
 }) {
   const { material, topicName, subjectName, difficulty, pharmacologyTopics, anatomyTopics } = body;
-
-  if (!material || material.length < 200) {
-    return NextResponse.json({
-      error: 'Материалът е твърде кратък за генериране на случай (мин. 200 символа)'
-    }, { status: 400 });
-  }
+  const hasMaterial = material && material.trim().length >= 200;
 
   const difficultyPrompt = {
     beginner: 'BEGINNER: Рутинна операция без усложнения. Ясни анатомични ориентири. Стандартни медикаменти.',
@@ -804,14 +799,20 @@ async function handleGenerateORCase(anthropic: Anthropic, body: {
 
 ${difficultyPrompt}
 
-Учебен материал:
+${hasMaterial ? `Учебен материал (PROVIDED BY STUDENT):
 """
-${material.substring(0, 4000)}
+${material!.substring(0, 4000)}
 """
+
+СТРОГ РЕЖИМ — САМО ОТ МАТЕРИАЛА:
+Създай хирургичен случай БАЗИРАН ИЗКЛЮЧИТЕЛНО на горния материал.
+Процедурата, анатомията и медикаментите ТРЯБВА да са от материала.` : `РЕЖИМ ОБЩИ ЗНАНИЯ:
+Няма предоставен учебен материал.
+Създай реалистичен хирургичен случай базиран на стандартните медицински/хирургични познания за тази тема.`}
 ${pharmacologySection}
 ${anatomySection}
 
-Създай РЕАЛИСТИЧЕН хирургичен случай БАЗИРАН на този материал. Студентът ще играе ролята на асистиращ хирург.
+Студентът ще играе ролята на асистиращ хирург.
 
 Върни САМО валиден JSON:
 {

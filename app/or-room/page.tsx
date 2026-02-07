@@ -175,9 +175,8 @@ function ORRoomContent() {
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const selectedSubjectObj = activeSubjects.find(s => s.id === selectedSubject);
-  const availableTopics = selectedSubjectObj?.topics?.filter(t =>
-    t.material && t.material.length >= 200
-  ) || [];
+  const availableTopics = selectedSubjectObj?.topics || [];
+  const topicsWithMaterial = availableTopics.filter(t => t.material && t.material.length >= 200);
 
   // Start demo case
   const startDemoCase = useCallback(() => {
@@ -1289,7 +1288,7 @@ function ORRoomContent() {
             {selectedSubject && (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Тема ({availableTopics.length} с материал)
+                  Тема ({availableTopics.length}{topicsWithMaterial.length < availableTopics.length ? `, ${topicsWithMaterial.length} с материал` : ''})
                 </label>
                 <select
                   value={selectedTopic}
@@ -1298,7 +1297,7 @@ function ORRoomContent() {
                 >
                   <option value="">Изберете тема...</option>
                   {availableTopics.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>{t.name}{(!t.material || t.material.length < 200) ? ' (общи)' : ''}</option>
                   ))}
                 </select>
               </div>

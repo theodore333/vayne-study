@@ -200,15 +200,18 @@ function CasesContent() {
  const handleGenerateCase = async () => {
  if (!subject || !apiKey || isGenerating) return;
 
- // Get topics with material and pick a random one
- const topicsWithMaterial = subject.topics.filter(t => t.material && t.material.length > 200);
- if (topicsWithMaterial.length === 0) {
- setError('Няма теми с достатъчно материал');
+ // Pick a random topic — prefer topics with material, but allow any
+ const topicsPool = subject.topics.filter(t => t.material && t.material.length > 200);
+ const allTopics = subject.topics;
+ if (allTopics.length === 0) {
+ setError('Няма теми в този предмет');
  return;
  }
 
- // Pick random topic
- const randomTopic = topicsWithMaterial[Math.floor(Math.random() * topicsWithMaterial.length)];
+ // Prefer topics with material; fall back to any topic
+ const randomTopic = topicsPool.length > 0
+ ? topicsPool[Math.floor(Math.random() * topicsPool.length)]
+ : allTopics[Math.floor(Math.random() * allTopics.length)];
 
  // Find pharmacology subjects for cross-subject integration
  const pharmacologySubjects = data.subjects.filter(s =>
@@ -230,7 +233,7 @@ function CasesContent() {
  body: JSON.stringify({
  apiKey,
  mode: 'generate_case',
- material: randomTopic.material,
+ material: randomTopic.material || '',
  topicName: randomTopic.name,
  subjectName: subject.name,
  subjectType: subject.subjectType || 'clinical',
@@ -1631,8 +1634,9 @@ function CasesContent() {
     (s.subjectType === 'clinical' || s.subjectType === 'hybrid')
  );
 
- // Get topics with material for selected subject
- const availableTopics = subject?.topics.filter(t => t.material && t.material.length > 200) || [];
+ // Get all topics for selected subject
+ const availableTopics = subject?.topics || [];
+ const topicsWithMaterial = availableTopics.filter(t => t.material && t.material.length > 200);
 
  // Topic selection view
  return (
@@ -1680,25 +1684,32 @@ function CasesContent() {
  {selectedSubjectId && subject && (
  <div className={`p-4 rounded-lg border ${
  availableTopics.length > 0
- ? 'bg-green-500/10 border-green-500/30'
+ ? topicsWithMaterial.length > 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-amber-500/10 border-amber-500/30'
  : 'bg-yellow-500/10 border-yellow-500/30'
  }`}>
  {availableTopics.length > 0 ? (
+ topicsWithMaterial.length > 0 ? (
  <p className="text-green-400">
  <CheckCircle className="w-4 h-4 inline mr-2" />
- {availableTopics.length} теми с материал. AI ще избере случайна тема за случая.
+ {topicsWithMaterial.length} теми с материал, {availableTopics.length - topicsWithMaterial.length > 0 ? `${availableTopics.length - topicsWithMaterial.length} без материал (общи знания)` : 'всички с материал'}.
  </p>
+ ) : (
+ <p className="text-amber-300">
+ <AlertCircle className="w-4 h-4 inline mr-2" />
+ {availableTopics.length} теми без материал. Случаят ще е базиран на общи медицински знания.
+ </p>
+ )
  ) : (
  <p className="text-yellow-400">
  <AlertCircle className="w-4 h-4 inline mr-2" />
- Няма теми с достатъчно материал. Добави материал в поне една тема.
+ Няма теми в този предмет.
  </p>
  )}
  </div>
  )}
 
  {/* Difficulty selection */}
- {selectedSubjectId && availableTopics.length > 0 && (
+ {selectedSubjectId && subject && availableTopics.length > 0 && (
  <div>
  <label className="block text-sm font-medium text-slate-400 mb-2">
  Трудност
@@ -1744,7 +1755,7 @@ function CasesContent() {
  {/* Start button */}
  <button
  onClick={handleGenerateCase}
- disabled={!selectedSubjectId || availableTopics.length === 0 || !apiKey || isGenerating}
+ disabled={!selectedSubjectId || !subject || availableTopics.length === 0 || !apiKey || isGenerating}
  className="w-full py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg font-semibold"
  >
  {isGenerating ? (

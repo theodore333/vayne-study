@@ -153,14 +153,15 @@ export async function getCollectionStats(selectedDecks?: string[]): Promise<Coll
     const deckQuery = decksToUse.map(d => `deck:"${d}"`).join(' OR ');
 
     const allCards = await invoke<number[]>('findCards', { query: deckQuery });
+    // is:due = review + learning cards due today (accurate)
+    // Note: is:new returns ALL unseen cards, not today's limited batch, so we don't use it
     const dueCards = await invoke<number[]>('findCards', { query: `(${deckQuery}) is:due` });
-    const newCards = await invoke<number[]>('findCards', { query: `(${deckQuery}) is:new` });
 
     return {
       totalCards: allCards.length,
       totalDecks: decksToUse.filter(n => !n.includes('::')).length,
       dueToday: dueCards.length,
-      newToday: newCards.length
+      newToday: 0
     };
   } catch {
     return {

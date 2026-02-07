@@ -18,15 +18,16 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
   const isOnFire = currentStreak >= 3;
   const isRecord = currentStreak >= longestStreak && currentStreak > 0;
 
-  // Build 5-week calendar data
+  const weeksToShow = compact ? 4 : 5;
+
+  // Build calendar data
   const calendarData = useMemo(() => {
     const today = new Date();
     const todayDow = (today.getDay() + 6) % 7; // Mon=0, Sun=6
     const cells: Array<{ date: string; minutes: number; dayLabel: string; isToday: boolean }> = [];
 
-    // Go back to fill 5 full weeks ending at current week's Sunday
-    const daysToShow = 5 * 7;
-    const startOffset = todayDow + (5 - 1) * 7;
+    const daysToShow = weeksToShow * 7;
+    const startOffset = todayDow + (weeksToShow - 1) * 7;
 
     for (let i = startOffset; i >= 0; i--) {
       const d = new Date(today);
@@ -47,7 +48,7 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
     }
 
     return cells.slice(-daysToShow);
-  }, [timerSessions]);
+  }, [timerSessions, weeksToShow]);
 
   const studyDays = calendarData.filter(c => c.minutes > 0).length;
   const goal = dailyGoalMinutes || 480;
@@ -97,27 +98,27 @@ export default function StreakCalendar({ timerSessions, dailyGoalMinutes, curren
   const calendarGrid = (
     <>
       <div className="flex gap-1">
-        <div className="flex flex-col gap-1 mr-1">
+        <div className="flex flex-col gap-[3px] mr-1">
           {[0, 2, 4, 6].map(i => (
-            <div key={i} className="h-3 flex items-center" style={i > 0 ? { marginTop: i === 2 ? '4px' : '4px' } : {}}>
+            <div key={i} className="flex items-center" style={{ height: compact ? 14 : 16, marginTop: i > 0 ? (compact ? 1 : 3) : 0 }}>
               <span className="text-[9px] text-slate-600 font-mono w-5">{DAY_LABELS[i]}</span>
             </div>
           ))}
         </div>
         <div className="flex-1 grid grid-rows-7 grid-flow-col gap-[3px]">
           {grid.flat().map((cell, i) => {
-            if (!cell) return <div key={i} className="w-full aspect-square rounded-sm bg-slate-900" />;
+            if (!cell) return <div key={i} className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-sm bg-slate-900`} />;
             return (
               <div
                 key={cell.date}
-                className={`w-full aspect-square rounded-sm ${getColor(cell.minutes, cell.isToday)} transition-colors`}
+                className={`${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'} rounded-sm ${getColor(cell.minutes, cell.isToday)} transition-colors`}
                 title={`${cell.date}: ${cell.minutes > 0 ? `${cell.minutes} мин` : 'Няма учене'}`}
               />
             );
           })}
         </div>
       </div>
-      <div className="flex items-center justify-between mt-3 text-[10px] font-mono text-slate-500">
+      <div className="flex items-center justify-between mt-2 text-[10px] font-mono text-slate-500">
         <span>{studyDays} от {calendarData.length} дни</span>
         <div className="flex items-center gap-1">
           <span>По-малко</span>

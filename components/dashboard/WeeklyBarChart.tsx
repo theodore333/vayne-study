@@ -129,7 +129,6 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal, ankiStats }: 
             </div>
             <div className="flex gap-4 text-[11px] font-mono">
               <span className="text-blue-400">{ankiStats.dueToday} <span className="text-slate-500">due</span></span>
-              <span className="text-cyan-400">{ankiStats.newToday} <span className="text-slate-500">new</span></span>
               <span className="text-slate-400">{ankiStats.totalCards.toLocaleString()} <span className="text-slate-500">total</span></span>
             </div>
           </div>

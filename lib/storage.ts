@@ -375,9 +375,9 @@ export function migrateData(rawData: any): AppData {
         longestStreak: 0
       };
     }
-    data.userProgress.stats.topicsCompleted = Math.max(data.userProgress.stats.topicsCompleted || 0, topicsCompleted);
-    data.userProgress.stats.greenTopics = Math.max(data.userProgress.stats.greenTopics || 0, greenTopics);
-    data.userProgress.stats.quizzesTaken = Math.max(data.userProgress.stats.quizzesTaken || 0, quizzesTaken);
+    data.userProgress.stats.topicsCompleted = topicsCompleted;
+    data.userProgress.stats.greenTopics = greenTopics;
+    data.userProgress.stats.quizzesTaken = quizzesTaken;
   }
 
   // Remove deprecated focusSession

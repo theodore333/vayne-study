@@ -1499,8 +1499,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             return {
               ...q,
               stats: {
-                attempts: q.stats.attempts + 1,
-                correct: q.stats.correct + (correct ? 1 : 0),
+                attempts: (q.stats?.attempts || 0) + 1,
+                correct: (q.stats?.correct || 0) + (correct ? 1 : 0),
                 lastAttempt: new Date().toISOString()
               }
             };

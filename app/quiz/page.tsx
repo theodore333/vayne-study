@@ -925,8 +925,15 @@ function QuizContent() {
           updateTopic(subjectId, t.id, { wrongAnswers: updated });
         }
       });
-      // Skip the normal save below - we already updated all topics
-      mergedWrongAnswers = existingWrongAnswers;
+      // Current topic was already updated in the loop above - compute its final state
+      // to match what the loop saved, so the final save below doesn't overwrite it
+      const currentTopicWA = existingWrongAnswers
+        .map(wa => ({
+          ...wa,
+          drillCount: drilledConcepts.has(wa.concept) ? wa.drillCount + 1 : wa.drillCount
+        }))
+        .filter(wa => !(wa.drillCount >= 3 && masteredConcepts.has(wa.concept)));
+      mergedWrongAnswers = currentTopicWA;
     } else if (mode === 'drill_weakness') {
       // Per-topic drill: only increment drillCount for questions that were ACTUALLY in this quiz
       const drilledConcepts = new Set(

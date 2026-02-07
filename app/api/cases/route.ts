@@ -168,7 +168,7 @@ ${pharmacologyTopics.map(t => `- "${t.name}" (id: "${t.id}", subjectId: "${t.sub
 {
   "presentation": {
     "age": <число 18-85>,
-    "gender": "male" или "female",
+    "gender": "male",
     "chiefComplaint": "основно оплакване на пациента (1-2 изречения)",
     "briefHistory": "кратка история на настоящото заболяване (2-3 изречения)"
   },
@@ -490,7 +490,7 @@ ${studentDdxText}
 {
   "score": <0-100>,
   "correctDiagnosisIncluded": true/false,
-  "correctDiagnosisRank": <number или null>,
+  "correctDiagnosisRank": null,
   "feedback": "Подробна обратна връзка на български",
   "strengths": ["силна страна 1", "силна страна 2"],
   "areasToImprove": ["област за подобрение 1"],
@@ -507,12 +507,22 @@ ${studentDdxText}
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let evaluation;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
@@ -569,12 +579,22 @@ DDx на студента: ${studentDdx.map(d => d.diagnosis).join(', ')}
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let evaluation;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({ error: 'Грешка при оценка' }, { status: 500 });
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
@@ -663,7 +683,7 @@ ${pharmacologySection}
   "strengths": ["силна страна 1"],
   "areasToImprove": ["област за подобрение 1"],
   "missedElements": ["пропуснат елемент"],
-  "safetyIssues": ["проблем с безопасността"] или [],
+  "safetyIssues": [],
   "suggestions": "Как да подобри плана",
   "suggestedImages": [{"description": "Изображение за качване в материалите", "type": "ecg|anatomy|imaging|instrument|pathology", "topicId": "", "subjectId": ""}],
   ${pharmacologyJsonFields}
@@ -681,12 +701,22 @@ suggestedImages - предложи 2-3 изображения, които сту
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let evaluation;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    return NextResponse.json({ error: 'Грешка при оценка' }, { status: 500 });
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      return NextResponse.json({ error: 'Грешка при оценка', raw: responseText.substring(0, 300) }, { status: 500 });
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
@@ -857,7 +887,7 @@ ${anatomySection}
   "specialty": "Хирургична специалност",
   "patient": {
     "age": <18-85>,
-    "gender": "male" или "female",
+    "gender": "male",
     "diagnosis": "Диагноза",
     "indication": "Индикация за операцията (1-2 изречения)",
     "relevantHistory": "Релевантна анамнеза (коморбидности, алергии, предишни операции)"
@@ -884,7 +914,7 @@ ${anatomySection}
     "complicationScenario": {
       "description": "Описание на усложнението, което ще възникне по време на операцията",
       "correctResponse": "Правилният отговор/действие при това усложнение",
-      "severity": "mild" или "moderate" или "severe"
+      "severity": "moderate"
     },
     "postOpOrders": {
       "medications": ["Медикамент 1 с доза", "Медикамент 2 с доза"],
@@ -1195,7 +1225,7 @@ ${crossSubjectTopics.anatomy?.length ? `Анатомия: ${crossSubjectTopics.a
 
   const response = await anthropic.messages.create({
     model: MODEL_MAP.opus.id,
-    max_tokens: 1500,
+    max_tokens: 4096,
     messages: [{
       role: 'user',
       content: `Създай финално обобщение на хирургична симулация.
@@ -1223,15 +1253,18 @@ ${evaluationsText}
   "nextSteps": "Препоръки",
   "suggestedImages": [
     {
-      "description": "Снимка/изображение за качване",
-      "type": "anatomy" или "imaging" или "instrument",
+      "description": "Изображение за учене",
+      "type": "anatomy|imaging|instrument|pathology|ecg",
       "topicId": "",
       "subjectId": ""
     }
   ]
 }
 
-ВАЖНО: Използвай ЛАТИНСКА анатомична и медицинска терминология както в българските учебници (a. femoralis, n. vagus, m. rectus abdominis и т.н.)`
+ВАЖНО:
+- Използвай ЛАТИНСКА анатомична и медицинска терминология (a. femoralis, n. vagus, m. rectus abdominis и т.н.)
+- type ТРЯБВА да е точно една от: "anatomy", "imaging", "instrument", "pathology", "ecg"
+- Върни САМО JSON, без markdown, без допълнителен текст`
     }]
   });
 
@@ -1243,22 +1276,32 @@ ${evaluationsText}
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let summary;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     summary = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
   } catch {
-    summary = {
-      overallScore: avgScore,
-      grade: avgScore >= 90 ? 6 : avgScore >= 75 ? 5 : avgScore >= 60 ? 4 : avgScore >= 40 ? 3 : 2,
-      summary: 'Операцията е завършена.',
-      keyLearnings: [],
-      surgicalSkills: [],
-      areasForReview: [],
-      encouragement: 'Добра работа!',
-      nextSteps: 'Продължавай да практикуваш.',
-      suggestedImages: []
-    };
+    const repaired = repairTruncatedJson(responseText);
+    try {
+      const jsonMatch = repaired.match(/\{[\s\S]*\}/);
+      summary = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(repaired);
+    } catch {
+      summary = {
+        overallScore: avgScore,
+        grade: avgScore >= 90 ? 6 : avgScore >= 75 ? 5 : avgScore >= 60 ? 4 : avgScore >= 40 ? 3 : 2,
+        summary: 'Операцията е завършена.',
+        keyLearnings: [],
+        surgicalSkills: [],
+        areasForReview: [],
+        encouragement: 'Добра работа!',
+        nextSteps: 'Продължавай да практикуваш.',
+        suggestedImages: []
+      };
+    }
   }
 
   const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +

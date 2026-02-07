@@ -511,7 +511,7 @@ function ORRoomContent() {
             pharmacologyMaterial: pharmacologyMaterial || undefined,
             anatomyMaterial: anatomyMaterial || undefined
           }),
-          timeout: 90000,
+          timeout: 120000,
           signal: abortControllerRef.current?.signal
         });
 

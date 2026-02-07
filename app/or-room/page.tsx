@@ -577,12 +577,15 @@ function ORRoomContent() {
         setActiveCase(prev => prev ? { ...prev, procedureMessages: [systemMsg] } : null);
       }
 
-      // Add system message when entering complications
+      // Add system message when entering complications — include the actual complication description
       if (nextStep === 'complications') {
+        const complicationDesc = activeCase.hiddenData?.complicationScenario?.description;
         const systemMsg: ORMessage = {
           id: generateId(),
           role: 'system',
-          content: 'Възникна усложнение по време на операцията! Реагирайте бързо.',
+          content: complicationDesc
+            ? `Усложнение по време на операцията: ${complicationDesc}`
+            : 'Възникна усложнение по време на операцията! Реагирайте бързо.',
           timestamp: new Date().toISOString()
         };
         setActiveCase(prev => prev ? { ...prev, complicationMessages: [systemMsg] } : null);

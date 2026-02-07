@@ -417,15 +417,11 @@ export default function TopicDetailPage() {
         </Link>
         <button
           onClick={() => router.push(`/quiz?subject=${subjectId}&topic=${topic.id}`)}
-          disabled={!hasMaterial}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-sm transition-all ${
-            hasMaterial
-              ? 'bg-purple-600 hover:bg-purple-500 text-white'
-              : 'bg-slate-700/50 text-slate-500 cursor-not-allowed'
-          }`}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-sm transition-all bg-purple-600 hover:bg-purple-500 text-white"
         >
           <Brain size={18} />
           Започни Quiz
+          {!hasMaterial && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300">общи</span>}
         </button>
       </div>
 

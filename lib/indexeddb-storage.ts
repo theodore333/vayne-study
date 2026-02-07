@@ -7,7 +7,7 @@ const DB_NAME = 'vayne-study-db';
 const DB_VERSION = 2;
 const MATERIALS_STORE = 'materials';
 const BACKUPS_STORE = 'backups';
-const MAX_AUTO_BACKUPS = 3;
+const MAX_AUTO_BACKUPS = 7;
 
 let dbInstance: IDBDatabase | null = null;
 let dbInitPromise: Promise<IDBDatabase> | null = null;

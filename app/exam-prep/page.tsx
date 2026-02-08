@@ -3,13 +3,14 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useApp } from '@/lib/context';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
-import { GraduationCap, Stethoscope, Brain, ArrowLeft, Loader2, ChevronDown, ChevronRight, RefreshCw, Target, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { GraduationCap, Stethoscope, Brain, ArrowLeft, Loader2, ChevronDown, ChevronRight, RefreshCw, Target, AlertTriangle, CheckCircle2, BookOpen, Eye } from 'lucide-react';
 import Link from 'next/link';
 
 type Phase =
   | 'select_subject'
   | 'select_mode'
   // Diagnostic
+  | 'diag_select_topics'
   | 'diag_generating'
   | 'diag_answering'
   | 'diag_evaluating'
@@ -69,6 +70,8 @@ export default function ExamPrepPage() {
   const [batchAnswers, setBatchAnswers] = useState<Record<string, string[]>>({});
   const [allScores, setAllScores] = useState<Record<string, TopicScore>>({});
   const [expandedTopic, setExpandedTopic] = useState<string | null>(null);
+  const [showMaterial, setShowMaterial] = useState<string | null>(null);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
 
   // Simulation state
   const [simTopicId, setSimTopicId] = useState<string | null>(null);
@@ -92,6 +95,23 @@ export default function ExamPrepPage() {
     activeSubjects.find(s => s.id === subjectId) || null,
     [activeSubjects, subjectId]
   );
+
+  // Persistence: load diagnostic scores from localStorage when subject changes
+  useEffect(() => {
+    if (!subjectId) return;
+    try {
+      const stored = localStorage.getItem(`exam-prep-scores-${subjectId}`);
+      if (stored) setAllScores(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, [subjectId]);
+
+  // Persistence: save diagnostic scores to localStorage when they change
+  useEffect(() => {
+    if (!subjectId || Object.keys(allScores).length === 0) return;
+    try {
+      localStorage.setItem(`exam-prep-scores-${subjectId}`, JSON.stringify(allScores));
+    } catch { /* ignore */ }
+  }, [allScores, subjectId]);
 
   // Timer for loading states
   useEffect(() => {
@@ -120,9 +140,12 @@ export default function ExamPrepPage() {
     });
   }, [selectedSubject]);
 
-  function buildBatches() {
+  function buildBatches(topicIds?: Set<string>) {
     const BATCH_SIZE = 6;
-    const topics = allTopicsSorted.map(t => ({
+    const filtered = topicIds && topicIds.size > 0
+      ? allTopicsSorted.filter(t => topicIds.has(t.id))
+      : allTopicsSorted;
+    const topics = filtered.map(t => ({
       topicId: t.id,
       topicName: t.name,
       material: t.material || '',
@@ -161,11 +184,18 @@ export default function ExamPrepPage() {
 
   // --- DIAGNOSTIC FLOW ---
 
-  async function startDiagnostic() {
-    const b = buildBatches();
+  function startDiagnostic() {
+    // Go to topic selection first
+    if (selectedSubject) {
+      setSelectedTopicIds(new Set(selectedSubject.topics.map(t => t.id)));
+    }
+    setPhase('diag_select_topics');
+  }
+
+  async function launchDiagnostic() {
+    const b = buildBatches(selectedTopicIds);
     setBatches(b);
     setCurrentBatch(0);
-    setAllScores({});
     setBatchAnswers({});
     await generateBatch(b, 0);
   }
@@ -430,7 +460,8 @@ export default function ExamPrepPage() {
           <button onClick={() => {
             abortRef.current?.abort();
             if (phase === 'select_mode') setPhase('select_subject');
-            else if (phase.startsWith('diag_') && phase !== 'diag_generating' && phase !== 'diag_evaluating') setPhase('select_mode');
+            else if (phase === 'diag_select_topics') setPhase('select_mode');
+            else if (phase.startsWith('diag_') && phase !== 'diag_generating' && phase !== 'diag_evaluating') setPhase('diag_select_topics');
             else if (phase.startsWith('sim_') && phase !== 'sim_evaluating' && phase !== 'sim_eval_follow_ups') setPhase('select_mode');
           }} className="text-slate-400 hover:text-slate-200">
             <ArrowLeft size={20} />
@@ -537,6 +568,83 @@ export default function ExamPrepPage() {
               {renderHeatmap()}
             </div>
           )}
+        </div>
+      )}
+
+      {/* DIAGNOSTIC: Select Topics */}
+      {phase === 'diag_select_topics' && selectedSubject && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-200">Избери теми за диагностика</h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedTopicIds(new Set(selectedSubject.topics.map(t => t.id)))}
+                className="text-xs text-violet-400 hover:text-violet-300"
+              >
+                Всички
+              </button>
+              <span className="text-xs text-slate-600">|</span>
+              <button
+                onClick={() => setSelectedTopicIds(new Set())}
+                className="text-xs text-slate-400 hover:text-slate-300"
+              >
+                Нито една
+              </button>
+              <span className="text-xs text-slate-600">|</span>
+              <button
+                onClick={() => setSelectedTopicIds(new Set(
+                  selectedSubject.topics.filter(t => t.status === 'gray' || t.status === 'yellow').map(t => t.id)
+                ))}
+                className="text-xs text-amber-400 hover:text-amber-300"
+              >
+                Само слаби
+              </button>
+            </div>
+          </div>
+          <div className="text-xs text-slate-500 font-mono">
+            {selectedTopicIds.size}/{selectedSubject.topics.length} избрани &middot; {Math.ceil(selectedTopicIds.size / 6)} батча
+          </div>
+          <div className="grid gap-1.5 max-h-[400px] overflow-y-auto">
+            {allTopicsSorted.map(topic => {
+              const isSelected = selectedTopicIds.has(topic.id);
+              const prevScore = allScores[topic.id];
+              return (
+                <button
+                  key={topic.id}
+                  onClick={() => setSelectedTopicIds(prev => {
+                    const next = new Set(prev);
+                    next.has(topic.id) ? next.delete(topic.id) : next.add(topic.id);
+                    return next;
+                  })}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
+                    isSelected ? 'bg-violet-500/15 border border-violet-500/30' : 'bg-[#0f172a] border border-[#1e293b] opacity-50'
+                  }`}
+                >
+                  <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${
+                    isSelected ? 'border-violet-400 bg-violet-500' : 'border-slate-600'
+                  }`}>
+                    {isSelected && <CheckCircle2 size={10} className="text-white" />}
+                  </div>
+                  <span className={`w-2 h-2 rounded-full ${
+                    topic.status === 'green' ? 'bg-green-500' : topic.status === 'orange' ? 'bg-orange-500' : topic.status === 'yellow' ? 'bg-yellow-500' : 'bg-slate-500'
+                  }`} />
+                  <span className="text-slate-200 flex-1 truncate">{topic.name}</span>
+                  {prevScore && (
+                    <span className={`text-xs font-mono ${prevScore.score >= 80 ? 'text-green-400' : prevScore.score >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                      {prevScore.score}%
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={launchDiagnostic}
+            disabled={selectedTopicIds.size === 0}
+            className="w-full px-6 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white rounded-lg font-medium transition-colors"
+          >
+            Започни диагностика ({selectedTopicIds.size} теми)
+          </button>
         </div>
       )}
 
@@ -905,6 +1013,25 @@ export default function ExamPrepPage() {
                 ))}
               </div>
             )}
+            {/* View material button */}
+            <button
+              onClick={() => setShowMaterial(showMaterial === expandedTopic ? null : expandedTopic)}
+              className="mt-2 flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300"
+            >
+              <Eye size={12} />
+              {showMaterial === expandedTopic ? 'Скрий материала' : 'Виж материала'}
+            </button>
+            {showMaterial === expandedTopic && (() => {
+              const topic = selectedSubject?.topics.find(t => t.id === expandedTopic);
+              const mat = topic?.material;
+              if (!mat) return <p className="mt-1 text-xs text-slate-500 italic">Няма материал за тази тема</p>;
+              return (
+                <div className="mt-2 max-h-60 overflow-y-auto bg-[#1e293b]/50 rounded p-2 text-xs text-slate-300 whitespace-pre-wrap">
+                  {mat.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 3000)}
+                  {mat.length > 3000 && <span className="text-slate-500"> ...</span>}
+                </div>
+              );
+            })()}
           </div>
         )}
 

@@ -430,6 +430,9 @@ export interface AppData {
   // Dashboard Features
   lastOpenedTopic: LastOpenedTopic | null;
   dailyGoals: DailyGoal[];
+  // Study Techniques (IcanStudy HUDLE Framework)
+  studyTechniques: StudyTechnique[];
+  techniquePractices: TechniquePractice[];
   // Sync metadata
   lastModified?: string; // ISO timestamp for cloud merge freshness
 }
@@ -472,7 +475,7 @@ export interface DailyTask {
   subjectId: string;
   subjectName: string;
   subjectColor: string;
-  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal' | 'project';
+  type: 'setup' | 'critical' | 'high' | 'medium' | 'normal' | 'project' | 'technique';
   typeLabel: string;
   description: string;
   topics: Topic[];
@@ -484,6 +487,11 @@ export interface DailyTask {
   projectModules?: ProjectModule[];
   // Module FSRS review flag
   isModuleReview?: boolean;
+  // Technique practice fields (for type='technique')
+  techniqueId?: string;
+  techniqueName?: string;
+  techniqueIcon?: string;
+  techniqueHowToApply?: string;
 }
 
 // Custom daily plan (edited by user)
@@ -915,6 +923,37 @@ export interface AcademicEvent {
   description?: string;
   weight: number;            // 0.5 = light, 1.0 = normal, 1.5 = important
   createdAt: string;
+}
+
+// ================ STUDY TECHNIQUES (IcanStudy HUDLE Framework) ================
+
+export type TechniqueCategory = 'encoding' | 'retrieval' | 'metacognition' | 'self-management';
+
+export interface StudyTechnique {
+  id: string;
+  name: string;                    // e.g. "Chunking", "Interleaving"
+  slug: string;                    // e.g. "chunking", "interleaving" - for matching
+  category: TechniqueCategory;
+  description: string;             // Short description (1-2 sentences)
+  notes: string;                   // Rich notes (HTML) - user's own notes from course
+  howToApply: string;              // Practical instructions for applying this technique
+  icon: string;                    // Emoji icon
+  isBuiltIn: boolean;              // true = pre-seeded from IcanStudy, false = user-created
+  isActive: boolean;               // user can enable/disable techniques
+  practiceCount: number;           // times practiced
+  lastPracticedAt: string | null;  // ISO date
+  createdAt: string;
+}
+
+export interface TechniquePractice {
+  id: string;
+  techniqueId: string;
+  topicId: string;
+  subjectId: string;
+  date: string;                    // ISO date
+  effectiveness: number | null;    // 1-5 rating after practice
+  aiPrompt: string;                // What AI suggested to do
+  userReflection: string | null;   // Optional: user's reflection on the practice
 }
 
 // ================ DASHBOARD FEATURES ================

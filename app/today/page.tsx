@@ -175,9 +175,10 @@ export default function TodayPage() {
       data.studyGoals,
       ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined,
       data.developmentProjects,
-      data.academicEvents
+      data.academicEvents,
+      data.studyTechniques
     ),
-    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents]
+    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques]
   );
 
   // Calculate syllabus progress/workload
@@ -274,7 +275,11 @@ export default function TodayPage() {
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
           apiKey,
-          bonusMode: mode // Tell the API this is a bonus plan
+          bonusMode: mode, // Tell the API this is a bonus plan
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, practiceCount: t.practiceCount,
+            lastPracticedAt: t.lastPracticedAt, howToApply: t.howToApply.substring(0, 150)
+          }))
         })
       });
 
@@ -331,7 +336,11 @@ export default function TodayPage() {
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
-          apiKey
+          apiKey,
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, practiceCount: t.practiceCount,
+            lastPracticedAt: t.lastPracticedAt, howToApply: t.howToApply.substring(0, 150)
+          }))
         })
       });
 
@@ -377,7 +386,8 @@ export default function TodayPage() {
     high: { bg: 'bg-orange-500/10', border: 'border-orange-500/30', text: 'text-orange-400' },
     medium: { bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' },
     normal: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
-    project: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' }
+    project: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/30', text: 'text-cyan-400' },
+    technique: { bg: 'bg-violet-500/10', border: 'border-violet-500/30', text: 'text-violet-400' }
   };
 
   const formatDate = () => {
@@ -726,6 +736,23 @@ export default function TodayPage() {
                           <Rocket size={12} className="inline mr-1.5" />
                           Отвори проекта за повече детайли
                         </Link>
+                      )}
+                      {/* Technique "How to" expandable + link to techniques page */}
+                      {task.type === 'technique' && task.techniqueHowToApply && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-violet-400 cursor-pointer hover:text-violet-300 transition-colors font-mono">
+                            Как? (натисни за инструкции)
+                          </summary>
+                          <pre className="mt-2 text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed bg-violet-500/5 rounded-lg p-3 border border-violet-500/10">
+                            {task.techniqueHowToApply}
+                          </pre>
+                          <Link
+                            href="/techniques"
+                            className="inline-block mt-2 text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                          >
+                            Виж всички техники →
+                          </Link>
+                        </details>
                       )}
                     </div>
                   </div>

@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, StudyTechnique } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
 
 // ============================================================================
@@ -1074,7 +1074,8 @@ export function generateDailyPlan(
   studyGoals?: StudyGoals,
   ankiDueCards?: number,
   developmentProjects?: DevelopmentProject[],
-  academicEvents?: AcademicEvent[]
+  academicEvents?: AcademicEvent[],
+  studyTechniques?: StudyTechnique[]
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
@@ -1590,6 +1591,102 @@ export function generateDailyPlan(
         });
 
         capacityAfterNew -= 1;
+      }
+    }
+  }
+
+  // ================ TECHNIQUE PRACTICE TASKS ================
+  // Add 1-2 technique practice suggestions per day, paired with topics from today's plan
+  if (studyTechniques && studyTechniques.length > 0) {
+    const activeTechniques = studyTechniques.filter(t => t.isActive);
+    if (activeTechniques.length > 0) {
+      // Collect all topics from today's tasks for pairing
+      const todayTopics: { topic: Topic; subjectName: string; subjectColor: string; subjectId: string }[] = [];
+      for (const task of tasks) {
+        for (const topic of task.topics) {
+          todayTopics.push({ topic, subjectName: task.subjectName, subjectColor: task.subjectColor, subjectId: task.subjectId });
+        }
+      }
+
+      if (todayTopics.length > 0) {
+        // Sort techniques: least recently practiced first, never-practiced first
+        const sortedTechniques = [...activeTechniques].sort((a, b) => {
+          if (!a.lastPracticedAt && !b.lastPracticedAt) return 0;
+          if (!a.lastPracticedAt) return -1;
+          if (!b.lastPracticedAt) return 1;
+          return new Date(a.lastPracticedAt).getTime() - new Date(b.lastPracticedAt).getTime();
+        });
+
+        // Use day of year as seed for consistent daily rotation
+        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        const techniqueCount = Math.min(2, sortedTechniques.length);
+
+        for (let i = 0; i < techniqueCount; i++) {
+          const technique = sortedTechniques[i];
+          // Pick a topic to pair with - use day rotation for variety
+          const topicIdx = (dayOfYear + i) % todayTopics.length;
+          const paired = todayTopics[topicIdx];
+
+          // Build technique-specific task descriptions
+          const descriptions: Record<string, string> = {
+            'chunking': `Групирай основните концепции на "${paired.topic.name}" в логични блокове`,
+            'non-linear-notes': `Направи mind map за "${paired.topic.name}" - нелинейни, интегрирани бележки`,
+            'effort-monitoring': `Докато учиш "${paired.topic.name}", следи когнитивното си натоварване - трудно = добре!`,
+            'cognitive-load-regulation': `Регулирай сложността докато учиш "${paired.topic.name}" - висок intrinsic load, нисък extraneous`,
+            'reflective-practice': `След като учиш днес, рефлектирай: какво работи? Какво не? Какво ще промениш?`,
+            'inquiry-based-learning': `За "${paired.topic.name}" задавай "Защо?", "Как?", "Какво ако?" за всеки ключов факт`,
+            'rote-management': `Прегледай "${paired.topic.name}" - какво ТРЯБВА да се зубри vs какво може да се РАЗБЕРЕ?`,
+            'spacing': `Провери FSRS графика - има ли теми за преговор които пропускаш?`,
+            'interleaving': `Смесвай "${paired.topic.name}" с теми от друг предмет докато учиш`,
+            'priming': `Преди да учиш "${paired.topic.name}" - прегледай бегло за 3 мин (заглавия, диаграми, summary)`,
+            'microlearning': `Микро-сесия: за 3-5 мин припомни си основното от "${paired.topic.name}" без бележки`
+          };
+
+          const description = descriptions[technique.slug] || `Приложи ${technique.name} с "${paired.topic.name}"`;
+
+          tasks.push({
+            id: generateId(),
+            subjectId: paired.subjectId,
+            subjectName: paired.subjectName,
+            subjectColor: paired.subjectColor,
+            type: 'technique',
+            typeLabel: `${technique.icon} ${technique.name}`,
+            description,
+            topics: [paired.topic],
+            estimatedMinutes: 10,
+            completed: false,
+            techniqueId: technique.id,
+            techniqueName: technique.name,
+            techniqueIcon: technique.icon,
+            techniqueHowToApply: technique.howToApply
+          });
+        }
+      }
+    }
+
+    // Suggest learning a new technique if there are inactive (not-yet-learned) ones
+    const inactiveTechniques = studyTechniques.filter(t => !t.isActive);
+    if (inactiveTechniques.length > 0 && activeTechniques.length < 5) {
+      // Remind every 3 days to consider a new technique
+      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+      if (dayOfYear % 3 === 0) {
+        const nextTechnique = inactiveTechniques[dayOfYear % inactiveTechniques.length];
+        tasks.push({
+          id: generateId(),
+          subjectId: '',
+          subjectName: 'IcanStudy',
+          subjectColor: '#8b5cf6',
+          type: 'technique',
+          typeLabel: `📚 Нова техника`,
+          description: `Време за нова техника! Разгледай "${nextTechnique.name}" в курса и включи я когато си готов.`,
+          topics: [],
+          estimatedMinutes: 15,
+          completed: false,
+          techniqueId: nextTechnique.id,
+          techniqueName: nextTechnique.name,
+          techniqueIcon: nextTechnique.icon,
+          techniqueHowToApply: nextTechnique.howToApply
+        });
       }
     }
   }

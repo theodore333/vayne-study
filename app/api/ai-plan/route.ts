@@ -53,13 +53,14 @@ interface GeneratedTask {
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode } = await request.json() as {
+    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques } = await request.json() as {
       subjects: RequestSubject[];
       schedule: ScheduleClass[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
       apiKey: string;
       studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number; vacationMode?: boolean; vacationMultiplier?: number };
       bonusMode?: 'tomorrow' | 'review' | 'weak';
+      studyTechniques?: Array<{ name: string; slug: string; practiceCount: number; lastPracticedAt: string | null; howToApply: string }>;
     };
 
     if (!apiKey) {
@@ -299,7 +300,12 @@ ${!bonusMode ? `- Ако има много жълти теми - те са БЪ�
 - Оранжеви теми имат само основи - нужна е работа
 - Малки теми (size: "small") дават бързи победи` : ''}
 - Не претоварвай - ${bonusMode ? 'това е БОНУС сесия!' : 'студентът трябва реално да свърши плана!'}
-
+${studyTechniques && studyTechniques.length > 0 ? `
+УЧЕБНИ ТЕХНИКИ (IcanStudy):
+Студентът практикува следните техники: ${studyTechniques.map(t => `${t.name} (${t.practiceCount}x практикувана${t.lastPracticedAt ? ', последно: ' + new Date(t.lastPracticedAt).toLocaleDateString('bg-BG') : ''})`).join(', ')}
+${(() => { const stale = studyTechniques.filter(t => { if (!t.lastPracticedAt) return true; return Math.floor((today.getTime() - new Date(t.lastPracticedAt).getTime()) / 86400000) >= 3; }); return stale.length > 0 ? `Непрактикувани >3 дни: ${stale.map(t => t.name).join(', ')}` : ''; })()}
+В описанието на задачите, ПРЕДЛОЖИ конкретна техника за прилагане (напр. "Приложи Chunking - групирай концепциите" или "Interleaving - смесвай с вчерашния материал").
+` : ''}
 ФОРМАТ НА ОТГОВОР (САМО валиден JSON, без markdown):
 {
   "tasks": [

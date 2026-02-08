@@ -197,7 +197,12 @@ export default function WeeklyReviewModal({ onClose }: Props) {
           decayAnalysis,
           userFeedback: { overloaded, tooMuchRepetition, enoughNewMaterial },
           type: 'weekly-review',
-          apiKey
+          apiKey,
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, category: t.category,
+            practiceCount: t.practiceCount, lastPracticedAt: t.lastPracticedAt,
+            notes: t.notes?.substring(0, 200) || '', isActive: t.isActive
+          }))
         })
       });
 

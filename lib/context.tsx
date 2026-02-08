@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal, StudyTechnique, TechniquePractice } from './types';
 import { loadData, saveData, migrateData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
@@ -324,6 +324,13 @@ interface AppContextType {
   addDailyGoal: (text: string, type: 'daily' | 'weekly') => void;
   toggleDailyGoal: (id: string) => void;
   deleteDailyGoal: (id: string) => void;
+
+  // Study Techniques (IcanStudy HUDLE Framework)
+  addTechnique: (technique: Omit<StudyTechnique, 'id' | 'createdAt' | 'practiceCount' | 'lastPracticedAt'>) => string;
+  updateTechnique: (id: string, updates: Partial<StudyTechnique>) => void;
+  deleteTechnique: (id: string) => void;
+  addTechniquePractice: (practice: Omit<TechniquePractice, 'id' | 'date'>) => string;
+  rateTechniquePractice: (practiceId: string, effectiveness: number, reflection?: string) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -440,7 +447,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     academicEvents: [],
     // Dashboard Features
     lastOpenedTopic: null,
-    dailyGoals: []
+    dailyGoals: [],
+    // Study Techniques (IcanStudy HUDLE Framework)
+    studyTechniques: [],
+    techniquePractices: []
   });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -2026,6 +2036,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setNewAchievements([]);
   }, []);
 
+  // ================ Study Techniques (IcanStudy HUDLE Framework) ================
+
+  const addTechnique = useCallback((technique: Omit<StudyTechnique, 'id' | 'createdAt' | 'practiceCount' | 'lastPracticedAt'>) => {
+    const id = generateId();
+    updateData(prev => ({
+      ...prev,
+      studyTechniques: [...(prev.studyTechniques || []), {
+        ...technique,
+        id,
+        practiceCount: 0,
+        lastPracticedAt: null,
+        createdAt: new Date().toISOString()
+      }]
+    }));
+    return id;
+  }, [updateData]);
+
+  const updateTechnique = useCallback((id: string, updates: Partial<StudyTechnique>) => {
+    updateData(prev => ({
+      ...prev,
+      studyTechniques: (prev.studyTechniques || []).map(t =>
+        t.id === id ? { ...t, ...updates } : t
+      )
+    }));
+  }, [updateData]);
+
+  const deleteTechnique = useCallback((id: string) => {
+    updateData(prev => ({
+      ...prev,
+      studyTechniques: (prev.studyTechniques || []).filter(t => t.id !== id),
+      techniquePractices: (prev.techniquePractices || []).filter(p => p.techniqueId !== id)
+    }));
+  }, [updateData]);
+
+  const addTechniquePractice = useCallback((practice: Omit<TechniquePractice, 'id' | 'date'>) => {
+    const id = generateId();
+    const now = new Date().toISOString();
+    updateData(prev => ({
+      ...prev,
+      techniquePractices: [...(prev.techniquePractices || []), {
+        ...practice,
+        id,
+        date: now
+      }],
+      studyTechniques: (prev.studyTechniques || []).map(t =>
+        t.id === practice.techniqueId
+          ? { ...t, practiceCount: t.practiceCount + 1, lastPracticedAt: now }
+          : t
+      )
+    }));
+    return id;
+  }, [updateData]);
+
+  const rateTechniquePractice = useCallback((practiceId: string, effectiveness: number, reflection?: string) => {
+    updateData(prev => ({
+      ...prev,
+      techniquePractices: (prev.techniquePractices || []).map(p =>
+        p.id === practiceId
+          ? { ...p, effectiveness, userReflection: reflection ?? p.userReflection }
+          : p
+      )
+    }));
+  }, [updateData]);
+
   const contextValue = useMemo(() => ({
     data,
     isLoading,
@@ -2107,7 +2181,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setLastOpenedTopic,
     addDailyGoal,
     toggleDailyGoal,
-    deleteDailyGoal
+    deleteDailyGoal,
+    addTechnique,
+    updateTechnique,
+    deleteTechnique,
+    addTechniquePractice,
+    rateTechniquePractice
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [data, isLoading, isSyncing, lastSynced, newAchievements, sidebarCollapsed, storageError]);
 

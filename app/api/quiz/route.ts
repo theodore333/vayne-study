@@ -67,7 +67,9 @@ export async function POST(request: Request) {
       quizHistory,
       currentBloomLevel,
       // Mastery context for smarter quiz generation
-      masteryContext
+      masteryContext,
+      // Study techniques for recommendations
+      studyTechniques
     } = body;
 
     if (!apiKey) {
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Напиши нещо преди да оцениш' }, { status: 400 });
       }
       if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
-      return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall);
+      return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall, studyTechniques);
     }
 
     if (mode === 'gap_analysis') {
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
     if (mode === 'analyze_mistakes') {
       // Analyze wrong answers pattern and provide study recommendations
       const { mistakes, topicName: topic, subjectName: subject } = body;
-      return handleAnalyzeMistakes(anthropic, mistakes, topic, subject);
+      return handleAnalyzeMistakes(anthropic, mistakes, topic, subject, studyTechniques);
     }
 
     if (mode === 'open_hint') {
@@ -208,7 +210,8 @@ async function handleFreeRecallEvaluation(
   material: string,
   topicName: string,
   subjectName: string,
-  userRecall: string
+  userRecall: string,
+  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null
 ) {
   const response = await anthropic.messages.create({
     model: 'claude-opus-4-6',
@@ -244,9 +247,16 @@ Return ONLY a valid JSON object with this structure:
     {"concept": "important concept they missed", "importance": "critical|important|nice_to_know"}
   ],
   "feedback": "Overall feedback in Bulgarian - what they did well and what to focus on",
-  "suggestedNextStep": "specific recommendation for what to study next"
+  "suggestedNextStep": "specific recommendation for what to study next"${studyTechniques && studyTechniques.length > 0 ? `,
+  "suggestedTechnique": "КОНКРЕТНА учебна техника от списъка по-долу, подходяща за подобрение"` : ''}
 }
-
+${studyTechniques && studyTechniques.length > 0 ? `
+Студентът практикува тези учебни техники: ${studyTechniques.map(t => t.name).join(', ')}
+В "suggestedTechnique" ЗАДЪЛЖИТЕЛНО препоръчай конкретна техника, базирана на представянето:
+- Ако пропуска много → "Chunking" или "Non-linear Note-taking"
+- Ако знае факти но не връзки → "Modified Inquiry-Based Learning"
+- Ако recall е слаб → "Spacing" или "Priming"
+` : ''}
 Be encouraging but honest. Focus on medical accuracy.`
     }]
   });
@@ -912,7 +922,8 @@ async function handleAnalyzeMistakes(
   anthropic: Anthropic,
   mistakes: MistakeForAnalysis[],
   topicName: string,
-  subjectName: string
+  subjectName: string,
+  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null
 ) {
   if (!mistakes || mistakes.length === 0) {
     return NextResponse.json({
@@ -970,7 +981,16 @@ ${mistakesText}
 }
 
 Pattern types: "conceptual_gap" (не разбира концепция), "detail_miss" (пропуска детайли), "confusion" (бърка подобни неща), "application_error" (не може да приложи), "recall_failure" (не помни)
-
+${studyTechniques && studyTechniques.length > 0 ? `
+УЧЕБНИ ТЕХНИКИ (IcanStudy):
+Студентът практикува: ${studyTechniques.map(t => t.name).join(', ')}
+В "recommendations" ЗАДЪЛЖИТЕЛНО включи поне 1 препоръка за КОНКРЕТНА техника, базирана на типа грешки:
+- conceptual_gap → "Chunking" (групиране на концепции) или "Non-linear Note-taking" (mind map)
+- detail_miss → "Rote-Memorisation Management" (разграничи какво трябва да се наизусти)
+- confusion → "Interleaving" (смесване на подобни теми за разграничаване)
+- application_error → "Modified Inquiry-Based Learning" (задавай "защо/как" въпроси)
+- recall_failure → "Spacing" (по-чести кратки повторения) или "Priming" (бегъл преглед преди учене)
+` : ''}
 ВАЖНО: Бъди КОНКРЕТЕН - използвай имената на концепциите от грешките, не общи съвети! Отговори САМО с JSON.`
     }]
   });

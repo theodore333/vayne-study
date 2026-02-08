@@ -32,6 +32,7 @@ import {
   Info, Lightbulb, Sparkles
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
+import { useApp } from '@/lib/context';
 import { mergeAttributes, Node as TiptapNode, Mark as TiptapMark } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import TutorChat from '@/components/TutorChat';
@@ -1164,6 +1165,21 @@ export default function ReaderMode({
   const [wordCount, setWordCount] = useState({ words: 0, chars: 0, readingTime: 0 });
   const [focusMode, setFocusMode] = useState(false);
   const [showCalloutPicker, setShowCalloutPicker] = useState(false);
+  const [techniqueTipDismissed, setTechniqueTipDismissed] = useState(false);
+
+  // Study technique tip for reading
+  const { data } = useApp();
+  const techniqueTip = useState(() => {
+    const techniques = data?.studyTechniques?.filter(t => t.isActive) || [];
+    if (techniques.length === 0) return null;
+    // Pick a technique relevant to reading/encoding, rotate by day
+    const readingTechniques = techniques.filter(t =>
+      ['chunking', 'non-linear-notes', 'inquiry-based', 'cognitive-load', 'priming', 'effort-as-cue'].includes(t.slug)
+    );
+    const pool = readingTechniques.length > 0 ? readingTechniques : techniques;
+    const dayIndex = new Date().getDate() % pool.length;
+    return pool[dayIndex];
+  })[0];
 
   const containerRef = useRef<HTMLDivElement>(null);
   const calloutPickerRef = useRef<HTMLDivElement>(null);
@@ -2577,6 +2593,23 @@ export default function ReaderMode({
                   <img key={idx} src={img} alt={`Изображение ${idx + 1}`} className="max-w-full rounded-lg shadow-md" />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Technique tip */}
+          {techniqueTip && !techniqueTipDismissed && !focusMode && (
+            <div className="mx-6 md:mx-12 lg:mx-20 mt-4 mb-2 bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-start gap-3">
+              <span className="text-lg flex-shrink-0 mt-0.5">{techniqueTip.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-violet-800">{techniqueTip.name}</p>
+                <p className="text-xs text-violet-600 mt-0.5 leading-relaxed">{techniqueTip.howToApply.substring(0, 200)}{techniqueTip.howToApply.length > 200 ? '...' : ''}</p>
+              </div>
+              <button
+                onClick={() => setTechniqueTipDismissed(true)}
+                className="text-violet-400 hover:text-violet-600 flex-shrink-0 mt-0.5"
+              >
+                <X size={16} />
+              </button>
             </div>
           )}
 

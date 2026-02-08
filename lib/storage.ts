@@ -1,6 +1,6 @@
 'use client';
 
-import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession, DevelopmentProject, ProjectModule } from './types';
+import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession, DevelopmentProject, ProjectModule, StudyTechnique } from './types';
 import { STORAGE_KEY } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
@@ -178,7 +178,10 @@ const defaultData: AppData = {
   academicEvents: [],
   // Dashboard Features
   lastOpenedTopic: null,
-  dailyGoals: []
+  dailyGoals: [],
+  // Study Techniques (IcanStudy HUDLE Framework)
+  studyTechniques: [],
+  techniquePractices: []
 };
 
 // Materials storage helpers - now using IndexedDB with in-memory cache
@@ -324,6 +327,30 @@ export function migrateData(rawData: any): AppData {
   // Dashboard widgets migration
   if (data.lastOpenedTopic === undefined) data.lastOpenedTopic = null;
   if (!data.dailyGoals) data.dailyGoals = [];
+
+  // Study Techniques migration (IcanStudy HUDLE Framework)
+  if (!data.studyTechniques) data.studyTechniques = [];
+  if (!data.techniquePractices) data.techniquePractices = [];
+
+  // Pre-seed built-in techniques if empty (first load or migration)
+  if (data.studyTechniques.length === 0) {
+    const { DEFAULT_TECHNIQUES } = require('./constants');
+    data.studyTechniques = DEFAULT_TECHNIQUES.map((t: any) => ({
+      id: `technique-${t.slug}`,
+      name: t.name,
+      slug: t.slug,
+      category: t.category,
+      description: t.description,
+      notes: '',
+      howToApply: t.howToApply,
+      icon: t.icon,
+      isBuiltIn: true,
+      isActive: false,
+      practiceCount: 0,
+      lastPracticedAt: null,
+      createdAt: new Date().toISOString()
+    }));
+  }
 
   // Sync metadata migration - stamp lastModified if missing
   if (!data.lastModified) data.lastModified = new Date().toISOString();

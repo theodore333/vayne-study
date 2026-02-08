@@ -539,7 +539,10 @@ function QuizContent() {
           material: topic.material,
           topicName: topic.name,
           subjectName: subject?.name,
-          userRecall: freeRecallText
+          userRecall: freeRecallText,
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, howToApply: t.howToApply.substring(0, 150)
+          }))
         }),
         signal: gen.abortControllerRef.current?.signal
       });
@@ -730,7 +733,10 @@ function QuizContent() {
           mode: 'analyze_mistakes',
           mistakes,
           topicName: topic.name,
-          subjectName: subject.name
+          subjectName: subject.name,
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, howToApply: t.howToApply.substring(0, 150)
+          }))
         }),
         signal: gen.abortControllerRef.current?.signal
       });

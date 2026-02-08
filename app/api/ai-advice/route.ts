@@ -61,7 +61,7 @@ interface AnkiStats {
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, timerSessions, dailyStatus, type, apiKey, studyGoals, ankiStats } = await request.json() as {
+    const { subjects, timerSessions, dailyStatus, type, apiKey, studyGoals, ankiStats, studyTechniques } = await request.json() as {
       subjects: RequestSubject[];
       timerSessions: RequestTimerSession[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
@@ -69,6 +69,7 @@ export async function POST(request: NextRequest) {
       apiKey: string;
       studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number };
       ankiStats?: AnkiStats | null;
+      studyTechniques?: Array<{ name: string; slug: string; category: string; practiceCount: number; lastPracticedAt: string | null; notes: string; isActive: boolean }>;
     };
 
     if (!apiKey) {
@@ -259,6 +260,29 @@ export async function POST(request: NextRequest) {
       return info;
     }).join('\n\n');
 
+    // Build study techniques context
+    let techniqueContext = '';
+    if (studyTechniques && studyTechniques.length > 0) {
+      const activeTechniques = studyTechniques.filter(t => t.isActive);
+      const staleTechniques = activeTechniques.filter(t => {
+        if (!t.lastPracticedAt) return true;
+        const daysSince = Math.floor((today.getTime() - new Date(t.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24));
+        return daysSince >= 3;
+      });
+      const recentlyPracticed = activeTechniques.filter(t => {
+        if (!t.lastPracticedAt) return false;
+        const daysSince = Math.floor((today.getTime() - new Date(t.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24));
+        return daysSince < 3;
+      });
+
+      techniqueContext = `
+УЧЕБНИ ТЕХНИКИ (IcanStudy/HUDLE):
+- Активни: ${activeTechniques.map(t => `${t.name} (${t.practiceCount}x${t.lastPracticedAt ? ', последно: ' + new Date(t.lastPracticedAt).toLocaleDateString('bg-BG') : ', непрактикувана'})`).join(', ')}
+${staleTechniques.length > 0 ? `- НЕПРАКТИКУВАНИ (>3 дни): ${staleTechniques.map(t => t.name).join(', ')} - ПРЕПОРЪЧАЙ да практикува поне 1 от тях!` : ''}
+${recentlyPracticed.length > 0 ? `- Скорошни: ${recentlyPracticed.map(t => t.name).join(', ')}` : ''}
+- Когато съветваш, споменавай КОНКРЕТНА техника за днешните теми (напр. "Приложи Chunking за тежките теми" или "Interleaving е добра идея - имаш теми от различни предмети")`;
+    }
+
     if (type === 'daily') {
       prompt = `Ти си СТРОГ учебен coach за медицински студент в МУ София. Анализирай данните и дай КОНКРЕТЕН съвет.
 
@@ -292,6 +316,8 @@ ${hasCriticalExam ? `
 ${mostUrgent.workloadWarning ? '- ' + mostUrgent.workloadWarning : ''}
 ${mostUrgent.formatStrategy ? '- ' + mostUrgent.formatStrategy : ''}
 ` : ''}
+
+${techniqueContext}
 
 СИСТЕМА ЗА СТАТУС (важно!):
 - СИВИ (×1.0): Не съм пипал - нужно ПЪЛНО учене
@@ -327,6 +353,8 @@ ${subjectDetails}
 ${subjectSummaries.filter((s) => s.daysUntilExam !== null && s.daysUntilExam <= 14).map((s) =>
   `- ${s.name}: ${s.daysUntilExam}д | ${s.weightedWorkload} units (${s.grayTopics} сиви, ${s.orangeTopics} оранжеви, ${s.yellowTopics} жълти) | ${s.workloadPerDay} units/ден`
 ).join('\n') || 'Няма изпити в следващите 2 седмици'}
+
+${techniqueContext}
 
 СИСТЕМА ЗА СТАТУС:
 - СИВИ (×1.0): Не съм пипал - ОРАНЖЕВИ (×0.75): Минимални основи - ЖЪЛТИ (×0.35): Знам добре - ЗЕЛЕНИ: Готови

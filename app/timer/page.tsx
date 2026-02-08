@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Play, Pause, Square, Clock, BookOpen, Target, Settings, RotateCcw, Coffee, Brain, TrendingUp, Calendar, Volume2, VolumeX, History, BarChart3, GraduationCap, FileText, Plus, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import StatsTab from '@/components/timer/StatsTab';
 
 type TimerMode = 'normal' | 'pomodoro';
 type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak';
@@ -683,28 +684,15 @@ export default function TimerPage() {
       }
     }
 
-    // By subject this month
-    const bySubject: Record<string, number> = {};
-    monthSessions.forEach(s => {
-      bySubject[s.subjectId] = (bySubject[s.subjectId] || 0) + s.duration;
-    });
-
-    // Distractions
-    const distractions = data.timerSessions
-      .filter(s => s.distractionNote && s.distractionNote.trim())
-      .slice(-20)
-      .reverse();
-
     return {
       today, todayMinutes, weekMinutes, monthMinutes,
       semesterMinutes, semesterDays, sessionMinutes, sessionDays, isInSession,
-      streak, bySubject, distractions
+      streak
     };
   }, [data.timerSessions, academicPeriod]);
 
   const dailyProgress = Math.min(100, (stats.todayMinutes / goals.dailyMinutes) * 100);
   const weeklyProgress = Math.min(100, (stats.weekMinutes / goals.weeklyMinutes) * 100);
-  const monthlyProgress = Math.min(100, (stats.monthMinutes / goals.monthlyMinutes) * 100);
 
   const getPhaseConfig = () => {
     switch (pomodoroPhase) {
@@ -1187,122 +1175,12 @@ export default function TimerPage() {
         </>
       ) : (
         /* Statistics Tab */
-        <div className="space-y-6">
-          {/* Period Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Calendar size={18} className="text-cyan-400" />
-                <span className="text-sm text-slate-400 font-mono">Този месец</span>
-              </div>
-              <div className="text-3xl font-bold text-cyan-400 font-mono mb-2">{formatMinutes(stats.monthMinutes)}</div>
-              <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500" style={{ width: `${monthlyProgress}%` }} />
-              </div>
-              <div className="text-xs text-slate-500 font-mono mt-2">{Math.round(monthlyProgress)}% от {Math.round(goals.monthlyMinutes / 60)}ч цел</div>
-            </div>
-
-            {academicPeriod.semesterStart && (
-              <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <GraduationCap size={18} className="text-purple-400" />
-                  <span className="text-sm text-slate-400 font-mono">Семестър</span>
-                </div>
-                <div className="text-3xl font-bold text-purple-400 font-mono mb-2">{formatMinutes(stats.semesterMinutes)}</div>
-                <div className="text-xs text-slate-500 font-mono">
-                  {stats.semesterDays > 0 && `~${Math.round(stats.semesterMinutes / stats.semesterDays)}м/ден средно`}
-                </div>
-                <div className="text-xs text-slate-500 font-mono mt-1">
-                  {new Date(academicPeriod.semesterStart).toLocaleDateString('bg-BG')} - {academicPeriod.semesterEnd ? new Date(academicPeriod.semesterEnd).toLocaleDateString('bg-BG') : '...'}
-                </div>
-              </div>
-            )}
-
-            {academicPeriod.sessionStart && (
-              <div className={`bg-slate-800/30 border rounded-xl p-5 ${stats.isInSession ? 'border-orange-500/50' : 'border-slate-700/50'}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <FileText size={18} className={stats.isInSession ? 'text-orange-400' : 'text-slate-400'} />
-                  <span className="text-sm text-slate-400 font-mono">Сесия {stats.isInSession && '(активна)'}</span>
-                </div>
-                <div className={`text-3xl font-bold font-mono mb-2 ${stats.isInSession ? 'text-orange-400' : 'text-slate-400'}`}>
-                  {formatMinutes(stats.sessionMinutes)}
-                </div>
-                <div className="text-xs text-slate-500 font-mono">
-                  {stats.sessionDays > 0 && `~${Math.round(stats.sessionMinutes / Math.max(1, stats.sessionDays))}м/ден средно`}
-                </div>
-                <div className="text-xs text-slate-500 font-mono mt-1">
-                  {new Date(academicPeriod.sessionStart).toLocaleDateString('bg-BG')} - {academicPeriod.sessionEnd ? new Date(academicPeriod.sessionEnd).toLocaleDateString('bg-BG') : '...'}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* By Subject */}
-          <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4 flex items-center gap-2">
-              <BookOpen size={18} className="text-slate-400" />
-              По предмети (този месец)
-            </h3>
-            <div className="space-y-3">
-              {Object.entries(stats.bySubject)
-                .sort((a, b) => b[1] - a[1])
-                .map(([subjectId, minutes]) => {
-                  const subject = data.subjects.find(s => s.id === subjectId);
-                  // Handle special subject IDs
-                  const getSubjectDisplay = () => {
-                    if (subject) return { name: subject.name, color: subject.color };
-                    switch (subjectId) {
-                      case 'general': return { name: 'Общо учене', color: '#6366f1' };
-                      case 'manual': return { name: 'Ръчно добавено', color: '#22c55e' };
-                      case 'pomodoro': return { name: 'Pomodoro', color: '#06b6d4' };
-                      default: return { name: 'Неизвестен', color: '#666' };
-                    }
-                  };
-                  const subjectDisplay = getSubjectDisplay();
-                  const percentage = stats.monthMinutes > 0 ? (minutes / stats.monthMinutes) * 100 : 0;
-                  return (
-                    <div key={subjectId}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: subjectDisplay.color }} />
-                          <span className="text-sm text-slate-300 font-mono">{subjectDisplay.name}</span>
-                        </div>
-                        <span className="text-sm text-slate-400 font-mono">{formatMinutes(minutes)}</span>
-                      </div>
-                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${percentage}%`, backgroundColor: subjectDisplay.color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              {Object.keys(stats.bySubject).length === 0 && (
-                <p className="text-slate-500 font-mono text-sm text-center py-4">Няма данни за този месец</p>
-              )}
-            </div>
-          </div>
-
-          {/* Distractions Log */}
-          {stats.distractions.length > 0 && (
-            <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-slate-100 font-mono mb-4 flex items-center gap-2">
-                💭 Разсейвания
-              </h3>
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {stats.distractions.map(s => (
-                  <div key={s.id} className="p-3 bg-slate-800/30 rounded-lg">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs text-slate-500 font-mono">
-                        {new Date(s.startTime).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
-                      </span>
-                      <span className="text-xs text-slate-500 font-mono">{s.duration}м</span>
-                    </div>
-                    <p className="text-sm text-slate-300 font-mono">{s.distractionNote}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <StatsTab
+          timerSessions={data.timerSessions}
+          subjects={data.subjects}
+          studyGoals={goals}
+          academicPeriod={academicPeriod}
+        />
       )}
 
       {/* Rating Modal */}

@@ -470,3 +470,72 @@ export function getWeeklyTrends(
 
   return result;
 }
+
+// ============ Period-Aware Analytics (Toggl-like) ============
+
+export interface DailySubjectData {
+  date: string;
+  totalMinutes: number;
+  bySubject: Record<string, number>; // subjectId -> minutes
+}
+
+export function getStudyTimeByDayAndSubject(
+  sessions: TimerSession[],
+  startDate: string,
+  endDate: string
+): DailySubjectData[] {
+  const result: DailySubjectData[] = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0];
+    const daySessions = sessions.filter(s => getSessionDate(s) === dateStr);
+    const bySubject: Record<string, number> = {};
+
+    for (const s of daySessions) {
+      const sid = s.subjectId || 'general';
+      bySubject[sid] = (bySubject[sid] || 0) + (s.duration || 0);
+    }
+
+    result.push({
+      date: dateStr,
+      totalMinutes: daySessions.reduce((sum, s) => sum + (s.duration || 0), 0),
+      bySubject
+    });
+  }
+
+  return result;
+}
+
+export interface DayGroup {
+  date: string;
+  totalMinutes: number;
+  sessions: TimerSession[];
+}
+
+export function getSessionsGroupedByDay(
+  sessions: TimerSession[],
+  startDate: string,
+  endDate: string
+): DayGroup[] {
+  const filtered = sessions.filter(s => {
+    const d = getSessionDate(s);
+    return d >= startDate && d <= endDate;
+  });
+
+  const grouped: Record<string, TimerSession[]> = {};
+  for (const s of filtered) {
+    const d = getSessionDate(s);
+    if (!grouped[d]) grouped[d] = [];
+    grouped[d].push(s);
+  }
+
+  return Object.entries(grouped)
+    .map(([date, daySessions]) => ({
+      date,
+      totalMinutes: daySessions.reduce((sum, s) => sum + (s.duration || 0), 0),
+      sessions: daySessions.sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''))
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date)); // newest first
+}

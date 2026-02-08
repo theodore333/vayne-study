@@ -852,6 +852,7 @@ export function calculatePredictedGrade(
 
   // 2. Mastery Score - average quiz grade (0 when no data, not 3.5)
   const gradedTopics = topics.filter(t => t.avgGrade != null && t.avgGrade > 0);
+  const gradedFraction = gradedTopics.length / totalTopics;
   const avgQuizGrade = gradedTopics.length > 0
     ? gradedTopics.reduce((sum, t) => sum + (t.avgGrade || 0), 0) / gradedTopics.length
     : 0;
@@ -905,7 +906,7 @@ export function calculatePredictedGrade(
   }
 
   // Final calculation - Question Bank влияе с до 0.5 точки
-  const baseGrade = (coverageScore * 3 + (avgQuizGrade / 6) * 3) * timeFactor;
+  const baseGrade = (coverageScore * 3 + (avgQuizGrade / 6) * 3 * gradedFraction) * timeFactor;
   const consistencyBonus = consistencyScore * 0.5;
   const decayPenalty = decayRisk * 0.5;
   const questionBankBonus = hasQuestionBankData ? questionBankScore * 0.5 : 0;
@@ -921,7 +922,7 @@ export function calculatePredictedGrade(
     // Calculate vayne mode boost directly
     const vayneBoost =
       Math.min(1, coverageScore * 1.3) * 3 +
-      (avgQuizGrade / 6) * 3;
+      (avgQuizGrade / 6) * 3 * gradedFraction;
     const vayneConsistency = Math.min(1, consistencyScore + 0.5);
     const vayneDecay = decayRisk * 0.5;
     const vayneQBBonus = hasQuestionBankData ? Math.min(1, questionBankScore + 0.2) * 0.5 : 0;

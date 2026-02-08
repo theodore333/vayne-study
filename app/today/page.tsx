@@ -15,7 +15,7 @@ import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
 export default function TodayPage() {
-  const { data, isLoading, incrementApiCalls, updateProjectModule } = useApp();
+  const { data, isLoading, incrementApiCalls, updateProjectModule, addTechniquePractice } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -227,12 +227,34 @@ export default function TodayPage() {
     );
   }
 
-  const toggleTask = (taskId: string) => {
+  const spacingTechnique = useMemo(() =>
+    (data.studyTechniques || []).find(t => t.slug === 'spacing'),
+    [data.studyTechniques]
+  );
+
+  const toggleTask = (taskId: string, task?: DailyTask) => {
+    const wasCompleted = completedTasks.has(taskId);
     setCompletedTasks(prev => {
       const next = new Set(prev);
       next.has(taskId) ? next.delete(taskId) : next.add(taskId);
       return next;
     });
+
+    // Auto-track Spacing practice when completing a review task
+    if (!wasCompleted && task && spacingTechnique &&
+        (task.typeLabel.includes('Review') || task.typeLabel.includes('Преговор'))) {
+      const firstTopic = task.topics[0];
+      if (firstTopic) {
+        addTechniquePractice({
+          techniqueId: spacingTechnique.id,
+          topicId: firstTopic.id,
+          subjectId: task.subjectId,
+          effectiveness: null,
+          aiPrompt: 'Auto-tracked: FSRS spaced repetition review',
+          userReflection: null,
+        });
+      }
+    }
   };
 
   const toggleTopic = (topicId: string) => {
@@ -578,7 +600,7 @@ export default function TodayPage() {
               return (
                 <div key={task.id} className={"p-5 transition-all " + (isCompleted ? "opacity-50" : "")}>
                   <div className="flex items-start gap-4">
-                    <button onClick={() => toggleTask(task.id)} className="mt-1 transition-transform hover:scale-110">
+                    <button onClick={() => toggleTask(task.id, task)} className="mt-1 transition-transform hover:scale-110">
                       {isCompleted ? (
                         <CheckCircle2 size={24} className="text-green-500" />
                       ) : (

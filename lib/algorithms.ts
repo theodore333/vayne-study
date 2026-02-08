@@ -1657,8 +1657,8 @@ export function generateDailyPlan(
 
         // Use day of year as seed for consistent daily rotation
         const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        // Limit technique tasks to number of unique topics (don't repeat the same topic)
-        const techniqueCount = Math.min(1, sortedTechniques.length, todayTopics.length);
+        // Max 2 technique tasks, but only if there are enough unique topics (no repeats)
+        const techniqueCount = Math.min(2, sortedTechniques.length, todayTopics.length);
 
         const usedTopicIds = new Set<string>();
         for (let i = 0; i < techniqueCount; i++) {

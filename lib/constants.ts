@@ -165,10 +165,10 @@ export const TECHNIQUE_CATEGORY_CONFIG: Record<TechniqueCategory, {
   color: string;
   bgColor: string;
 }> = {
-  encoding: { label: 'Кодиране', color: '#a78bfa', bgColor: '#2e1065' },
-  retrieval: { label: 'Извличане', color: '#38bdf8', bgColor: '#0c4a6e' },
-  metacognition: { label: 'Метакогниция', color: '#f472b6', bgColor: '#500724' },
-  'self-management': { label: 'Самоуправление', color: '#4ade80', bgColor: '#052e16' }
+  encoding: { label: 'Encoding', color: '#a78bfa', bgColor: '#2e1065' },
+  retrieval: { label: 'Retrieval', color: '#38bdf8', bgColor: '#0c4a6e' },
+  metacognition: { label: 'Metacognition', color: '#f472b6', bgColor: '#500724' },
+  'self-management': { label: 'Self-Management', color: '#4ade80', bgColor: '#052e16' }
 };
 
 export interface DefaultTechnique {

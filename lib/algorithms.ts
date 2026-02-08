@@ -1640,11 +1640,91 @@ export function generateDailyPlan(
 
         const sortedTechniques = [...eligibleTechniques].sort((a, b) => scoreTechnique(b) - scoreTechnique(a));
 
-        // Attach top 1-2 techniques to the first 1-2 study tasks
+        // Compute task properties for affinity matching
+        const uniqueSubjectIds = new Set(studyTasks.map(t => t.subjectId));
+        const hasMultipleSubjects = uniqueSubjectIds.size >= 2;
+        const taskProps = studyTasks.map((task, idx) => {
+          const grayCount = task.topics.filter(t => t.status === 'gray').length;
+          const totalTopics = task.topics.length;
+          return {
+            task,
+            idx,
+            isNewMaterial: grayCount > 0,
+            isReview: grayCount === 0 && totalTopics > 0,
+            isFirst: idx === 0,
+            isLast: idx === studyTasks.length - 1,
+          };
+        });
+
+        // Technique-task affinity: how well does this technique fit this task?
+        const affinityScore = (technique: StudyTechnique, tp: typeof taskProps[0]): number => {
+          let aff = 0;
+          switch (technique.slug) {
+            case 'priming':
+              // Priming = preview before deep learning → new material, first task
+              if (tp.isNewMaterial) aff += 10;
+              if (tp.isFirst) aff += 5;
+              if (tp.isReview) aff -= 5;
+              break;
+            case 'chunking':
+            case 'non-linear-notes':
+              // Encoding techniques → new material
+              if (tp.isNewMaterial) aff += 8;
+              if (tp.isReview) aff -= 3;
+              break;
+            case 'inquiry-based-learning':
+              // Deep questions → any, slight preference for new material
+              if (tp.isNewMaterial) aff += 5;
+              break;
+            case 'rote-management':
+              // Identify what to memorize → new material
+              if (tp.isNewMaterial) aff += 6;
+              break;
+            case 'effort-monitoring':
+            case 'cognitive-load-regulation':
+              // Metacognition → works with anything, slight preference for heavy tasks
+              if (tp.isNewMaterial) aff += 3;
+              break;
+            case 'interleaving':
+              // Mix subjects → only makes sense when 2+ subjects in the day
+              if (hasMultipleSubjects) aff += 10;
+              else aff -= 10; // Don't suggest if only 1 subject
+              break;
+            case 'reflective-practice':
+              // Reflect after studying → last task of the day
+              if (tp.isLast) aff += 10;
+              if (tp.isFirst && studyTasks.length > 1) aff -= 5;
+              break;
+            case 'microlearning':
+              // Ultra-short review → review tasks, not new material
+              if (tp.isReview) aff += 8;
+              if (tp.isNewMaterial) aff -= 5;
+              break;
+          }
+          return aff;
+        };
+
+        // Greedy matching: for top N techniques by mastery score, find best task for each
         const attachCount = Math.min(2, sortedTechniques.length, studyTasks.length);
+        const usedTaskIndices = new Set<number>();
+
         for (let i = 0; i < attachCount; i++) {
           const technique = sortedTechniques[i];
-          studyTasks[i].suggestedTechnique = {
+          // Find the best unused task for this technique
+          let bestIdx = -1;
+          let bestScore = -Infinity;
+          for (const tp of taskProps) {
+            if (usedTaskIndices.has(tp.idx)) continue;
+            const score = affinityScore(technique, tp);
+            if (score > bestScore) {
+              bestScore = score;
+              bestIdx = tp.idx;
+            }
+          }
+          // Skip if terrible fit (e.g. interleaving with 1 subject)
+          if (bestIdx === -1 || bestScore < -5) continue;
+          usedTaskIndices.add(bestIdx);
+          studyTasks[bestIdx].suggestedTechnique = {
             id: technique.id,
             name: technique.name,
             icon: technique.icon,

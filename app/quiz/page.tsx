@@ -12,6 +12,7 @@ import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@
 import { showToast } from '@/components/Toast';
 import { useQuizTimer } from '@/hooks/useQuizTimer';
 import { useQuizGeneration } from '@/hooks/useQuizGeneration';
+import { getCachedQuiz, saveCachedQuiz, hashMaterial } from '@/lib/indexeddb-storage';
 import { QuizModeSelector } from '@/components/quiz/QuizModeSelector';
 import { QuizQuestion } from '@/components/quiz/QuizQuestion';
 import { QuizResults } from '@/components/quiz/QuizResults';
@@ -59,6 +60,8 @@ function QuizContent() {
 
   // Quiz settings
   const [mode, setMode] = useState<QuizMode | null>(null); // null = no selection yet
+  const [forceNewQuestions, setForceNewQuestions] = useState(false);
+  const [usedCache, setUsedCache] = useState(false);
   const [quizLength, setQuizLength] = useState<QuizLengthPreset>('standard');
   const [matchExamFormat, setMatchExamFormat] = useState(false);
   const [showCustomOptions, setShowCustomOptions] = useState(false);
@@ -383,6 +386,34 @@ function QuizContent() {
     }
 
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
+    setUsedCache(false);
+
+    // Cacheable modes (not dependent on wrong answers or unique recall)
+    const cacheableModes: Set<string> = new Set(['assessment', 'lower_order', 'mid_order', 'higher_order', 'custom']);
+    const isCacheable = !isMultiMode && !forceNewQuestions && topicId && mode && cacheableModes.has(mode);
+
+    // Check cache before generating
+    if (isCacheable && topicId && mode) {
+      try {
+        const cached = await getCachedQuiz(topicId, mode);
+        if (cached && cached.questions.length > 0) {
+          const currentHash = hashMaterial(topic?.material || '');
+          if (cached.materialHash === currentHash) {
+            // Cache hit - material unchanged, reuse questions
+            setUsedCache(true);
+            setQuizState({
+              questions: cached.questions,
+              currentIndex: 0,
+              answers: new Array(cached.questions.length).fill(null),
+              showResult: false, isGenerating: false, error: null
+            });
+            timer.initQuestionTimes(cached.questions.length);
+            setForceNewQuestions(false);
+            return;
+          }
+        }
+      } catch { /* cache miss - proceed with generation */ }
+    }
 
     // Build request body
     const questionCount = previewQuestionCount;
@@ -442,6 +473,12 @@ function QuizContent() {
       showResult: false, isGenerating: false, error: null
     });
     timer.initQuestionTimes(result.questions!.length);
+
+    // Save to cache for reuse
+    if (isCacheable && topicId && mode && result.questions) {
+      saveCachedQuiz(topicId, mode, result.questions, topic?.material || '');
+    }
+    setForceNewQuestions(false);
   };
 
   const cancelGeneration = () => {
@@ -1290,6 +1327,18 @@ function QuizContent() {
   // Quiz in progress
   if (quizState.questions.length > 0) {
     return (
+      <>
+      {usedCache && quizState.currentIndex === 0 && !showExplanation && (
+        <div className="mx-6 mb-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+          <span className="text-[11px] text-blue-400">⚡ Кеширани въпроси (без разход)</span>
+          <button
+            onClick={() => { setForceNewQuestions(true); resetQuiz(); }}
+            className="ml-auto text-[11px] text-blue-300 hover:text-white transition-colors underline"
+          >
+            Генерирай нови
+          </button>
+        </div>
+      )}
       <QuizQuestion
         questions={quizState.questions}
         currentIndex={quizState.currentIndex}
@@ -1317,6 +1366,7 @@ function QuizContent() {
         onEarlyStop={handleEarlyStop}
         onBack={() => { setShowBackConfirm(false); router.push('/quiz'); }}
       />
+      </>
     );
   }
 

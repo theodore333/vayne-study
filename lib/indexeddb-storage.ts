@@ -4,10 +4,11 @@
  */
 
 const DB_NAME = 'vayne-study-db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const MATERIALS_STORE = 'materials';
 const BACKUPS_STORE = 'backups';
 export const IMAGES_STORE = 'images';
+const QUIZ_CACHE_STORE = 'quiz-cache';
 const MAX_AUTO_BACKUPS = 7;
 
 let dbInstance: IDBDatabase | null = null;
@@ -57,6 +58,12 @@ export function initDB(): Promise<IDBDatabase> {
         const imgStore = db.createObjectStore(IMAGES_STORE, { keyPath: 'id' });
         imgStore.createIndex('topicId', 'topicId', { unique: false });
         imgStore.createIndex('type', 'type', { unique: false });
+      }
+
+      // Create quiz cache store (added in v4)
+      if (!db.objectStoreNames.contains(QUIZ_CACHE_STORE)) {
+        const quizStore = db.createObjectStore(QUIZ_CACHE_STORE, { keyPath: 'key' });
+        quizStore.createIndex('topicId', 'topicId', { unique: false });
       }
     };
   });
@@ -342,4 +349,73 @@ export async function getBackupSnapshots(): Promise<BackupSnapshot[]> {
 export async function getLatestBackup(): Promise<BackupSnapshot | null> {
   const all = await getBackupSnapshots();
   return all.length > 0 ? all[0] : null;
+}
+
+// --- Quiz Question Cache ---
+
+export interface CachedQuiz {
+  key: string;              // topicId:mode
+  topicId: string;
+  mode: string;
+  questions: any[];         // The generated questions array
+  materialHash: string;     // Simple hash to detect material changes
+  generatedAt: number;      // Timestamp
+}
+
+/** Simple string hash for material change detection */
+export function hashMaterial(material: string): string {
+  let hash = 0;
+  for (let i = 0; i < material.length; i++) {
+    const char = material.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash |= 0;
+  }
+  return hash.toString(36) + ':' + material.length;
+}
+
+/** Get cached quiz questions for a topic+mode */
+export async function getCachedQuiz(topicId: string, mode: string): Promise<CachedQuiz | null> {
+  try {
+    const db = await initDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(QUIZ_CACHE_STORE, 'readonly');
+      const store = tx.objectStore(QUIZ_CACHE_STORE);
+      const req = store.get(`${topicId}:${mode}`);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Save quiz questions to cache */
+export async function saveCachedQuiz(topicId: string, mode: string, questions: any[], material: string): Promise<void> {
+  try {
+    const db = await initDB();
+    const entry: CachedQuiz = {
+      key: `${topicId}:${mode}`,
+      topicId,
+      mode,
+      questions,
+      materialHash: hashMaterial(material),
+      generatedAt: Date.now()
+    };
+    const tx = db.transaction(QUIZ_CACHE_STORE, 'readwrite');
+    tx.objectStore(QUIZ_CACHE_STORE).put(entry);
+  } catch { /* non-critical */ }
+}
+
+/** Clear quiz cache for a specific topic (all modes) */
+export async function clearQuizCacheForTopic(topicId: string): Promise<void> {
+  try {
+    const db = await initDB();
+    const tx = db.transaction(QUIZ_CACHE_STORE, 'readwrite');
+    const store = tx.objectStore(QUIZ_CACHE_STORE);
+    const index = store.index('topicId');
+    const req = index.getAllKeys(topicId);
+    req.onsuccess = () => {
+      for (const key of req.result) store.delete(key);
+    };
+  } catch { /* non-critical */ }
 }

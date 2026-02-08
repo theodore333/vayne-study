@@ -492,6 +492,15 @@ export interface DailyTask {
   techniqueName?: string;
   techniqueIcon?: string;
   techniqueHowToApply?: string;
+  // Embedded technique suggestion (shown inside the task card, not as separate task)
+  suggestedTechnique?: {
+    id: string;
+    name: string;
+    icon: string;
+    slug: string;
+    description: string;
+    howToApply: string;
+  };
 }
 
 // Custom daily plan (edited by user)

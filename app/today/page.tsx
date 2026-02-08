@@ -738,7 +738,7 @@ export default function TodayPage() {
                           Отвори проекта за повече детайли
                         </Link>
                       )}
-                      {/* Technique "How to" expandable + link to techniques page */}
+                      {/* Technique "How to" expandable + link to techniques page (for standalone technique tasks) */}
                       {task.type === 'technique' && task.techniqueHowToApply && (
                         <details className="mt-2">
                           <summary className="text-xs text-violet-400 cursor-pointer hover:text-violet-300 transition-colors font-mono">
@@ -753,6 +753,28 @@ export default function TodayPage() {
                           >
                             Виж всички техники →
                           </Link>
+                        </details>
+                      )}
+                      {/* Embedded technique suggestion (inside regular task card) */}
+                      {task.suggestedTechnique && (
+                        <details className="mt-2 rounded-lg bg-violet-500/5 border border-violet-500/15">
+                          <summary className="px-3 py-2 cursor-pointer hover:bg-violet-500/10 transition-colors rounded-lg flex items-center gap-2">
+                            <span className="text-sm">{task.suggestedTechnique.icon}</span>
+                            <span className="text-xs font-semibold text-violet-400">Приложи: {task.suggestedTechnique.name}</span>
+                            <span className="text-[10px] text-violet-500 ml-auto">▾</span>
+                          </summary>
+                          <div className="px-3 pb-3 pt-1">
+                            <p className="text-[11px] text-slate-400 mb-2">{task.suggestedTechnique.description}</p>
+                            <pre className="text-[11px] text-slate-300 whitespace-pre-wrap font-sans leading-relaxed bg-[#1a1a2e] rounded-lg p-2.5">
+                              {task.suggestedTechnique.howToApply}
+                            </pre>
+                            <Link
+                              href="/techniques"
+                              className="inline-block mt-2 text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                            >
+                              Виж всички техники →
+                            </Link>
+                          </div>
                         </details>
                       )}
                     </div>

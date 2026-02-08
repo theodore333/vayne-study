@@ -1596,23 +1596,18 @@ export function generateDailyPlan(
     }
   }
 
-  // ================ TECHNIQUE PRACTICE TASKS ================
-  // Add 1-2 technique practice suggestions per day, paired with topics from today's plan
+  // ================ EMBED TECHNIQUE SUGGESTIONS INTO EXISTING TASKS ================
+  // Instead of separate technique tasks, attach 1-2 technique suggestions to existing study tasks
   if (studyTechniques && studyTechniques.length > 0) {
     const activeTechniques = studyTechniques.filter(t => t.isActive);
-    if (activeTechniques.length > 0) {
-      // Collect all topics from today's tasks for pairing
-      const todayTopics: { topic: Topic; subjectName: string; subjectColor: string; subjectId: string }[] = [];
-      for (const task of tasks) {
-        for (const topic of task.topics) {
-          todayTopics.push({ topic, subjectName: task.subjectName, subjectColor: task.subjectColor, subjectId: task.subjectId });
-        }
-      }
 
-      if (todayTopics.length > 0) {
-        // Skip spacing - it's already automated by FSRS, no need for a separate task
-        const eligibleTechniques = activeTechniques.filter(t => t.slug !== 'spacing');
+    // Embed technique suggestions into regular study tasks (not project/technique tasks)
+    const studyTasks = tasks.filter(t => t.type !== 'project' && t.type !== 'technique' && t.topics.length > 0);
+    if (activeTechniques.length > 0 && studyTasks.length > 0) {
+      // Skip spacing - already automated by FSRS
+      const eligibleTechniques = activeTechniques.filter(t => t.slug !== 'spacing');
 
+      if (eligibleTechniques.length > 0) {
         // Build effectiveness map per technique from practices
         const practiceMap: Record<string, { avgEff: number; count: number }> = {};
         if (techniquePractices) {
@@ -1630,83 +1625,33 @@ export function generateDailyPlan(
         const now = Date.now();
         const scoreTechnique = (t: StudyTechnique): number => {
           let score = 0;
-
-          // 1. Never practiced → highest priority (+50)
           if (!t.lastPracticedAt) return 50 + (5 - t.practiceCount) * 2;
-
-          // 2. Days since last practice (1 point per day, max 30)
           const daysSince = (now - new Date(t.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24);
           score += Math.min(30, daysSince);
-
-          // 3. Low effectiveness → needs more practice (+15 if avg < 3, +8 if avg < 4)
           const stats = practiceMap[t.id];
           if (stats && stats.count > 0) {
             if (stats.avgEff < 3) score += 15;
             else if (stats.avgEff < 4) score += 8;
           }
-
-          // 4. Low practice count → still building mastery (+10 if < 3, +5 if < 7)
           if (t.practiceCount < 3) score += 10;
           else if (t.practiceCount < 7) score += 5;
-
           return score;
         };
 
-        // Sort by priority score descending (highest priority first)
         const sortedTechniques = [...eligibleTechniques].sort((a, b) => scoreTechnique(b) - scoreTechnique(a));
 
-        // Use day of year as seed for consistent daily rotation
-        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        // Max 2 technique tasks, but only if there are enough unique topics (no repeats)
-        const techniqueCount = Math.min(2, sortedTechniques.length, todayTopics.length);
-
-        const usedTopicIds = new Set<string>();
-        for (let i = 0; i < techniqueCount; i++) {
+        // Attach top 1-2 techniques to the first 1-2 study tasks
+        const attachCount = Math.min(2, sortedTechniques.length, studyTasks.length);
+        for (let i = 0; i < attachCount; i++) {
           const technique = sortedTechniques[i];
-          // Pick a topic not already used by another technique task
-          let topicIdx = (dayOfYear + i) % todayTopics.length;
-          let attempts = 0;
-          while (usedTopicIds.has(todayTopics[topicIdx].topic.id) && attempts < todayTopics.length) {
-            topicIdx = (topicIdx + 1) % todayTopics.length;
-            attempts++;
-          }
-          if (usedTopicIds.has(todayTopics[topicIdx].topic.id)) break;
-          usedTopicIds.add(todayTopics[topicIdx].topic.id);
-          const paired = todayTopics[topicIdx];
-
-          // Build technique-specific task descriptions
-          const descriptions: Record<string, string> = {
-            'chunking': `Групирай основните концепции на "${paired.topic.name}" в логични блокове`,
-            'non-linear-notes': `Направи mind map за "${paired.topic.name}" - нелинейни, интегрирани бележки`,
-            'effort-monitoring': `Докато учиш "${paired.topic.name}", следи когнитивното си натоварване - трудно = добре!`,
-            'cognitive-load-regulation': `Регулирай сложността докато учиш "${paired.topic.name}" - висок intrinsic load, нисък extraneous`,
-            'reflective-practice': `След като учиш днес, рефлектирай: какво работи? Какво не? Какво ще промениш?`,
-            'inquiry-based-learning': `За "${paired.topic.name}" задавай "Защо?", "Как?", "Какво ако?" за всеки ключов факт`,
-            'rote-management': `Прегледай "${paired.topic.name}" - какво ТРЯБВА да се зубри vs какво може да се РАЗБЕРЕ?`,
-            'spacing': `Провери FSRS графика - има ли теми за преговор които пропускаш?`,
-            'interleaving': `Смесвай "${paired.topic.name}" с теми от друг предмет докато учиш`,
-            'priming': `Преди да учиш "${paired.topic.name}" - прегледай бегло за 3 мин (заглавия, диаграми, summary)`,
-            'microlearning': `Микро-сесия: за 3-5 мин припомни си основното от "${paired.topic.name}" без бележки`
+          studyTasks[i].suggestedTechnique = {
+            id: technique.id,
+            name: technique.name,
+            icon: technique.icon,
+            slug: technique.slug,
+            description: technique.description,
+            howToApply: technique.howToApply
           };
-
-          const description = descriptions[technique.slug] || `Приложи ${technique.name} с "${paired.topic.name}"`;
-
-          tasks.push({
-            id: generateId(),
-            subjectId: paired.subjectId,
-            subjectName: paired.subjectName,
-            subjectColor: paired.subjectColor,
-            type: 'technique',
-            typeLabel: `${technique.icon} ${technique.name}`,
-            description,
-            topics: [paired.topic],
-            estimatedMinutes: 10,
-            completed: false,
-            techniqueId: technique.id,
-            techniqueName: technique.name,
-            techniqueIcon: technique.icon,
-            techniqueHowToApply: technique.howToApply
-          });
         }
       }
     }
@@ -1714,7 +1659,6 @@ export function generateDailyPlan(
     // Suggest learning a new technique if there are inactive (not-yet-learned) ones
     const inactiveTechniques = studyTechniques.filter(t => !t.isActive);
     if (inactiveTechniques.length > 0 && activeTechniques.length < 5) {
-      // Remind every 3 days to consider a new technique
       const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
       if (dayOfYear % 3 === 0) {
         const nextTechnique = inactiveTechniques[dayOfYear % inactiveTechniques.length];

@@ -52,20 +52,32 @@ const NAV_GROUPS = [
     icon: 'BookOpen',
     children: [
       { href: '/subjects', label: 'Предмети', icon: 'BookOpen' },
-      { href: '/projects', label: 'Проекти', icon: 'Rocket' },
       { href: '/question-bank', label: 'Сборници', icon: 'FileQuestion' },
-      { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
-      { href: '/or-room', label: 'Операционна зала', icon: 'Scissors' },
       { href: '/techniques', label: 'Техники', icon: 'Sparkles' },
       { href: '/exam-prep', label: 'Изпитна подготовка', icon: 'GraduationCap' },
-      { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
     ]
+  },
+  {
+    id: 'clinical',
+    label: 'Клиника',
+    icon: 'Stethoscope',
+    children: [
+      { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
+      { href: '/or-room', label: 'Операционна зала', icon: 'Scissors' },
+    ]
+  },
+  {
+    id: 'projects',
+    label: 'Проекти',
+    icon: 'Rocket',
+    href: '/projects',
   },
   {
     id: 'analytics',
     label: 'Анализи',
     icon: 'BarChart3',
     children: [
+      { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
       { href: '/prediction', label: 'Прогноза', icon: 'TrendingUp' },
       { href: '/gpa', label: 'GPA', icon: 'GraduationCap' },
     ]

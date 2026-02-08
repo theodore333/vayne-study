@@ -1175,7 +1175,7 @@ export default function ReaderMode({
     if (techniques.length === 0) return null;
     // Pick a technique relevant to reading/encoding, rotate by day
     const readingTechniques = techniques.filter(t =>
-      ['chunking', 'non-linear-notes', 'inquiry-based', 'cognitive-load', 'priming', 'effort-as-cue'].includes(t.slug)
+      ['chunking', 'non-linear-notes', 'inquiry-based-learning', 'cognitive-load-regulation', 'priming', 'effort-monitoring'].includes(t.slug)
     );
     const pool = readingTechniques.length > 0 ? readingTechniques : techniques;
     const dayIndex = new Date().getDate() % pool.length;

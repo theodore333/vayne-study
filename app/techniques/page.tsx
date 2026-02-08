@@ -586,7 +586,8 @@ export default function TechniquesPage() {
         practices.filter(p => p.effectiveness !== null).length
       : null;
     const stale = techniques.filter(t => {
-      if (!t.isActive || !t.lastPracticedAt) return t.isActive;
+      if (!t.isActive) return false;
+      if (!t.lastPracticedAt) return false; // Never practiced = new, not stale
       return (Date.now() - new Date(t.lastPracticedAt).getTime()) > 7 * 24 * 60 * 60 * 1000;
     }).length;
     return { active, totalPractices, avgEffectiveness, stale };

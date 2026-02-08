@@ -1609,8 +1609,11 @@ export function generateDailyPlan(
       }
 
       if (todayTopics.length > 0) {
+        // Skip spacing - it's already automated by FSRS, no need for a separate task
+        const eligibleTechniques = activeTechniques.filter(t => t.slug !== 'spacing');
+
         // Sort techniques: least recently practiced first, never-practiced first
-        const sortedTechniques = [...activeTechniques].sort((a, b) => {
+        const sortedTechniques = [...eligibleTechniques].sort((a, b) => {
           if (!a.lastPracticedAt && !b.lastPracticedAt) return 0;
           if (!a.lastPracticedAt) return -1;
           if (!b.lastPracticedAt) return 1;
@@ -1619,12 +1622,21 @@ export function generateDailyPlan(
 
         // Use day of year as seed for consistent daily rotation
         const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-        const techniqueCount = Math.min(2, sortedTechniques.length);
+        // Limit technique tasks to number of unique topics (don't repeat the same topic)
+        const techniqueCount = Math.min(1, sortedTechniques.length, todayTopics.length);
 
+        const usedTopicIds = new Set<string>();
         for (let i = 0; i < techniqueCount; i++) {
           const technique = sortedTechniques[i];
-          // Pick a topic to pair with - use day rotation for variety
-          const topicIdx = (dayOfYear + i) % todayTopics.length;
+          // Pick a topic not already used by another technique task
+          let topicIdx = (dayOfYear + i) % todayTopics.length;
+          let attempts = 0;
+          while (usedTopicIds.has(todayTopics[topicIdx].topic.id) && attempts < todayTopics.length) {
+            topicIdx = (topicIdx + 1) % todayTopics.length;
+            attempts++;
+          }
+          if (usedTopicIds.has(todayTopics[topicIdx].topic.id)) break;
+          usedTopicIds.add(todayTopics[topicIdx].topic.id);
           const paired = todayTopics[topicIdx];
 
           // Build technique-specific task descriptions

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, Repeat } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -785,6 +785,31 @@ export default function TodayPage() {
           </div>
         )}
       </div>
+
+      {/* "Learn a new technique" hint - subtle banner, every 3 days */}
+      {(() => {
+        const techniques = data.studyTechniques || [];
+        const activeCount = techniques.filter(t => t.isActive).length;
+        const inactive = techniques.filter(t => !t.isActive);
+        const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
+        if (inactive.length > 0 && activeCount < 5 && dayOfYear % 3 === 0) {
+          const next = inactive[dayOfYear % inactive.length];
+          return (
+            <Link
+              href="/techniques"
+              className="mt-3 flex items-center gap-3 px-4 py-2.5 rounded-xl bg-violet-500/5 border border-violet-500/15 hover:bg-violet-500/10 transition-colors group"
+            >
+              <span className="text-lg">{next.icon}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-xs text-violet-400 font-medium">Готов за нова техника?</span>
+                <span className="text-xs text-slate-500 ml-1.5">Разгледай <span className="text-violet-300">{next.name}</span></span>
+              </div>
+              <ChevronRight size={14} className="text-violet-500 group-hover:text-violet-300 transition-colors shrink-0" />
+            </Link>
+          );
+        }
+        return null;
+      })()}
 
       {/* Completion Message with Bonus Options */}
       {topicProgressPercent === 100 && activePlan.length > 0 && (

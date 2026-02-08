@@ -1736,30 +1736,6 @@ export function generateDailyPlan(
       }
     }
 
-    // Suggest learning a new technique if there are inactive (not-yet-learned) ones
-    const inactiveTechniques = studyTechniques.filter(t => !t.isActive);
-    if (inactiveTechniques.length > 0 && activeTechniques.length < 5) {
-      const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-      if (dayOfYear % 3 === 0) {
-        const nextTechnique = inactiveTechniques[dayOfYear % inactiveTechniques.length];
-        tasks.push({
-          id: generateId(),
-          subjectId: '',
-          subjectName: 'IcanStudy',
-          subjectColor: '#8b5cf6',
-          type: 'technique',
-          typeLabel: `📚 Нова техника`,
-          description: `Време за нова техника! Разгледай "${nextTechnique.name}" в курса и включи я когато си готов.`,
-          topics: [],
-          estimatedMinutes: 15,
-          completed: false,
-          techniqueId: nextTechnique.id,
-          techniqueName: nextTechnique.name,
-          techniqueIcon: nextTechnique.icon,
-          techniqueHowToApply: nextTechnique.howToApply
-        });
-      }
-    }
   }
 
   return tasks;

@@ -1,6 +1,27 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { NextResponse } from 'next/server';
 
+function repairTruncatedJson(text: string): string {
+  text = text.replace(/,\s*"[^"]*$/, '');
+  text = text.replace(/:\s*"[^"]*$/, ': ""');
+  const opens: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (const ch of text) {
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{' || ch === '[') opens.push(ch);
+    if (ch === '}' || ch === ']') opens.pop();
+  }
+  while (opens.length > 0) {
+    const last = opens.pop();
+    text += last === '{' ? '}' : ']';
+  }
+  return text;
+}
+
 // Bloom's Taxonomy level descriptions
 const BLOOM_PROMPTS: Record<number, string> = {
   1: `Level 1 - REMEMBER (Запомняне): Focus on recall of facts, terms, and basic concepts.
@@ -89,7 +110,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Напиши нещо преди да оцениш' }, { status: 400 });
       }
       if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
-      return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall, studyTechniques);
+      return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall, studyTechniques, body.examSimulation);
     }
 
     if (mode === 'gap_analysis') {
@@ -122,6 +143,21 @@ export async function POST(request: Request) {
       return handleOpenHint(anthropic, question, qBloomLevel || 3, concept);
     }
 
+
+    if (mode === 'exam_prep_diagnostic') {
+      const { topics, subjectName: subjName } = body;
+      return handleExamPrepDiagnostic(anthropic, topics, subjName || subjectName);
+    }
+
+    if (mode === 'exam_prep_evaluate') {
+      const { answers } = body;
+      return handleExamPrepEvaluate(anthropic, answers);
+    }
+
+    if (mode === 'exam_prep_followup_eval') {
+      const { followUps } = body;
+      return handleExamPrepFollowUpEval(anthropic, followUps);
+    }
 
     // Standard quiz generation (assessment, mid_order, higher_order, custom)
     // material can be empty — generates from general medical knowledge
@@ -211,14 +247,21 @@ async function handleFreeRecallEvaluation(
   topicName: string,
   subjectName: string,
   userRecall: string,
-  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null
+  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null,
+  examSimulation?: boolean
 ) {
+  const followUpInstruction = examSimulation ? `
+  "followUpQuestions": [
+    {"question": "<follow-up въпрос базиран на пропуснато>", "correctAnswer": "<верен отговор 2-3 изречения>"}
+  ]
+IMPORTANT: Generate exactly 2-3 follow-up questions that a professor would ask based on what the student MISSED or explained poorly. Questions should dig deeper into the missing concepts.` : '';
+
   const response = await anthropic.messages.create({
     model: 'claude-opus-4-6',
-    max_tokens: 4096,
+    max_tokens: examSimulation ? 6144 : 4096,
     messages: [{
       role: 'user',
-      content: `You are an expert medical educator evaluating a Bulgarian medical student's free recall.
+      content: `You are an expert medical educator evaluating a Bulgarian medical student's free recall.${examSimulation ? ' This is an EXAM SIMULATION - you are playing the role of an examining professor.' : ''}
 
 Subject: ${subjectName}
 Topic: ${topicName}
@@ -248,7 +291,8 @@ Return ONLY a valid JSON object with this structure:
   ],
   "feedback": "Overall feedback in Bulgarian - what they did well and what to focus on",
   "suggestedNextStep": "specific recommendation for what to study next"${studyTechniques && studyTechniques.length > 0 ? `,
-  "suggestedTechnique": "КОНКРЕТНА учебна техника от списъка по-долу, подходяща за подобрение"` : ''}
+  "suggestedTechnique": "КОНКРЕТНА учебна техника от списъка по-долу, подходяща за подобрение"` : ''}${examSimulation ? ',' : ''}
+  ${followUpInstruction}
 }
 ${studyTechniques && studyTechniques.length > 0 ? `
 Студентът практикува тези учебни техники: ${studyTechniques.map(t => t.name).join(', ')}
@@ -1159,6 +1203,262 @@ BLOOM НИВО: ${bloomLevel} - ${bloomGuidance[bloomLevel] || bloomGuidance[3]}
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
+}
+
+// --- Exam Prep Handlers ---
+
+interface ExamPrepTopic {
+  topicId: string;
+  topicName: string;
+  material: string;
+  bloomLevel?: number;
+}
+
+async function handleExamPrepDiagnostic(
+  anthropic: Anthropic,
+  topics: ExamPrepTopic[],
+  subjectName: string
+) {
+  if (!topics || topics.length === 0) {
+    return NextResponse.json({ error: 'Няма теми за диагностика' }, { status: 400 });
+  }
+
+  const topicList = topics.map((t, i) => {
+    const mat = (t.material || '').substring(0, 2000);
+    return `--- ТЕМА ${i + 1}: ${t.topicName} (ID: ${t.topicId}) ---
+Bloom ниво: ${t.bloomLevel || 2}
+Материал:
+${mat}${(t.material || '').length > 2000 ? '\n[... съкратено]' : ''}`;
+  }).join('\n\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 8192,
+    messages: [{
+      role: 'user',
+      content: `Ти си медицински преподавател. Генерирай диагностични въпроси за изпитна подготовка.
+
+Предмет: ${subjectName}
+Брой теми: ${topics.length}
+
+${topicList}
+
+ЗАДАЧА: За ВСЯКА тема генерирай 2-3 отворени въпроса които тестват разбирането на студента.
+- Въпросите трябва да покриват КЛЮЧОВИТЕ концепции от материала
+- Bloom ниво: подходящо за темата (1-2 за дефиниции, 3-4 за приложение, 5-6 за анализ)
+- correctAnswer: примерен верен отговор (2-4 изречения, колкото се очаква от студента)
+- Въпроси на БЪЛГАРСКИ
+
+Върни САМО валиден JSON:
+{
+  "topicQuestions": [
+    {
+      "topicId": "<ID на темата>",
+      "topicName": "<име на темата>",
+      "questions": [
+        {
+          "question": "<въпрос на български>",
+          "correctAnswer": "<примерен верен отговор 2-4 изречения>",
+          "bloomLevel": <1-6>,
+          "concept": "<тествана концепция>"
+        }
+      ]
+    }
+  ]
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
+  let result;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse diagnostic questions', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    ...result,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 10000) / 10000
+    }
+  });
+}
+
+interface ExamPrepAnswer {
+  topicId: string;
+  topicName: string;
+  question: string;
+  correctAnswer: string;
+  userAnswer: string;
+  bloomLevel?: number;
+}
+
+async function handleExamPrepEvaluate(
+  anthropic: Anthropic,
+  answers: ExamPrepAnswer[]
+) {
+  if (!answers || answers.length === 0) {
+    return NextResponse.json({ error: 'Няма отговори за оценка' }, { status: 400 });
+  }
+
+  const byTopic = new Map<string, ExamPrepAnswer[]>();
+  for (const a of answers) {
+    if (!byTopic.has(a.topicId)) byTopic.set(a.topicId, []);
+    byTopic.get(a.topicId)!.push(a);
+  }
+
+  const answerList = Array.from(byTopic.entries()).map(([topicId, topicAnswers]) => {
+    const topicName = topicAnswers[0].topicName;
+    const qaPairs = topicAnswers.map((a, i) => `  В${i + 1}: ${a.question}
+  Верен отговор: ${a.correctAnswer}
+  Студент: ${a.userAnswer || '(без отговор)'}`).join('\n\n');
+
+    return `--- ${topicName} (ID: ${topicId}) ---\n${qaPairs}`;
+  }).join('\n\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: `Ти си справедлив медицински преподавател. Оцени отговорите на студента по теми.
+
+${answerList}
+
+КРИТЕРИИ:
+- Сравнявай СЪДЪРЖАТЕЛНО с верния отговор - покрива ли ключовите точки?
+- Кратък но верен = добра оценка. Грешни факти = ниска оценка.
+- Ако reference отговорът е кратък, НЕ наказвай за краткост.
+- score е 0-100 (процент покритие на ключови точки + точност)
+
+Върни САМО валиден JSON:
+{
+  "topicScores": [
+    {
+      "topicId": "<ID>",
+      "topicName": "<име>",
+      "score": <0-100>,
+      "feedback": "<1-2 изречения обратна връзка>",
+      "missing": ["<пропусната концепция 1>", "<пропусната концепция 2>"]
+    }
+  ]
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
+  let result;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse evaluation', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    ...result,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 10000) / 10000
+    }
+  });
+}
+
+async function handleExamPrepFollowUpEval(
+  anthropic: Anthropic,
+  followUps: Array<{ question: string; correctAnswer: string; userAnswer: string }>
+) {
+  if (!followUps || followUps.length === 0) {
+    return NextResponse.json({ error: 'Няма follow-up отговори' }, { status: 400 });
+  }
+
+  const qaPairs = followUps.map((f, i) =>
+    `В${i + 1}: ${f.question}\nВерен отговор: ${f.correctAnswer}\nСтудент: ${f.userAnswer || '(без отговор)'}`
+  ).join('\n\n');
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: `Оцени follow-up отговорите на студента от устен изпит.
+
+${qaPairs}
+
+КРИТЕРИИ: Справедлива оценка. Сравни съдържателно с верния отговор. Кратък верен = добра оценка.
+
+Върни САМО валиден JSON:
+{
+  "evaluations": [
+    {
+      "score": <0.0-1.0>,
+      "isCorrect": <true ако score >= 0.7>,
+      "feedback": "<кратка обратна връзка>"
+    }
+  ],
+  "overallScore": <0.0-1.0 средна>,
+  "summary": "<обобщена обратна връзка на български>"
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let result;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse follow-up evaluation', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    ...result,
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 10000) / 10000
     }
   });
 }

@@ -57,6 +57,7 @@ const NAV_GROUPS = [
       { href: '/cases', label: 'Клинични случаи', icon: 'Stethoscope' },
       { href: '/or-room', label: 'Операционна зала', icon: 'Scissors' },
       { href: '/techniques', label: 'Техники', icon: 'Sparkles' },
+      { href: '/exam-prep', label: 'Изпитна подготовка', icon: 'GraduationCap' },
       { href: '/analytics', label: 'Статистики', icon: 'BarChart3' },
     ]
   },

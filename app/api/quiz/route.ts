@@ -250,11 +250,13 @@ async function handleFreeRecallEvaluation(
   studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null,
   examSimulation?: boolean
 ) {
-  const followUpInstruction = examSimulation ? `
+  const followUpField = examSimulation ? `,
   "followUpQuestions": [
     {"question": "<follow-up въпрос базиран на пропуснато>", "correctAnswer": "<верен отговор 2-3 изречения>"}
-  ]
-IMPORTANT: Generate exactly 2-3 follow-up questions that a professor would ask based on what the student MISSED or explained poorly. Questions should dig deeper into the missing concepts.` : '';
+  ]` : '';
+
+  const followUpInstruction = examSimulation ? `
+IMPORTANT: Generate exactly 2-3 follow-up questions in "followUpQuestions" that a professor would ask based on what the student MISSED or explained poorly. Questions should dig deeper into the missing concepts. Questions in Bulgarian.` : '';
 
   const response = await anthropic.messages.create({
     model: 'claude-opus-4-6',
@@ -291,9 +293,9 @@ Return ONLY a valid JSON object with this structure:
   ],
   "feedback": "Overall feedback in Bulgarian - what they did well and what to focus on",
   "suggestedNextStep": "specific recommendation for what to study next"${studyTechniques && studyTechniques.length > 0 ? `,
-  "suggestedTechnique": "КОНКРЕТНА учебна техника от списъка по-долу, подходяща за подобрение"` : ''}${examSimulation ? ',' : ''}
-  ${followUpInstruction}
+  "suggestedTechnique": "КОНКРЕТНА учебна техника от списъка по-долу, подходяща за подобрение"` : ''}${followUpField}
 }
+${followUpInstruction}
 ${studyTechniques && studyTechniques.length > 0 ? `
 Студентът практикува тези учебни техники: ${studyTechniques.map(t => t.name).join(', ')}
 В "suggestedTechnique" ЗАДЪЛЖИТЕЛНО препоръчай конкретна техника, базирана на представянето:
@@ -313,6 +315,10 @@ Be encouraging but honest. Focus on medical accuracy.`
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
 
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
   let evaluation;
   try {
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -321,7 +327,7 @@ Be encouraging but honest. Focus on medical accuracy.`
     return NextResponse.json({ error: 'Failed to parse evaluation', raw: responseText.substring(0, 500) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * 0.015 + response.usage.output_tokens * 0.075) / 1000000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     evaluation,
@@ -1442,6 +1448,10 @@ ${qaPairs}
 
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
 
   let result;
   try {

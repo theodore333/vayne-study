@@ -28,14 +28,30 @@ function TechniqueCard({
   onToggleExpand: () => void;
 }) {
   const categoryConfig = TECHNIQUE_CATEGORY_CONFIG[technique.category] || TECHNIQUE_CATEGORY_CONFIG.encoding;
-  const avgEffectiveness = practices.length > 0
-    ? practices.filter(p => p.effectiveness !== null).reduce((sum, p) => sum + (p.effectiveness ?? 0), 0) /
-      (practices.filter(p => p.effectiveness !== null).length || 1)
+  const ratedPractices = practices.filter(p => p.effectiveness !== null);
+  const avgEffectiveness = ratedPractices.length > 0
+    ? ratedPractices.reduce((sum, p) => sum + (p.effectiveness ?? 0), 0) / ratedPractices.length
     : null;
 
   const daysSinceLastPractice = technique.lastPracticedAt
     ? Math.floor((Date.now() - new Date(technique.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24))
     : null;
+
+  // Mastery level computation
+  const pc = technique.practiceCount;
+  const avg = avgEffectiveness ?? 0;
+  const isRecent = daysSinceLastPractice !== null && daysSinceLastPractice <= 14;
+  const mastery = pc === 0
+    ? { level: 'Нова', color: 'text-slate-500', bg: 'bg-slate-500', percent: 0 }
+    : pc <= 2 || avg < 2.5
+    ? { level: 'Начинаещ', color: 'text-orange-400', bg: 'bg-orange-400', percent: Math.min(25, pc * 8 + avg * 3) }
+    : pc <= 6 || avg < 3.5
+    ? { level: 'Учещ се', color: 'text-yellow-400', bg: 'bg-yellow-400', percent: 25 + Math.min(30, (pc - 2) * 5 + avg * 3) }
+    : pc <= 14 || avg < 4.2
+    ? { level: 'Напреднал', color: 'text-blue-400', bg: 'bg-blue-400', percent: 55 + Math.min(30, (pc - 6) * 2 + avg * 3) }
+    : isRecent
+    ? { level: 'Mastered', color: 'text-emerald-400', bg: 'bg-emerald-400', percent: 100 }
+    : { level: 'Напреднал', color: 'text-blue-400', bg: 'bg-blue-400', percent: 85 };
 
   return (
     <div className={`rounded-xl border transition-all ${technique.isActive ? 'border-[#2a2a3a] bg-[#0f0f1a]' : 'border-[#1a1a2a] bg-[#0a0a12] opacity-60'}`}>
@@ -51,23 +67,36 @@ function TechniqueCard({
               >
                 {categoryConfig.label}
               </span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${mastery.color} bg-slate-800/80`}>
+                {mastery.level}
+              </span>
               {!technique.isActive && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500">Изключена</span>
               )}
+            </div>
+            {/* Mastery progress bar */}
+            <div className="flex items-center gap-2 mt-1.5 mb-1.5">
+              <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${mastery.bg}`}
+                  style={{ width: `${mastery.percent}%`, opacity: mastery.percent === 0 ? 0 : 0.7 }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 tabular-nums w-8 text-right">{Math.round(mastery.percent)}%</span>
             </div>
             <p className="text-xs text-slate-400 line-clamp-2">{technique.description}</p>
             <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-500">
               <span className="flex items-center gap-1">
                 <Star size={10} />
-                {avgEffectiveness !== null ? `${avgEffectiveness.toFixed(1)}/5` : 'Няма оценка'}
+                {avgEffectiveness !== null ? `${avgEffectiveness.toFixed(1)}/5` : '—'}
               </span>
               <span className="flex items-center gap-1">
                 <Clock size={10} />
-                {technique.practiceCount}x практикувано
+                {technique.practiceCount}x
               </span>
               {daysSinceLastPractice !== null && (
                 <span className={daysSinceLastPractice > 7 ? 'text-orange-400' : ''}>
-                  Последно: преди {daysSinceLastPractice}д
+                  преди {daysSinceLastPractice}д
                 </span>
               )}
             </div>

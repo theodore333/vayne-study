@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, StudyTechnique } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, StudyTechnique, TechniquePractice } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
 
 // ============================================================================
@@ -1075,7 +1075,8 @@ export function generateDailyPlan(
   ankiDueCards?: number,
   developmentProjects?: DevelopmentProject[],
   academicEvents?: AcademicEvent[],
-  studyTechniques?: StudyTechnique[]
+  studyTechniques?: StudyTechnique[],
+  techniquePractices?: TechniquePractice[]
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
@@ -1612,13 +1613,47 @@ export function generateDailyPlan(
         // Skip spacing - it's already automated by FSRS, no need for a separate task
         const eligibleTechniques = activeTechniques.filter(t => t.slug !== 'spacing');
 
-        // Sort techniques: least recently practiced first, never-practiced first
-        const sortedTechniques = [...eligibleTechniques].sort((a, b) => {
-          if (!a.lastPracticedAt && !b.lastPracticedAt) return 0;
-          if (!a.lastPracticedAt) return -1;
-          if (!b.lastPracticedAt) return 1;
-          return new Date(a.lastPracticedAt).getTime() - new Date(b.lastPracticedAt).getTime();
-        });
+        // Build effectiveness map per technique from practices
+        const practiceMap: Record<string, { avgEff: number; count: number }> = {};
+        if (techniquePractices) {
+          for (const p of techniquePractices) {
+            if (!practiceMap[p.techniqueId]) practiceMap[p.techniqueId] = { avgEff: 0, count: 0 };
+            if (p.effectiveness !== null) {
+              const entry = practiceMap[p.techniqueId];
+              entry.avgEff = (entry.avgEff * entry.count + p.effectiveness) / (entry.count + 1);
+              entry.count++;
+            }
+          }
+        }
+
+        // Smart priority scoring: higher = more urgent to practice
+        const now = Date.now();
+        const scoreTechnique = (t: StudyTechnique): number => {
+          let score = 0;
+
+          // 1. Never practiced → highest priority (+50)
+          if (!t.lastPracticedAt) return 50 + (5 - t.practiceCount) * 2;
+
+          // 2. Days since last practice (1 point per day, max 30)
+          const daysSince = (now - new Date(t.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24);
+          score += Math.min(30, daysSince);
+
+          // 3. Low effectiveness → needs more practice (+15 if avg < 3, +8 if avg < 4)
+          const stats = practiceMap[t.id];
+          if (stats && stats.count > 0) {
+            if (stats.avgEff < 3) score += 15;
+            else if (stats.avgEff < 4) score += 8;
+          }
+
+          // 4. Low practice count → still building mastery (+10 if < 3, +5 if < 7)
+          if (t.practiceCount < 3) score += 10;
+          else if (t.practiceCount < 7) score += 5;
+
+          return score;
+        };
+
+        // Sort by priority score descending (highest priority first)
+        const sortedTechniques = [...eligibleTechniques].sort((a, b) => scoreTechnique(b) - scoreTechnique(a));
 
         // Use day of year as seed for consistent daily rotation
         const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));

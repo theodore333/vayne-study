@@ -332,6 +332,35 @@ export function migrateData(rawData: any): AppData {
   if (!data.studyTechniques) data.studyTechniques = [];
   if (!data.techniquePractices) data.techniquePractices = [];
 
+  // Sanitize technique categories (prevent crash from corrupted cloud data)
+  const validCategories = ['encoding', 'retrieval', 'metacognition', 'self-management'];
+  data.studyTechniques = data.studyTechniques.map((t: any) => ({
+    ...t,
+    category: validCategories.includes(t.category) ? t.category : 'encoding',
+    name: typeof t.name === 'string' ? t.name : '',
+    slug: typeof t.slug === 'string' ? t.slug : '',
+    notes: typeof t.notes === 'string' ? t.notes : '',
+    description: typeof t.description === 'string' ? t.description : '',
+    howToApply: typeof t.howToApply === 'string' ? t.howToApply : '',
+    icon: typeof t.icon === 'string' ? t.icon : '📝',
+    isActive: typeof t.isActive === 'boolean' ? t.isActive : false,
+    isBuiltIn: typeof t.isBuiltIn === 'boolean' ? t.isBuiltIn : false,
+    practiceCount: typeof t.practiceCount === 'number' ? t.practiceCount : 0,
+  }));
+
+  // Migrate built-in technique names to English (from Bulgarian) if they exist
+  if (data.studyTechniques.length > 0) {
+    const { DEFAULT_TECHNIQUES } = require('./constants');
+    const defaultsBySlug: Record<string, any> = {};
+    for (const d of DEFAULT_TECHNIQUES) defaultsBySlug[(d as any).slug] = d;
+    data.studyTechniques = data.studyTechniques.map((t: any) => {
+      if (t.isBuiltIn && defaultsBySlug[t.slug]) {
+        return { ...t, name: defaultsBySlug[t.slug].name };
+      }
+      return t;
+    });
+  }
+
   // Pre-seed built-in techniques if empty (first load or migration)
   if (data.studyTechniques.length === 0) {
     const { DEFAULT_TECHNIQUES } = require('./constants');

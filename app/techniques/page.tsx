@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useApp } from '@/lib/context';
 import { TECHNIQUE_CATEGORY_CONFIG } from '@/lib/constants';
 import { StudyTechnique, TechniqueCategory, TechniquePractice } from '@/lib/types';
@@ -27,9 +27,9 @@ function TechniqueCard({
   expanded: boolean;
   onToggleExpand: () => void;
 }) {
-  const categoryConfig = TECHNIQUE_CATEGORY_CONFIG[technique.category];
+  const categoryConfig = TECHNIQUE_CATEGORY_CONFIG[technique.category] || TECHNIQUE_CATEGORY_CONFIG.encoding;
   const avgEffectiveness = practices.length > 0
-    ? practices.filter(p => p.effectiveness !== null).reduce((sum, p) => sum + (p.effectiveness || 0), 0) /
+    ? practices.filter(p => p.effectiveness !== null).reduce((sum, p) => sum + (p.effectiveness ?? 0), 0) /
       (practices.filter(p => p.effectiveness !== null).length || 1)
     : null;
 
@@ -158,7 +158,7 @@ function EditTechniqueModal({
       notes: notes.trim(),
       icon,
       category,
-      slug: name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+      slug: name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}-]/gu, ''),
       isBuiltIn: technique?.isBuiltIn ?? false,
       isActive: technique?.isActive ?? true
     });
@@ -282,6 +282,12 @@ function PracticeModal({
   const [reflection, setReflection] = useState('');
   const [evaluation, setEvaluation] = useState<AIEvaluation | null>(null);
   const [evalError, setEvalError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Cleanup fetch on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   // Build the "correct answer" from technique data
   const fullMaterial = [
@@ -302,10 +308,15 @@ function PracticeModal({
     setPhase('evaluating');
     setEvalError(null);
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const response = await fetch('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           apiKey,
           mode: 'free_recall',
@@ -571,7 +582,7 @@ export default function TechniquesPage() {
     const active = techniques.filter(t => t.isActive).length;
     const totalPractices = practices.length;
     const avgEffectiveness = practices.filter(p => p.effectiveness !== null).length > 0
-      ? practices.filter(p => p.effectiveness !== null).reduce((s, p) => s + (p.effectiveness || 0), 0) /
+      ? practices.filter(p => p.effectiveness !== null).reduce((s, p) => s + (p.effectiveness ?? 0), 0) /
         practices.filter(p => p.effectiveness !== null).length
       : null;
     const stale = techniques.filter(t => {

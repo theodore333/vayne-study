@@ -191,7 +191,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'non-linear-notes',
-    name: 'Нелинейни бележки',
+    name: 'Non-linear Note-taking',
     category: 'encoding',
     icon: '🗺️',
     description: 'Бележки които не са последователни (не ред по ред), а интегрирани и приоритизирани - mind maps, concept maps, диаграми с връзки.',
@@ -199,7 +199,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'effort-monitoring',
-    name: 'Effort-as-Cue мониторинг',
+    name: 'Effort-as-Cue Monitoring',
     category: 'metacognition',
     icon: '🧭',
     description: 'Следи усилието си докато учиш. Когато е трудно = "desirable difficulty" = ученето работи. Когато е лесно = вероятно не учиш нищо ново.',
@@ -207,7 +207,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'cognitive-load-regulation',
-    name: 'Регулация на когнитивно натоварване',
+    name: 'Cognitive Load Self-Regulation',
     category: 'metacognition',
     icon: '⚖️',
     description: 'Активно управлявай колко трудно е ученето. Целта е ВИСОКО intrinsic натоварване (дълбоко мислене) при НИСКО extraneous (без излишни разсейвания).',
@@ -215,7 +215,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'reflective-practice',
-    name: 'Рефлективна практика',
+    name: 'Reflective Practice',
     category: 'metacognition',
     icon: '🪞',
     description: 'След всяка учебна сесия, рефлектирай: какво работи, какво не, какво да промениш. Модифициран Kolb цикъл: Опит → Рефлексия → Анализ → Експеримент.',
@@ -231,7 +231,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'rote-management',
-    name: 'Управление на зубрене',
+    name: 'Rote-Memorisation Management',
     category: 'encoding',
     icon: '🎯',
     description: 'Разграничавай какво ТРЯБВА да се зазубри (формули, дози) от какво може да се РАЗБЕРЕ (механизми, връзки). Минимизирай зубренето.',
@@ -239,7 +239,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'spacing',
-    name: 'Spacing (Разпределено учене)',
+    name: 'Spacing',
     category: 'retrieval',
     icon: '📅',
     description: 'Разпредели ученето във времето вместо да учиш всичко наведнъж. FSRS в приложението автоматизира timing-а, но принципът е по-широк.',
@@ -247,7 +247,7 @@ export const DEFAULT_TECHNIQUES: DefaultTechnique[] = [
   },
   {
     slug: 'interleaving',
-    name: 'Interleaving (Смесване)',
+    name: 'Interleaving',
     category: 'retrieval',
     icon: '🔀',
     description: 'Смесвай различни теми/предмети в една сесия вместо да учиш само едно нещо. Чувства се по-трудно, но води до по-силно запомняне.',

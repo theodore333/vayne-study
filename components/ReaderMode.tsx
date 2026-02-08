@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useEditor, EditorContent, NodeViewWrapper, NodeViewProps, ReactNodeViewRenderer } from '@tiptap/react';
 import { Fragment } from '@tiptap/pm/model';
 import StarterKit from '@tiptap/starter-kit';
@@ -1169,7 +1169,8 @@ export default function ReaderMode({
 
   // Study technique tip for reading
   const { data } = useApp();
-  const techniqueTip = useState(() => {
+  const activeTechniqueCount = data?.studyTechniques?.filter(t => t.isActive).length ?? 0;
+  const techniqueTip = useMemo(() => {
     const techniques = data?.studyTechniques?.filter(t => t.isActive) || [];
     if (techniques.length === 0) return null;
     // Pick a technique relevant to reading/encoding, rotate by day
@@ -1179,7 +1180,7 @@ export default function ReaderMode({
     const pool = readingTechniques.length > 0 ? readingTechniques : techniques;
     const dayIndex = new Date().getDate() % pool.length;
     return pool[dayIndex];
-  })[0];
+  }, [activeTechniqueCount]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const calloutPickerRef = useRef<HTMLDivElement>(null);
@@ -2598,15 +2599,15 @@ export default function ReaderMode({
 
           {/* Technique tip */}
           {techniqueTip && !techniqueTipDismissed && !focusMode && (
-            <div className="mx-6 md:mx-12 lg:mx-20 mt-4 mb-2 bg-violet-50 border border-violet-200 rounded-lg px-4 py-3 flex items-start gap-3">
+            <div className="mx-6 md:mx-12 lg:mx-20 mt-4 mb-2 bg-violet-500/10 border border-violet-500/30 rounded-lg px-4 py-3 flex items-start gap-3">
               <span className="text-lg flex-shrink-0 mt-0.5">{techniqueTip.icon}</span>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-violet-800">{techniqueTip.name}</p>
-                <p className="text-xs text-violet-600 mt-0.5 leading-relaxed">{techniqueTip.howToApply.substring(0, 200)}{techniqueTip.howToApply.length > 200 ? '...' : ''}</p>
+                <p className="text-sm font-semibold text-violet-300">{techniqueTip.name}</p>
+                <p className="text-xs text-violet-400 mt-0.5 leading-relaxed">{techniqueTip.howToApply.substring(0, 200)}{techniqueTip.howToApply.length > 200 ? '...' : ''}</p>
               </div>
               <button
                 onClick={() => setTechniqueTipDismissed(true)}
-                className="text-violet-400 hover:text-violet-600 flex-shrink-0 mt-0.5"
+                className="text-violet-500 hover:text-violet-300 flex-shrink-0 mt-0.5"
               >
                 <X size={16} />
               </button>

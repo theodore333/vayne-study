@@ -31,8 +31,9 @@ function getSubjectDisplay(subjectId: string, subjects: Subject[]) {
 }
 
 function formatMinutes(mins: number) {
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
+  let h = Math.floor(mins / 60);
+  let m = Math.round(mins % 60);
+  if (m === 60) { h++; m = 0; }
   return h > 0 ? `${h}ч ${m}м` : `${m}м`;
 }
 
@@ -152,7 +153,7 @@ export default function StatsTab({ timerSessions, subjects, studyGoals, academic
   }, [completedSessions, academicPeriod]);
 
   // Bar chart max
-  const maxDayMinutes = Math.max(...dailyData.map(d => d.totalMinutes), studyGoals.dailyMinutes || 1);
+  const maxDayMinutes = Math.max(...dailyData.map(d => d.totalMinutes), studyGoals.dailyMinutes ?? 1, 1);
 
   const periods: { key: StatsPeriod; label: string }[] = [
     { key: 'thisWeek', label: 'Тази седмица' },

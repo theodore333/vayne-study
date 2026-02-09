@@ -822,13 +822,13 @@ export default function MaterialEditor({ value, onChange, placeholder, className
           font-size: 1.1em;
         }
         /* Toggle / Details blocks */
-        .material-editor-wrapper .ProseMirror details {
+        .material-editor-wrapper .ProseMirror [data-type="details"] {
           border: 1px solid #334155;
           border-radius: 0.5rem;
           margin: 0.5rem 0;
           overflow: hidden;
         }
-        .material-editor-wrapper .ProseMirror details summary {
+        .material-editor-wrapper .ProseMirror [data-type="details-summary"] {
           padding: 0.5rem 0.75rem;
           background: #1e293b;
           cursor: pointer;
@@ -838,12 +838,8 @@ export default function MaterialEditor({ value, onChange, placeholder, className
           align-items: center;
           gap: 0.5em;
           user-select: text;
-          list-style: none;
         }
-        .material-editor-wrapper .ProseMirror details summary::-webkit-details-marker {
-          display: none;
-        }
-        .material-editor-wrapper .ProseMirror details summary::before {
+        .material-editor-wrapper .ProseMirror [data-type="details-summary"]::before {
           content: '▶';
           display: inline-block;
           font-size: 0.7em;
@@ -851,20 +847,20 @@ export default function MaterialEditor({ value, onChange, placeholder, className
           color: #64748b;
           flex-shrink: 0;
         }
-        .material-editor-wrapper .ProseMirror details[open] summary::before {
+        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="true"] [data-type="details-summary"]::before {
           transform: rotate(90deg);
         }
-        .material-editor-wrapper .ProseMirror details div[data-details-content] {
+        .material-editor-wrapper .ProseMirror [data-type="details-content"] {
           padding: 0.5rem 0.75rem;
           border-top: 1px solid #334155;
         }
-        .material-editor-wrapper .ProseMirror details:not([open]) div[data-details-content] {
+        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="false"] [data-type="details-content"] {
           display: none;
         }
-        .material-editor-wrapper .ProseMirror details div[data-details-content] > p:first-child {
+        .material-editor-wrapper .ProseMirror [data-type="details-content"] > p:first-child {
           margin-top: 0;
         }
-        .material-editor-wrapper .ProseMirror details div[data-details-content] > p:last-child {
+        .material-editor-wrapper .ProseMirror [data-type="details-content"] > p:last-child {
           margin-bottom: 0;
         }
       `}</style>

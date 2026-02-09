@@ -2921,13 +2921,13 @@ export default function ReaderMode({
               }
 
               /* Toggle / Details blocks */
-              .ProseMirror details {
+              .ProseMirror [data-type="details"] {
                 border: 1px solid #e7e5e4;
                 border-radius: 0.5em;
                 margin: 1em 0;
                 overflow: hidden;
               }
-              .ProseMirror details summary {
+              .ProseMirror [data-type="details-summary"] {
                 padding: 0.75em 1em;
                 background: #fafaf9;
                 cursor: pointer;
@@ -2938,12 +2938,8 @@ export default function ReaderMode({
                 align-items: center;
                 gap: 0.5em;
                 user-select: text;
-                list-style: none;
               }
-              .ProseMirror details summary::-webkit-details-marker {
-                display: none;
-              }
-              .ProseMirror details summary::before {
+              .ProseMirror [data-type="details-summary"]::before {
                 content: '▶';
                 display: inline-block;
                 font-size: 0.7em;
@@ -2951,20 +2947,20 @@ export default function ReaderMode({
                 color: #a8a29e;
                 flex-shrink: 0;
               }
-              .ProseMirror details[open] summary::before {
+              .ProseMirror [data-type="details"][data-open="true"] [data-type="details-summary"]::before {
                 transform: rotate(90deg);
               }
-              .ProseMirror details div[data-details-content] {
+              .ProseMirror [data-type="details-content"] {
                 padding: 0.75em 1em;
                 border-top: 1px solid #e7e5e4;
               }
-              .ProseMirror details:not([open]) div[data-details-content] {
+              .ProseMirror [data-type="details"][data-open="false"] [data-type="details-content"] {
                 display: none;
               }
-              .ProseMirror details div[data-details-content] > p:first-child {
+              .ProseMirror [data-type="details-content"] > p:first-child {
                 margin-top: 0;
               }
-              .ProseMirror details div[data-details-content] > p:last-child {
+              .ProseMirror [data-type="details-content"] > p:last-child {
                 margin-bottom: 0;
               }
 

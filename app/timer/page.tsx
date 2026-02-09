@@ -1002,7 +1002,7 @@ export default function TimerPage() {
                       onChange={(e) => { setSelectedSubject(e.target.value); setSelectedTopic(null); }}
                       className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono">
                       <option value="">Избери предмет (незадължително)</option>
-                      <option value="anki">📚 Anki</option>
+                      <option value="anki">Anki</option>
                       {activeSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
@@ -1030,7 +1030,7 @@ export default function TimerPage() {
                       color: selectedSubject === 'anki' ? '#22c55e' : selectedSubjectData?.color 
                     }}>
                     <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                    {selectedSubject === 'anki' ? '📚 Anki' : selectedSubjectData?.name}
+                    {selectedSubject === 'anki' ? 'Anki' : selectedSubjectData?.name}
                     {selectedTopic && topics.find(t => t.id === selectedTopic) && (
                       <span className="text-slate-400">• #{topics.find(t => t.id === selectedTopic)?.number}</span>
                     )}
@@ -1239,7 +1239,7 @@ export default function TimerPage() {
               🍅 Pomodoro #{pendingPomodoroData.count} завърши!
             </h3>
             <p className="text-sm text-slate-400 mb-4 text-center font-mono">
-              {pendingPomodoroData.duration} минути • {selectedSubject === 'anki' ? '📚 Anki' : (activeSubjects.find(s => s.id === selectedSubject)?.name || 'Обща работа')}
+              {pendingPomodoroData.duration} минути • {selectedSubject === 'anki' ? 'Anki' : (activeSubjects.find(s => s.id === selectedSubject)?.name || 'Обща работа')}
             </p>
             <p className="text-xs text-slate-500 mb-4 text-center font-mono">
               Как мина сесията? (незадължително)

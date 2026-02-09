@@ -1477,6 +1477,14 @@ export default function ReaderMode({
         const html = editor.getHTML();
         if (!html || html === '<p></p>') return;
 
+        // Safety: don't save if content is drastically shorter than original (possible parse failure)
+        const originalLen = topic.material?.length || 0;
+        const newLen = html.length;
+        if (originalLen > 200 && newLen < originalLen * 0.1) {
+          console.error('[ReaderMode] Refusing to save: content shrank from', originalLen, 'to', newLen, '— possible parse failure');
+          return;
+        }
+
         // Now update UI state (only once per save, not per keystroke)
         setHasUnsavedChanges(true);
         isSavingRef.current = true;

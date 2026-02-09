@@ -11,7 +11,8 @@ import Underline from '@tiptap/extension-underline';
 import Highlight from '@tiptap/extension-highlight';
 import Image from '@tiptap/extension-image';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { ImagePlus, Calculator, Pencil, X, Check } from 'lucide-react';
+import { ImagePlus, Calculator, Pencil, X, Check, ChevronRight } from 'lucide-react';
+import { DetailsNode, DetailsSummary, DetailsContent, transformDetailsHTML } from '@/lib/tiptap-details';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 
@@ -438,6 +439,9 @@ export default function MaterialEditor({ value, onChange, placeholder, className
       TableRow,
       TableCell,
       TableHeader,
+      DetailsNode,
+      DetailsSummary,
+      DetailsContent,
     ],
     content: value
       ? (value.trim().startsWith('<')
@@ -447,6 +451,9 @@ export default function MaterialEditor({ value, onChange, placeholder, className
     editorProps: {
       attributes: {
         class: 'prose prose-invert prose-sm max-w-none focus:outline-none min-h-[200px] p-4 ' + (className || ''),
+      },
+      transformPastedHTML(html) {
+        return transformDetailsHTML(html);
       },
       handlePaste: (view, event) => {
         const clipboardData = event.clipboardData;
@@ -656,9 +663,18 @@ export default function MaterialEditor({ value, onChange, placeholder, className
           </svg>
         </button>
 
+        {/* Toggle block */}
+        <button
+          onClick={() => (editor.commands as any).setDetails()}
+          className={`p-1.5 rounded hover:bg-slate-700 ${editor.isActive('details') ? 'bg-slate-700 text-blue-400' : 'text-slate-400'}`}
+          title="Разгъваем блок"
+        >
+          <ChevronRight size={16} />
+        </button>
+
         <div className="w-px h-4 bg-slate-700 mx-1" />
 
-        {/* NEW: Medical Tools */}
+        {/* Medical Tools */}
         <input
           ref={imageInputRef}
           type="file"
@@ -804,6 +820,52 @@ export default function MaterialEditor({ value, onChange, placeholder, className
         }
         .material-editor-wrapper .ProseMirror .katex {
           font-size: 1.1em;
+        }
+        /* Toggle / Details blocks */
+        .material-editor-wrapper .ProseMirror details {
+          border: 1px solid #334155;
+          border-radius: 0.5rem;
+          margin: 0.5rem 0;
+          overflow: hidden;
+        }
+        .material-editor-wrapper .ProseMirror details summary {
+          padding: 0.5rem 0.75rem;
+          background: #1e293b;
+          cursor: pointer;
+          font-weight: 600;
+          color: #e2e8f0;
+          display: flex;
+          align-items: center;
+          gap: 0.5em;
+          user-select: text;
+          list-style: none;
+        }
+        .material-editor-wrapper .ProseMirror details summary::-webkit-details-marker {
+          display: none;
+        }
+        .material-editor-wrapper .ProseMirror details summary::before {
+          content: '▶';
+          display: inline-block;
+          font-size: 0.7em;
+          transition: transform 0.2s ease;
+          color: #64748b;
+          flex-shrink: 0;
+        }
+        .material-editor-wrapper .ProseMirror details[open] summary::before {
+          transform: rotate(90deg);
+        }
+        .material-editor-wrapper .ProseMirror details div[data-details-content] {
+          padding: 0.5rem 0.75rem;
+          border-top: 1px solid #334155;
+        }
+        .material-editor-wrapper .ProseMirror details:not([open]) div[data-details-content] {
+          display: none;
+        }
+        .material-editor-wrapper .ProseMirror details div[data-details-content] > p:first-child {
+          margin-top: 0;
+        }
+        .material-editor-wrapper .ProseMirror details div[data-details-content] > p:last-child {
+          margin-bottom: 0;
         }
       `}</style>
     </div>

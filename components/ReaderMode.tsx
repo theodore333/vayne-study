@@ -35,6 +35,7 @@ import { Topic, TextHighlight } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { mergeAttributes, Node as TiptapNode, Mark as TiptapMark } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import { DetailsNode, DetailsSummary, DetailsContent, transformDetailsHTML } from '@/lib/tiptap-details';
 import TutorChat from '@/components/TutorChat';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -500,7 +501,7 @@ function markdownToHtml(markdown: string): string {
 
   // Now escape remaining HTML
   html = html.replace(/&(?!amp;|lt;|gt;)/g, '&amp;');
-  html = html.replace(/<(?!\/?(pre|code|h[1-3]|strong|em|s|blockquote|ul|ol|li|p|br|a|img|table|thead|tbody|tr|th|td|hr|mark|u|input)[^>]*>)/g, '&lt;');
+  html = html.replace(/<(?!\/?(pre|code|h[1-3]|strong|em|s|blockquote|ul|ol|li|p|br|a|img|table|thead|tbody|tr|th|td|hr|mark|u|input|details|summary|div)[^>]*>)/g, '&lt;');
 
   // Horizontal rule (before headers)
   html = html.replace(/^---+$/gm, '<hr>');
@@ -1217,6 +1218,9 @@ export default function ReaderMode({
       Superscript,
       Subscript,
       CalloutExtension,
+      DetailsNode,
+      DetailsSummary,
+      DetailsContent,
       ResizableImage.configure({
         inline: false,
         allowBase64: true,
@@ -1261,6 +1265,9 @@ export default function ReaderMode({
     editorProps: {
       attributes: {
         class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',
+      },
+      transformPastedHTML(html) {
+        return transformDetailsHTML(html);
       },
       handlePaste: (view, event) => {
         const clipboardData = event.clipboardData;
@@ -2406,6 +2413,15 @@ export default function ReaderMode({
             )}
           </div>
 
+          {/* Toggle block */}
+          <ToolbarButton
+            onClick={() => (editor.commands as any).setDetails()}
+            active={editor.isActive('details')}
+            title="Разгъваем блок"
+          >
+            <ChevronRight size={18} />
+          </ToolbarButton>
+
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
           {/* Insert */}
@@ -2901,6 +2917,54 @@ export default function ReaderMode({
                 margin-top: 0;
               }
               .ProseMirror div[data-callout] > p:last-child {
+                margin-bottom: 0;
+              }
+
+              /* Toggle / Details blocks */
+              .ProseMirror details {
+                border: 1px solid #e7e5e4;
+                border-radius: 0.5em;
+                margin: 1em 0;
+                overflow: hidden;
+              }
+              .ProseMirror details summary {
+                padding: 0.75em 1em;
+                background: #fafaf9;
+                cursor: pointer;
+                font-weight: 600;
+                font-size: 0.95em;
+                color: #44403c;
+                display: flex;
+                align-items: center;
+                gap: 0.5em;
+                user-select: text;
+                list-style: none;
+              }
+              .ProseMirror details summary::-webkit-details-marker {
+                display: none;
+              }
+              .ProseMirror details summary::before {
+                content: '▶';
+                display: inline-block;
+                font-size: 0.7em;
+                transition: transform 0.2s ease;
+                color: #a8a29e;
+                flex-shrink: 0;
+              }
+              .ProseMirror details[open] summary::before {
+                transform: rotate(90deg);
+              }
+              .ProseMirror details div[data-details-content] {
+                padding: 0.75em 1em;
+                border-top: 1px solid #e7e5e4;
+              }
+              .ProseMirror details:not([open]) div[data-details-content] {
+                display: none;
+              }
+              .ProseMirror details div[data-details-content] > p:first-child {
+                margin-top: 0;
+              }
+              .ProseMirror details div[data-details-content] > p:last-child {
                 margin-bottom: 0;
               }
 

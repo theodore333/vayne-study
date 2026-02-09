@@ -52,60 +52,56 @@ export const DetailsNode = TiptapNode.create({
     return {
       setDetails: () => ({ state, tr, dispatch }: any) => {
         const { from, to, empty } = state.selection;
-        const detailsType = state.schema.nodes.details;
-        const summaryType = state.schema.nodes.detailsSummary;
-        const contentType = state.schema.nodes.detailsContent;
+        const schema = state.schema;
 
-        if (!detailsType || !summaryType || !contentType) return false;
+        if (!schema.nodes.details || !schema.nodes.detailsSummary || !schema.nodes.detailsContent) return false;
 
         if (!empty) {
-          // Collect full block nodes that overlap the selection
-          const blockNodes: any[] = [];
-          state.doc.nodesBetween(from, to, (node: any, pos: number, parent: any) => {
-            // Only collect top-level blocks within the selection range
-            if (parent === state.doc && node.isBlock) {
-              blockNodes.push(node);
-              return false; // don't recurse into this node
+          // Find the containing block boundaries using resolved positions
+          const $from = state.doc.resolve(from);
+          const $to = state.doc.resolve(to);
+
+          // Walk up to find the depth where the parent can hold a details block
+          // (i.e., a node whose content spec allows 'block' group)
+          let wrapDepth = $from.depth;
+          while (wrapDepth > 0 && $from.node(wrapDepth).type.name !== 'detailsContent' && wrapDepth > 1) {
+            wrapDepth--;
+          }
+          // Use depth 1 for top-level, or the found depth
+          const depth = Math.min($from.depth, 1);
+
+          // Get the range of the block(s) containing the selection
+          const blockStart = $from.before(depth);
+          const blockEnd = $to.after(depth);
+
+          // Collect the block nodes in that range
+          const blocks: any[] = [];
+          state.doc.nodesBetween(blockStart, blockEnd, (node: any, pos: number, parent: any, index: number) => {
+            if (pos >= blockStart && parent === $from.node(depth - 1)) {
+              blocks.push(node);
+              return false;
             }
             return true;
           });
 
-          if (blockNodes.length === 0) {
-            // Selection is inline — wrap in a paragraph
-            const text = state.doc.textBetween(from, to, ' ');
-            const paragraph = state.schema.nodes.paragraph.create(
-              null,
-              text ? state.schema.text(text) : null
-            );
-            blockNodes.push(paragraph);
-          }
+          if (blocks.length === 0) return false;
 
-          const summary = summaryType.create(null, state.schema.text('Заглавие'));
-          const content = contentType.create(null, blockNodes);
-          const details = detailsType.create({ open: true }, [summary, content]);
-
-          // Find the range of full blocks to replace
-          let blockFrom = from;
-          let blockTo = to;
-          state.doc.nodesBetween(from, to, (_node: any, pos: number, parent: any) => {
-            if (parent === state.doc) {
-              blockFrom = Math.min(blockFrom, pos);
-              blockTo = Math.max(blockTo, pos + _node.nodeSize);
-            }
-          });
+          const summary = schema.nodes.detailsSummary.create(null, schema.text('Заглавие'));
+          const content = schema.nodes.detailsContent.create(null, blocks);
+          const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
           if (dispatch) {
-            tr.replaceWith(blockFrom, blockTo, details);
+            tr.replaceWith(blockStart, blockEnd, details);
             dispatch(tr);
           }
           return true;
         }
 
         // No selection: insert empty toggle
-        const summary = summaryType.create(null, state.schema.text('Заглавие'));
-        const paragraph = state.schema.nodes.paragraph.create();
-        const content = contentType.create(null, paragraph);
-        const details = detailsType.create({ open: true }, [summary, content]);
+        const summary = schema.nodes.detailsSummary.create(null, schema.text('Заглавие'));
+        const paragraph = schema.nodes.paragraph.create();
+        const content = schema.nodes.detailsContent.create(null, paragraph);
+        const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
         if (dispatch) {
           tr.replaceSelectionWith(details);

@@ -50,58 +50,68 @@ export const DetailsNode = TiptapNode.create({
 
   addCommands() {
     return {
-      setDetails: () => ({ state, chain }: any) => {
+      setDetails: () => ({ state, tr, dispatch }: any) => {
         const { from, to, empty } = state.selection;
+        const detailsType = state.schema.nodes.details;
+        const summaryType = state.schema.nodes.detailsSummary;
+        const contentType = state.schema.nodes.detailsContent;
+
+        if (!detailsType || !summaryType || !contentType) return false;
 
         if (!empty) {
-          // Wrap selected content: selection becomes the body
-          const selectedContent = state.doc.slice(from, to);
-          const contentNodes: any[] = [];
-          selectedContent.content.forEach((node: any) => {
-            contentNodes.push(node.toJSON());
+          // Collect full block nodes that overlap the selection
+          const blockNodes: any[] = [];
+          state.doc.nodesBetween(from, to, (node: any, pos: number, parent: any) => {
+            // Only collect top-level blocks within the selection range
+            if (parent === state.doc && node.isBlock) {
+              blockNodes.push(node);
+              return false; // don't recurse into this node
+            }
+            return true;
           });
 
-          // If selected content is just inline text, wrap in paragraph
-          const bodyContent = contentNodes.length > 0 && contentNodes[0].type
-            ? contentNodes
-            : [{ type: 'paragraph', content: contentNodes }];
+          if (blockNodes.length === 0) {
+            // Selection is inline — wrap in a paragraph
+            const text = state.doc.textBetween(from, to, ' ');
+            const paragraph = state.schema.nodes.paragraph.create(
+              null,
+              text ? state.schema.text(text) : null
+            );
+            blockNodes.push(paragraph);
+          }
 
-          return chain()
-            .deleteSelection()
-            .insertContent({
-              type: 'details',
-              attrs: { open: true },
-              content: [
-                {
-                  type: 'detailsSummary',
-                  content: [{ type: 'text', text: 'Заглавие' }],
-                },
-                {
-                  type: 'detailsContent',
-                  content: bodyContent,
-                },
-              ],
-            })
-            .run();
+          const summary = summaryType.create(null, state.schema.text('Заглавие'));
+          const content = contentType.create(null, blockNodes);
+          const details = detailsType.create({ open: true }, [summary, content]);
+
+          // Find the range of full blocks to replace
+          let blockFrom = from;
+          let blockTo = to;
+          state.doc.nodesBetween(from, to, (_node: any, pos: number, parent: any) => {
+            if (parent === state.doc) {
+              blockFrom = Math.min(blockFrom, pos);
+              blockTo = Math.max(blockTo, pos + _node.nodeSize);
+            }
+          });
+
+          if (dispatch) {
+            tr.replaceWith(blockFrom, blockTo, details);
+            dispatch(tr);
+          }
+          return true;
         }
 
         // No selection: insert empty toggle
-        return chain()
-          .insertContent({
-            type: 'details',
-            attrs: { open: true },
-            content: [
-              {
-                type: 'detailsSummary',
-                content: [{ type: 'text', text: 'Заглавие' }],
-              },
-              {
-                type: 'detailsContent',
-                content: [{ type: 'paragraph' }],
-              },
-            ],
-          })
-          .run();
+        const summary = summaryType.create(null, state.schema.text('Заглавие'));
+        const paragraph = state.schema.nodes.paragraph.create();
+        const content = contentType.create(null, paragraph);
+        const details = detailsType.create({ open: true }, [summary, content]);
+
+        if (dispatch) {
+          tr.replaceSelectionWith(details);
+          dispatch(tr);
+        }
+        return true;
       },
     } as any;
   },

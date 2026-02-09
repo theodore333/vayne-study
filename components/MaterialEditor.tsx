@@ -821,46 +821,40 @@ export default function MaterialEditor({ value, onChange, placeholder, className
         .material-editor-wrapper .ProseMirror .katex {
           font-size: 1.1em;
         }
-        /* Toggle / Details blocks */
+        /* Toggle / Details blocks — Notion style */
         .material-editor-wrapper .ProseMirror [data-type="details"] {
-          border: 1px solid #334155;
-          border-radius: 0.5rem;
-          margin: 0.5rem 0;
-          overflow: hidden;
+          margin: 0.25em 0;
         }
         .material-editor-wrapper .ProseMirror [data-type="details-summary"] {
-          padding: 0.5rem 0.75rem;
-          background: #1e293b;
           cursor: pointer;
           font-weight: 600;
           color: #e2e8f0;
           display: flex;
-          align-items: center;
-          gap: 0.5em;
-          user-select: text;
+          align-items: flex-start;
+          gap: 0.3em;
+          padding: 0.15em 0;
         }
         .material-editor-wrapper .ProseMirror [data-type="details-summary"]::before {
           content: '▶';
-          display: inline-block;
-          font-size: 0.7em;
-          transition: transform 0.2s ease;
-          color: #64748b;
+          font-size: 0.6em;
+          margin-top: 0.4em;
+          transition: transform 0.15s ease;
+          opacity: 0.4;
           flex-shrink: 0;
         }
-        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="true"] [data-type="details-summary"]::before {
+        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="true"] > [data-type="details-summary"]::before {
           transform: rotate(90deg);
         }
         .material-editor-wrapper .ProseMirror [data-type="details-content"] {
-          padding: 0.5rem 0.75rem;
-          border-top: 1px solid #334155;
+          padding-left: 1.2em;
         }
-        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="false"] [data-type="details-content"] {
+        .material-editor-wrapper .ProseMirror [data-type="details"][data-open="false"] > [data-type="details-content"] {
           display: none;
         }
-        .material-editor-wrapper .ProseMirror [data-type="details-content"] > p:first-child {
+        .material-editor-wrapper .ProseMirror [data-type="details-content"] > *:first-child {
           margin-top: 0;
         }
-        .material-editor-wrapper .ProseMirror [data-type="details-content"] > p:last-child {
+        .material-editor-wrapper .ProseMirror [data-type="details-content"] > *:last-child {
           margin-bottom: 0;
         }
       `}</style>

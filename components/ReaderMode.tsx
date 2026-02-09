@@ -2928,47 +2928,39 @@ export default function ReaderMode({
                 margin-bottom: 0;
               }
 
-              /* Toggle / Details blocks */
+              /* Toggle / Details blocks — Notion style */
               .ProseMirror [data-type="details"] {
-                border: 1px solid #e7e5e4;
-                border-radius: 0.5em;
-                margin: 1em 0;
-                overflow: hidden;
+                margin: 0.25em 0;
               }
               .ProseMirror [data-type="details-summary"] {
-                padding: 0.75em 1em;
-                background: #fafaf9;
                 cursor: pointer;
                 font-weight: 600;
-                font-size: 0.95em;
-                color: #44403c;
                 display: flex;
-                align-items: center;
-                gap: 0.5em;
-                user-select: text;
+                align-items: flex-start;
+                gap: 0.3em;
+                padding: 0.15em 0;
               }
               .ProseMirror [data-type="details-summary"]::before {
                 content: '▶';
-                display: inline-block;
-                font-size: 0.7em;
-                transition: transform 0.2s ease;
-                color: #a8a29e;
+                font-size: 0.6em;
+                margin-top: 0.4em;
+                transition: transform 0.15s ease;
+                opacity: 0.4;
                 flex-shrink: 0;
               }
-              .ProseMirror [data-type="details"][data-open="true"] [data-type="details-summary"]::before {
+              .ProseMirror [data-type="details"][data-open="true"] > [data-type="details-summary"]::before {
                 transform: rotate(90deg);
               }
               .ProseMirror [data-type="details-content"] {
-                padding: 0.75em 1em;
-                border-top: 1px solid #e7e5e4;
+                padding-left: 1.2em;
               }
-              .ProseMirror [data-type="details"][data-open="false"] [data-type="details-content"] {
+              .ProseMirror [data-type="details"][data-open="false"] > [data-type="details-content"] {
                 display: none;
               }
-              .ProseMirror [data-type="details-content"] > p:first-child {
+              .ProseMirror [data-type="details-content"] > *:first-child {
                 margin-top: 0;
               }
-              .ProseMirror [data-type="details-content"] > p:last-child {
+              .ProseMirror [data-type="details-content"] > *:last-child {
                 margin-bottom: 0;
               }
 

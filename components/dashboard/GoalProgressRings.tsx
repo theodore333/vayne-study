@@ -11,6 +11,7 @@ interface GoalProgressRingsProps {
     monthlyMinutes: number;
   };
   compact?: boolean;
+  inline?: boolean;
 }
 
 interface RingProps {
@@ -78,7 +79,7 @@ function ProgressRing({ percentage, size, strokeWidth, color, label, current, go
   );
 }
 
-export default function GoalProgressRings({ timerSessions, studyGoals, compact }: GoalProgressRingsProps) {
+export default function GoalProgressRings({ timerSessions, studyGoals, compact, inline }: GoalProgressRingsProps) {
   const safeSessions = timerSessions || [];
   const safeGoals = {
     dailyMinutes: studyGoals?.dailyMinutes || 120,
@@ -132,12 +133,53 @@ export default function GoalProgressRings({ timerSessions, studyGoals, compact }
     };
   }, [safeSessions, safeGoals.dailyMinutes, safeGoals.weeklyMinutes, safeGoals.monthlyMinutes]);
 
+  const ringSize = inline ? 44 : compact ? 68 : 80;
+  const ringStroke = inline ? 4 : compact ? 5 : 6;
+
+  if (inline) {
+    return (
+      <div className="flex items-center gap-4">
+        {[
+          { ...progress.daily, label: 'Днес', color: '#3b82f6' },
+          { ...progress.weekly, label: 'Седмица', color: '#8b5cf6' },
+          { ...progress.monthly, label: 'Месец', color: '#06b6d4' },
+        ].map(ring => {
+          const fmtTime = (mins: number) => {
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            return h > 0 ? `${h}ч${m > 0 ? m + 'м' : ''}` : `${m}м`;
+          };
+          const radius = (ringSize - ringStroke) / 2;
+          const circ = radius * 2 * Math.PI;
+          const offset = circ - (Math.min(ring.percentage, 100) / 100) * circ;
+          return (
+            <div key={ring.label} className="flex items-center gap-2">
+              <div className="relative" style={{ width: ringSize, height: ringSize }}>
+                <svg className="transform -rotate-90" width={ringSize} height={ringSize}>
+                  <circle cx={ringSize / 2} cy={ringSize / 2} r={radius} stroke="currentColor" strokeWidth={ringStroke} fill="transparent" className="text-slate-700" />
+                  <circle cx={ringSize / 2} cy={ringSize / 2} r={radius} stroke={ring.color} strokeWidth={ringStroke} fill="transparent" strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={offset} className="transition-all duration-500" />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[10px] font-bold font-mono" style={{ color: ring.color }}>{Math.round(ring.percentage)}%</span>
+                </div>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-slate-500 font-mono leading-tight">{ring.label}</span>
+                <span className="text-xs text-slate-300 font-mono leading-tight">{fmtTime(ring.current)}<span className="text-slate-500">/{fmtTime(ring.goal)}</span></span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
   const rings = (
     <div className="flex justify-around items-start">
       <ProgressRing
         percentage={progress.daily.percentage}
-        size={compact ? 68 : 80}
-        strokeWidth={compact ? 5 : 6}
+        size={ringSize}
+        strokeWidth={ringStroke}
         color="#3b82f6"
         label="Днес"
         current={progress.daily.current}
@@ -145,8 +187,8 @@ export default function GoalProgressRings({ timerSessions, studyGoals, compact }
       />
       <ProgressRing
         percentage={progress.weekly.percentage}
-        size={compact ? 68 : 80}
-        strokeWidth={compact ? 5 : 6}
+        size={ringSize}
+        strokeWidth={ringStroke}
         color="#8b5cf6"
         label="Седмица"
         current={progress.weekly.current}
@@ -154,8 +196,8 @@ export default function GoalProgressRings({ timerSessions, studyGoals, compact }
       />
       <ProgressRing
         percentage={progress.monthly.percentage}
-        size={compact ? 68 : 80}
-        strokeWidth={compact ? 5 : 6}
+        size={ringSize}
+        strokeWidth={ringStroke}
         color="#06b6d4"
         label="Месец"
         current={progress.monthly.current}

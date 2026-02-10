@@ -1462,19 +1462,14 @@ export default function ReaderMode({
       },
     },
     onCreate: ({ editor: ed }) => {
-      // Verify content loaded correctly before allowing saves
+      // Only block saves if editor loaded completely empty when material exists.
+      // Don't compare lengths — cleanupEmptyListItems + format conversion change length legitimately.
       const loadedHtml = ed.getHTML();
       const originalMaterial = topic.material || '';
-      const loadedLen = loadedHtml?.length || 0;
-      const originalLen = originalMaterial.length;
+      const loadedEmpty = !loadedHtml || loadedHtml === '<p></p>' || loadedHtml.length < 20;
 
-      // Block saves if editor loaded significantly less content than stored
-      // Catches: empty load, partial parse failures (e.g. toggle blocks dropped)
-      const isEmpty = loadedLen < 20 || loadedHtml === '<p></p>';
-      const bigShrink = originalLen > 100 && loadedLen < originalLen * 0.5;
-      if (originalLen > 50 && (isEmpty || bigShrink)) {
-        console.error('[ReaderMode] PARSE FAILURE: had', originalLen, 'chars but editor loaded', loadedLen, '— saves BLOCKED');
-        // Do NOT set isEditorInitializedRef — saves will never fire
+      if (originalMaterial.length > 50 && loadedEmpty) {
+        console.error('[ReaderMode] Editor loaded empty but material has', originalMaterial.length, 'chars — saves BLOCKED');
         return;
       }
 

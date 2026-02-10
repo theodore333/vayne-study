@@ -57,37 +57,49 @@ export const DetailsNode = TiptapNode.create({
         if (!schema.nodes.details || !schema.nodes.detailsSummary || !schema.nodes.detailsContent) return false;
 
         if (!empty) {
-          // Find the containing block boundaries using resolved positions
           const $from = state.doc.resolve(from);
           const $to = state.doc.resolve(to);
 
-          // Walk up to find the depth where the parent can hold a details block
-          // (i.e., a node whose content spec allows 'block' group)
+          // Find depth where parent can accept a details block (doc or detailsContent)
           let wrapDepth = $from.depth;
-          while (wrapDepth > 0 && $from.node(wrapDepth).type.name !== 'detailsContent' && wrapDepth > 1) {
+          while (wrapDepth > 1) {
+            const parentName = $from.node(wrapDepth - 1).type.name;
+            if (parentName === 'doc' || parentName === 'detailsContent') break;
             wrapDepth--;
           }
-          // Use depth 1 for top-level, or the found depth
-          const depth = Math.min($from.depth, 1);
+          if (wrapDepth === 0) return false;
 
-          // Get the range of the block(s) containing the selection
-          const blockStart = $from.before(depth);
-          const blockEnd = $to.after(depth);
+          const blockStart = $from.before(wrapDepth);
+          const blockEnd = $to.after(Math.min(wrapDepth, $to.depth));
+          const parentNode = $from.node(wrapDepth - 1);
 
-          // Collect the block nodes in that range
+          // Collect blocks at this depth level
           const blocks: any[] = [];
-          state.doc.nodesBetween(blockStart, blockEnd, (node: any, pos: number, parent: any, index: number) => {
-            if (pos >= blockStart && parent === $from.node(depth - 1)) {
+          state.doc.nodesBetween(blockStart, blockEnd, (node: any, pos: number, parent: any) => {
+            if (parent === parentNode) {
               blocks.push(node);
-              return false;
+              return false; // don't descend into the block
             }
             return true;
           });
 
           if (blocks.length === 0) return false;
 
-          const summary = schema.nodes.detailsSummary.create(null, schema.text('Заглавие'));
-          const content = schema.nodes.detailsContent.create(null, blocks);
+          // First block's inline content becomes the summary (like Notion's "Turn into toggle")
+          const firstBlock = blocks[0];
+          let summaryContent: any;
+          if (firstBlock.isTextblock && firstBlock.content.size > 0) {
+            summaryContent = firstBlock.content;
+          } else {
+            summaryContent = schema.text('Заглавие');
+          }
+          const summary = schema.nodes.detailsSummary.create(null, summaryContent);
+
+          // Remaining blocks go into the body; if only one block, body is empty paragraph
+          const bodyBlocks = blocks.length > 1
+            ? blocks.slice(1)
+            : [schema.nodes.paragraph.create()];
+          const content = schema.nodes.detailsContent.create(null, bodyBlocks);
           const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
           if (dispatch) {
@@ -97,14 +109,16 @@ export const DetailsNode = TiptapNode.create({
           return true;
         }
 
-        // No selection: insert empty toggle
+        // No selection: insert empty toggle with cursor in summary
         const summary = schema.nodes.detailsSummary.create(null, schema.text('Заглавие'));
         const paragraph = schema.nodes.paragraph.create();
         const content = schema.nodes.detailsContent.create(null, paragraph);
         const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
         if (dispatch) {
+          const pos = from;
           tr.replaceSelectionWith(details);
+          // Place cursor at the start of the summary text for immediate editing
           dispatch(tr);
         }
         return true;

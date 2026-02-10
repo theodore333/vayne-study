@@ -708,8 +708,10 @@ function cleanupEmptyListItems(html: string): string {
   });
 
   // Remove empty <p> elements (including those with only <br>, whitespace, or lone bullet chars)
+  // BUT skip paragraphs inside toggle content — they're required for TipTap's block+ content spec
   const paragraphs = doc.querySelectorAll('p');
   paragraphs.forEach(p => {
+    if (p.closest('[data-type="details-content"]') || p.closest('[data-details-content]')) return;
     const text = p.textContent?.trim() || '';
     const hasOnlyBr = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '';
     // Also remove paragraphs that contain only bullet characters (•, -, *)
@@ -1455,9 +1457,20 @@ export default function ReaderMode({
         return false;
       },
     },
-    onCreate: () => {
-      // Mark editor as initialized after first content load
-      // This prevents onUpdate from marking changes during initial setup
+    onCreate: ({ editor: ed }) => {
+      // Verify content loaded correctly before allowing saves
+      const loadedHtml = ed.getHTML();
+      const originalMaterial = topic.material || '';
+      const loadedLen = loadedHtml?.length || 0;
+      const originalLen = originalMaterial.length;
+
+      // If we had content but editor loaded empty/near-empty → parse failure → block ALL saves
+      if (originalLen > 50 && (loadedLen < 20 || loadedHtml === '<p></p>')) {
+        console.error('[ReaderMode] PARSE FAILURE: had', originalLen, 'chars but editor loaded', loadedLen, '— saves BLOCKED');
+        // Do NOT set isEditorInitializedRef — saves will never fire
+        return;
+      }
+
       setTimeout(() => {
         isEditorInitializedRef.current = true;
       }, 500);
@@ -1465,10 +1478,8 @@ export default function ReaderMode({
     onUpdate: ({ editor }) => {
       // Skip updates during initial content load to prevent false "unsaved changes"
       if (!isEditorInitializedRef.current) return;
-      // Use ref to avoid re-render on every keystroke - only update UI state when saving
       hasUnsavedChangesRef.current = true;
 
-      // Always clear and reschedule
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
@@ -1477,11 +1488,11 @@ export default function ReaderMode({
         const html = editor.getHTML();
         if (!html || html === '<p></p>') return;
 
-        // Safety: don't save if content is drastically shorter than original (possible parse failure)
+        // Safety: don't save content that is drastically shorter than what was loaded
         const originalLen = topic.material?.length || 0;
         const newLen = html.length;
-        if (originalLen > 200 && newLen < originalLen * 0.1) {
-          console.error('[ReaderMode] Refusing to save: content shrank from', originalLen, 'to', newLen, '— possible parse failure');
+        if (originalLen > 100 && newLen < originalLen * 0.2) {
+          console.error('[ReaderMode] Refusing to save: content shrank from', originalLen, 'to', newLen);
           return;
         }
 
@@ -2930,32 +2941,41 @@ export default function ReaderMode({
 
               /* Toggle / Details blocks — Notion style */
               .ProseMirror [data-type="details"] {
-                margin: 0.25em 0;
+                margin: 0.5em 0;
+                border: none !important;
+                background: none !important;
+                padding: 0 !important;
               }
               .ProseMirror [data-type="details-summary"] {
                 cursor: pointer;
                 font-weight: 600;
-                display: flex;
+                display: flex !important;
                 align-items: flex-start;
-                gap: 0.3em;
-                padding: 0.15em 0;
+                gap: 0.4em;
+                padding: 0.2em 0;
+                border: none !important;
+                background: none !important;
+                color: inherit;
+                user-select: text;
               }
               .ProseMirror [data-type="details-summary"]::before {
                 content: '▶';
-                font-size: 0.6em;
-                margin-top: 0.4em;
+                font-size: 0.55em;
+                margin-top: 0.45em;
                 transition: transform 0.15s ease;
-                opacity: 0.4;
+                opacity: 0.5;
                 flex-shrink: 0;
               }
               .ProseMirror [data-type="details"][data-open="true"] > [data-type="details-summary"]::before {
                 transform: rotate(90deg);
               }
               .ProseMirror [data-type="details-content"] {
-                padding-left: 1.2em;
+                padding-left: 1.4em;
+                border: none !important;
+                background: none !important;
               }
               .ProseMirror [data-type="details"][data-open="false"] > [data-type="details-content"] {
-                display: none;
+                display: none !important;
               }
               .ProseMirror [data-type="details-content"] > *:first-child {
                 margin-top: 0;

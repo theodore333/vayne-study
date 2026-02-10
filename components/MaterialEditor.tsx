@@ -823,33 +823,41 @@ export default function MaterialEditor({ value, onChange, placeholder, className
         }
         /* Toggle / Details blocks — Notion style */
         .material-editor-wrapper .ProseMirror [data-type="details"] {
-          margin: 0.25em 0;
+          margin: 0.5em 0;
+          border: none !important;
+          background: none !important;
+          padding: 0 !important;
         }
         .material-editor-wrapper .ProseMirror [data-type="details-summary"] {
           cursor: pointer;
           font-weight: 600;
           color: #e2e8f0;
-          display: flex;
+          display: flex !important;
           align-items: flex-start;
-          gap: 0.3em;
-          padding: 0.15em 0;
+          gap: 0.4em;
+          padding: 0.2em 0;
+          border: none !important;
+          background: none !important;
+          user-select: text;
         }
         .material-editor-wrapper .ProseMirror [data-type="details-summary"]::before {
           content: '▶';
-          font-size: 0.6em;
-          margin-top: 0.4em;
+          font-size: 0.55em;
+          margin-top: 0.45em;
           transition: transform 0.15s ease;
-          opacity: 0.4;
+          opacity: 0.5;
           flex-shrink: 0;
         }
         .material-editor-wrapper .ProseMirror [data-type="details"][data-open="true"] > [data-type="details-summary"]::before {
           transform: rotate(90deg);
         }
         .material-editor-wrapper .ProseMirror [data-type="details-content"] {
-          padding-left: 1.2em;
+          padding-left: 1.4em;
+          border: none !important;
+          background: none !important;
         }
         .material-editor-wrapper .ProseMirror [data-type="details"][data-open="false"] > [data-type="details-content"] {
-          display: none;
+          display: none !important;
         }
         .material-editor-wrapper .ProseMirror [data-type="details-content"] > *:first-child {
           margin-top: 0;

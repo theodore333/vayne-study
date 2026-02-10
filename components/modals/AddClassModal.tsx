@@ -168,23 +168,6 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
             />
           </div>
 
-          {/* Start Date */}
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
-              <Calendar size={14} className="inline mr-2" />
-              Почва от (незадължително)
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
-            />
-            {!startDate && (
-              <p className="text-xs text-slate-500 font-mono mt-1">Ако не зададеш, ще се брои от тази седмица</p>
-            )}
-          </div>
-
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">

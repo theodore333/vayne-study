@@ -167,10 +167,20 @@ export default function TodayPage() {
     [activeSubjects]
   );
 
+  // Filter schedule by academic period (skip exercises before semester/cycle starts)
+  const activeSchedule = useMemo(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    const semStart = data.academicPeriod?.semesterStart ? new Date(data.academicPeriod.semesterStart) : null;
+    const semesterStarted = !semStart || semStart <= tomorrow;
+    return semesterStarted ? data.schedule : data.schedule.filter(c => !!c.startDate);
+  }, [data.schedule, data.academicPeriod?.semesterStart]);
+
   const dailyPlan = useMemo(
     () => generateDailyPlan(
       activeSubjects,
-      data.schedule,
+      activeSchedule,
       data.dailyStatus,
       data.studyGoals,
       ankiStats ? ankiStats.dueToday + ankiStats.newToday : undefined,
@@ -179,7 +189,7 @@ export default function TodayPage() {
       data.studyTechniques,
       data.techniquePractices
     ),
-    [activeSubjects, data.schedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices]
+    [activeSubjects, activeSchedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices]
   );
 
   // Calculate syllabus progress/workload
@@ -298,6 +308,7 @@ export default function TodayPage() {
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
           academicEvents: data.academicEvents,
+          academicPeriod: data.academicPeriod,
           apiKey,
           bonusMode: mode, // Tell the API this is a bonus plan
           studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
@@ -361,6 +372,7 @@ export default function TodayPage() {
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
           academicEvents: data.academicEvents,
+          academicPeriod: data.academicPeriod,
           apiKey,
           studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
             name: t.name, slug: t.slug, practiceCount: t.practiceCount,

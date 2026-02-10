@@ -147,7 +147,9 @@ const defaultAcademicPeriod: AcademicPeriod = {
   semesterStart: null,
   semesterEnd: null,
   sessionStart: null,
-  sessionEnd: null
+  sessionEnd: null,
+  cycleStart: null,
+  cycleEnd: null
 };
 
 const defaultClinicalCaseSessions: ClinicalCaseSession = {

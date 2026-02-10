@@ -9,7 +9,7 @@ import AddClassModal from '@/components/modals/AddClassModal';
 import AddAcademicEventModal from '@/components/modals/AddAcademicEventModal';
 
 export default function SchedulePage() {
-  const { data, isLoading, deleteClass, deleteAcademicEvent } = useApp();
+  const { data, isLoading, deleteClass, deleteAcademicEvent, updateAcademicPeriod } = useApp();
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
@@ -125,6 +125,85 @@ export default function SchedulePage() {
           <Plus size={18} /> Добави занятие
         </button>
       </div>
+
+      {/* Academic Period */}
+      {(() => {
+        const ap = data.academicPeriod;
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+
+        // Determine current period
+        let currentPeriod = '';
+        if (ap.sessionStart && ap.sessionEnd && todayDate >= new Date(ap.sessionStart) && todayDate <= new Date(ap.sessionEnd)) {
+          currentPeriod = 'Сесия';
+        } else if (ap.cycleStart && ap.cycleEnd && todayDate >= new Date(ap.cycleStart) && todayDate <= new Date(ap.cycleEnd)) {
+          currentPeriod = 'Цикъл';
+        } else if (ap.semesterStart && ap.semesterEnd && todayDate >= new Date(ap.semesterStart) && todayDate <= new Date(ap.semesterEnd)) {
+          currentPeriod = 'Семестър';
+        } else if (ap.semesterStart && todayDate < new Date(ap.semesterStart)) {
+          const daysUntil = Math.ceil((new Date(ap.semesterStart).getTime() - todayDate.getTime()) / 86400000);
+          currentPeriod = `Семестърът почва след ${daysUntil}д`;
+        }
+
+        return (
+          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4 mb-4">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-300 font-mono">
+                Академичен период
+                {currentPeriod && (
+                  <span className="ml-2 px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs">
+                    {currentPeriod}
+                  </span>
+                )}
+              </h2>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1 font-mono">Семестър</label>
+                <div className="flex gap-1">
+                  <input type="date" value={ap.semesterStart || ''}
+                    onChange={e => updateAcademicPeriod({ semesterStart: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                  <input type="date" value={ap.semesterEnd || ''}
+                    onChange={e => updateAcademicPeriod({ semesterEnd: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1 font-mono">Цикъл</label>
+                <div className="flex gap-1">
+                  <input type="date" value={ap.cycleStart || ''}
+                    onChange={e => updateAcademicPeriod({ cycleStart: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                  <input type="date" value={ap.cycleEnd || ''}
+                    onChange={e => updateAcademicPeriod({ cycleEnd: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1 font-mono">Сесия</label>
+                <div className="flex gap-1">
+                  <input type="date" value={ap.sessionStart || ''}
+                    onChange={e => updateAcademicPeriod({ sessionStart: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                  <input type="date" value={ap.sessionEnd || ''}
+                    onChange={e => updateAcademicPeriod({ sessionEnd: e.target.value || null })}
+                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+            </div>
+            {!ap.semesterStart && !ap.cycleStart && !ap.sessionStart && (
+              <p className="text-xs text-slate-600 font-mono mt-2">Задай дати за да знае AI кога какво почва</p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Week Grid */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl overflow-hidden">

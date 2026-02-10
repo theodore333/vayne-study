@@ -295,6 +295,8 @@ export interface AcademicPeriod {
   semesterEnd: string | null;    // Semester end date (ISO)
   sessionStart: string | null;   // Exam session start (ISO)
   sessionEnd: string | null;     // Exam session end (ISO)
+  cycleStart: string | null;     // Clinical cycle/rotation start (ISO)
+  cycleEnd: string | null;       // Clinical cycle/rotation end (ISO)
 }
 
 

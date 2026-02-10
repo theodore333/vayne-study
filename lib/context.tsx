@@ -107,6 +107,8 @@ function sanitizeLoadedData(data: AppData): AppData {
       semesterEnd: sn(rap.semesterEnd),
       sessionStart: sn(rap.sessionStart),
       sessionEnd: sn(rap.sessionEnd),
+      cycleStart: sn(rap.cycleStart),
+      cycleEnd: sn(rap.cycleEnd),
     };
 
     // gpaData
@@ -408,7 +410,9 @@ const defaultAcademicPeriod: AcademicPeriod = {
   semesterStart: null,
   semesterEnd: null,
   sessionStart: null,
-  sessionEnd: null
+  sessionEnd: null,
+  cycleStart: null,
+  cycleEnd: null
 };
 
 export function AppProvider({ children }: { children: React.ReactNode }) {

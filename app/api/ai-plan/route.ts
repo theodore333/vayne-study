@@ -56,7 +56,7 @@ interface GeneratedTask {
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques, academicEvents } = await request.json() as {
+    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques, academicEvents, academicPeriod } = await request.json() as {
       subjects: RequestSubject[];
       schedule: ScheduleClass[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       bonusMode?: 'tomorrow' | 'review' | 'weak';
       studyTechniques?: Array<{ name: string; slug: string; practiceCount: number; lastPracticedAt: string | null; howToApply: string }>;
       academicEvents?: Array<{ id: string; type: string; subjectId: string; date: string; name?: string; topicIds?: string[]; weight: number }>;
+      academicPeriod?: { semesterStart: string | null; semesterEnd: string | null; sessionStart: string | null; sessionEnd: string | null; cycleStart: string | null; cycleEnd: string | null };
     };
 
     if (!apiKey) {
@@ -106,9 +107,11 @@ export async function POST(request: NextRequest) {
     const MAX_TOPICS_PER_DAY = 12; // Hard limit for reasonable daily workload
     const dailyTopicCapacity = Math.min(rawCapacity, MAX_TOPICS_PER_DAY);
 
-    // Check for exercises tomorrow (respect startDate)
+    // Check for exercises tomorrow (respect academic period + startDate)
+    const semesterStarted = !academicPeriod?.semesterStart || new Date(academicPeriod.semesterStart) <= tomorrow;
     const tomorrowExercises = schedule.filter(c => {
       if (c.day !== tomorrowDay || c.type !== 'exercise') return false;
+      if (!semesterStarted && !c.startDate) return false; // semester not started, no override
       if (c.startDate && new Date(c.startDate) > tomorrow) return false;
       return true;
     });
@@ -300,6 +303,41 @@ ${eventLines.join('\n')}
     const prompt = `Ти си експертен AI планировчик за медицински студент. Твоята задача е да генерираш ОПТИМАЛЕН ${bonusMode ? 'БОНУС' : 'дневен'} план за учене.
 
 ДАТА: ${todayStr} (${isWeekend ? 'уикенд' : 'делник'})
+${(() => {
+  if (!academicPeriod) return '';
+  const parts: string[] = [];
+  const t = today;
+  if (academicPeriod.semesterStart) {
+    const ss = new Date(academicPeriod.semesterStart);
+    if (t < ss) {
+      const d = Math.ceil((ss.getTime() - t.getTime()) / 86400000);
+      parts.push(`СЕМЕСТЪР: ПОЧВА СЛЕД ${d} ДНИ (${academicPeriod.semesterStart}) — упражненията ОЩЕ НЕ СА ЗАПОЧНАЛИ!`);
+    } else if (academicPeriod.semesterEnd && t <= new Date(academicPeriod.semesterEnd)) {
+      const week = Math.ceil((t.getTime() - ss.getTime()) / (7 * 86400000));
+      parts.push(`СЕМЕСТЪР: Седмица ${week} (${academicPeriod.semesterStart} — ${academicPeriod.semesterEnd})`);
+    }
+  }
+  if (academicPeriod.cycleStart) {
+    const cs = new Date(academicPeriod.cycleStart);
+    if (t < cs) {
+      const d = Math.ceil((cs.getTime() - t.getTime()) / 86400000);
+      parts.push(`ЦИКЪЛ: ПОЧВА СЛЕД ${d} ДНИ (${academicPeriod.cycleStart})`);
+    } else if (academicPeriod.cycleEnd && t <= new Date(academicPeriod.cycleEnd)) {
+      const day = Math.ceil((t.getTime() - cs.getTime()) / 86400000) + 1;
+      parts.push(`ЦИКЪЛ: Ден ${day} (${academicPeriod.cycleStart} — ${academicPeriod.cycleEnd})`);
+    }
+  }
+  if (academicPeriod.sessionStart) {
+    const ses = new Date(academicPeriod.sessionStart);
+    if (t < ses) {
+      const d = Math.ceil((ses.getTime() - t.getTime()) / 86400000);
+      parts.push(`СЕСИЯ: СЛЕД ${d} ДНИ (${academicPeriod.sessionStart})`);
+    } else if (academicPeriod.sessionEnd && t <= new Date(academicPeriod.sessionEnd)) {
+      parts.push(`СЕСИЯ: В МОМЕНТА! (${academicPeriod.sessionStart} — ${academicPeriod.sessionEnd})`);
+    }
+  }
+  return parts.length > 0 ? 'АКАДЕМИЧЕН ПЕРИОД:\n' + parts.join('\n') : '';
+})()}
 КАПАЦИТЕТ: ${dailyTopicCapacity} теми (${dailyMinutes} минути общо)
 ${isVacationMode ? `РЕЖИМ: 🏖️ ВАКАНЦИЯ - намален workload до ${Math.round(vacationMultiplier * 100)}%! Фокус върху поддръжка и лек преговор.` : ''}
 ${dailyStatus?.sick ? 'СТАТУС: Болен - намален капацитет!' : dailyStatus?.holiday ? 'СТАТУС: Почивка - намален капацитет!' : ''}

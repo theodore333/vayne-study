@@ -275,11 +275,13 @@ export function transformDetailsHTML(html: string): string {
 
       const contentDiv = doc.createElement('div');
       contentDiv.setAttribute('data-type', 'details-content');
-      // Move all non-summary children into content wrapper
-      Array.from(details.childNodes).forEach(child => {
-        if (child instanceof Element && child.tagName === 'SUMMARY') return;
-        contentDiv.appendChild(child.cloneNode(true));
-      });
+      // Move (not clone) non-summary children so nested <details> stay in the live DOM
+      // for subsequent iterations to convert them too
+      const childNodes = Array.from(details.childNodes);
+      for (const child of childNodes) {
+        if (child instanceof Element && child.tagName === 'SUMMARY') continue;
+        contentDiv.appendChild(child);
+      }
       if (contentDiv.childNodes.length === 0) {
         contentDiv.innerHTML = '<p></p>';
       }

@@ -312,6 +312,14 @@ export default function SchedulePage() {
                             </span>
                           )}
                         </div>
+                        {event.topicIds && event.topicIds.length > 0 && subject && (
+                          <p className="text-xs text-purple-400/70 font-mono mt-1 truncate max-w-[300px]">
+                            Теми: {event.topicIds
+                              .map(id => subject.topics.find(t => t.id === id)?.name)
+                              .filter(Boolean)
+                              .join(', ') || '?'}
+                          </p>
+                        )}
                         {event.description && (
                           <p className="text-xs text-slate-500 font-mono mt-1">
                             {event.description}

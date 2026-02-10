@@ -1,7 +1,7 @@
 ﻿'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Calendar, Clock, MapPin } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { X, Calendar, Clock, MapPin, CheckSquare, Square } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { CLASS_TYPES, DAYS } from '@/lib/constants';
 
@@ -25,8 +25,32 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
   const [day, setDay] = useState(defaultDay);
   const [time, setTime] = useState('09:00');
   const [room, setRoom] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
+  const [showTopics, setShowTopics] = useState(false);
 
+  const selectedSubject = data.subjects.find(s => s.id === subjectId);
   const exerciseConfig = CLASS_TYPES.exercise;
+
+  const subjectTopics = useMemo(() => {
+    if (!selectedSubject) return [];
+    return selectedSubject.topics;
+  }, [selectedSubject]);
+
+  const handleSubjectChange = (newId: string) => {
+    setSubjectId(newId);
+    setSelectedTopicIds(new Set());
+    setShowTopics(false);
+  };
+
+  const toggleTopic = (topicId: string) => {
+    setSelectedTopicIds(prev => {
+      const next = new Set(prev);
+      if (next.has(topicId)) next.delete(topicId);
+      else next.add(topicId);
+      return next;
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,12 +61,12 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
       day,
       time,
       type: 'exercise',
-      room
+      room,
+      description: description.trim() || undefined,
+      topicIds: selectedTopicIds.size > 0 ? Array.from(selectedTopicIds) : undefined
     });
     onClose();
   };
-
-  const selectedSubject = data.subjects.find(s => s.id === subjectId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -79,7 +103,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
             ) : (
               <select
                 value={subjectId}
-                onChange={(e) => setSubjectId(e.target.value)}
+                onChange={(e) => handleSubjectChange(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
               >
                 {activeSubjects.map(s => (
@@ -141,6 +165,59 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
               className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 font-mono"
             />
           </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              Тема на упражнението (незадължително)
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value.slice(0, 100))}
+              placeholder="напр. Мускули на горен крайник"
+              maxLength={100}
+              className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-orange-500 font-mono"
+            />
+          </div>
+
+          {/* Topic Selection */}
+          {selectedSubject && subjectTopics.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTopics(!showTopics)}
+                className="flex items-center gap-2 text-sm font-medium text-slate-400 mb-2 font-mono hover:text-slate-200 transition-colors"
+              >
+                <span>{showTopics ? '▾' : '▸'} Конкретни теми ({selectedTopicIds.size > 0 ? `${selectedTopicIds.size} избрани` : 'незадължително'})</span>
+              </button>
+              {showTopics && (
+                <div className="border border-slate-700 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                  {subjectTopics.map(topic => {
+                    const isSelected = selectedTopicIds.has(topic.id);
+                    return (
+                      <button
+                        key={topic.id}
+                        type="button"
+                        onClick={() => toggleTopic(topic.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs font-mono transition-colors ${
+                          isSelected
+                            ? 'bg-orange-500/10 text-orange-300'
+                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300'
+                        }`}
+                      >
+                        {isSelected
+                          ? <CheckSquare size={13} className="shrink-0 text-orange-400" />
+                          : <Square size={13} className="shrink-0 text-slate-600" />
+                        }
+                        <span className="truncate">{topic.number}. {topic.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Preview */}
           {selectedSubject && (

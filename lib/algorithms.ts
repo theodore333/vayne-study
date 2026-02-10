@@ -1244,16 +1244,25 @@ export function generateDailyPlan(
       const config = ACADEMIC_EVENT_CONFIG[event.type];
       const topicsToReview = Math.min(3, capacityForPriority);
 
-      // For events, prioritize yellow/orange topics (consolidation of learned material)
-      // Events test what you've learned, not new material
-      const candidates = subject.topics.filter(t =>
+      // If event has specific topicIds, use only those topics
+      // Otherwise fall back to yellow/orange from the whole subject
+      const eventTopicPool = event.topicIds && event.topicIds.length > 0
+        ? subject.topics.filter(t => event.topicIds!.includes(t.id))
+        : subject.topics;
+
+      // Prioritize yellow/orange topics (consolidation of learned material)
+      const candidates = eventTopicPool.filter(t =>
         t.status === 'yellow' || t.status === 'orange'
       );
 
       // If no yellow/orange topics, include green topics that need review
+      // Also include gray topics if event has specific topicIds (student must cover them)
+      const fallbackStatuses = event.topicIds && event.topicIds.length > 0
+        ? eventTopicPool.filter(t => t.status === 'green' || t.status === 'gray')
+        : eventTopicPool.filter(t => t.status === 'green');
       const finalCandidates = candidates.length >= topicsToReview
         ? candidates
-        : [...candidates, ...subject.topics.filter(t => t.status === 'green')];
+        : [...candidates, ...fallbackStatuses];
 
       const selectedTopics = selectTopicsWithRelations(finalCandidates, topicsToReview, inCrunchMode);
 

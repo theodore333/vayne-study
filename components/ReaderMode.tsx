@@ -28,14 +28,13 @@ import {
   Strikethrough, ChevronDown, RowsIcon, ColumnsIcon, Trash2, Plus as PlusIcon,
   MinusIcon, GripVertical, AlignLeft, AlignCenter, AlignRight,
   Calculator, Check, Search, Replace, ListTree, Clock, FileText, CheckCircle2,
-  ChevronRight, Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain,
+  Eye, AlertTriangle, ArrowLeft, ArrowRight, Brain,
   Info, Lightbulb, Sparkles
 } from 'lucide-react';
 import { Topic, TextHighlight } from '@/lib/types';
 import { useApp } from '@/lib/context';
 import { mergeAttributes, Node as TiptapNode, Mark as TiptapMark } from '@tiptap/core';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
-import { DetailsNode, DetailsSummary, DetailsContent, transformDetailsHTML } from '@/lib/tiptap-details';
 import TutorChat from '@/components/TutorChat';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -501,7 +500,7 @@ function markdownToHtml(markdown: string): string {
 
   // Now escape remaining HTML
   html = html.replace(/&(?!amp;|lt;|gt;)/g, '&amp;');
-  html = html.replace(/<(?!\/?(pre|code|h[1-3]|strong|em|s|blockquote|ul|ol|li|p|br|a|img|table|thead|tbody|tr|th|td|hr|mark|u|input|details|summary|div)[^>]*>)/g, '&lt;');
+  html = html.replace(/<(?!\/?(pre|code|h[1-3]|strong|em|s|blockquote|ul|ol|li|p|br|a|img|table|thead|tbody|tr|th|td|hr|mark|u|input|div)[^>]*>)/g, '&lt;');
 
   // Horizontal rule (before headers)
   html = html.replace(/^---+$/gm, '<hr>');
@@ -691,10 +690,8 @@ function cleanupEmptyListItems(html: string): string {
   const doc = parser.parseFromString(html, 'text/html');
 
   // Remove empty <li> elements (including those with only bullet chars or whitespace)
-  // Skip elements inside toggle content to preserve block+ requirement
   const listItems = doc.querySelectorAll('li');
   listItems.forEach(li => {
-    if (li.closest('[data-type="details-content"]')) return;
     const text = li.textContent?.trim() || '';
     if (text.length === 0 || /^[\s\u200B\u00A0•\-*]+$/.test(text)) {
       li.remove();
@@ -702,20 +699,16 @@ function cleanupEmptyListItems(html: string): string {
   });
 
   // Remove empty <ul> and <ol> that have no children
-  // Skip elements inside toggle content to preserve block+ requirement
   const lists = doc.querySelectorAll('ul, ol');
   lists.forEach(list => {
-    if (list.closest('[data-type="details-content"]')) return;
     if (list.children.length === 0) {
       list.remove();
     }
   });
 
   // Remove empty <p> elements (including those with only <br>, whitespace, or lone bullet chars)
-  // BUT skip paragraphs inside toggle content — they're required for TipTap's block+ content spec
   const paragraphs = doc.querySelectorAll('p');
   paragraphs.forEach(p => {
-    if (p.closest('[data-type="details-content"]') || p.closest('[data-details-content]')) return;
     const text = p.textContent?.trim() || '';
     const hasOnlyBr = p.innerHTML.trim() === '<br>' || p.innerHTML.trim() === '';
     // Also remove paragraphs that contain only bullet characters (•, -, *)
@@ -1224,9 +1217,6 @@ export default function ReaderMode({
       Superscript,
       Subscript,
       CalloutExtension,
-      DetailsNode,
-      DetailsSummary,
-      DetailsContent,
       ResizableImage.configure({
         inline: false,
         allowBase64: true,
@@ -1271,9 +1261,6 @@ export default function ReaderMode({
     editorProps: {
       attributes: {
         class: 'prose prose-stone max-w-none focus:outline-none min-h-[60vh]',
-      },
-      transformPastedHTML(html) {
-        return transformDetailsHTML(html);
       },
       handlePaste: (view, event) => {
         const clipboardData = event.clipboardData;
@@ -2434,15 +2421,6 @@ export default function ReaderMode({
             )}
           </div>
 
-          {/* Toggle block */}
-          <ToolbarButton
-            onClick={() => (editor.commands as any).setDetails()}
-            active={editor.isActive('details')}
-            title="Разгъваем блок"
-          >
-            <ChevronRight size={18} />
-          </ToolbarButton>
-
           <div className="w-px h-6 bg-stone-300 mx-1" />
 
           {/* Insert */}
@@ -2938,51 +2916,6 @@ export default function ReaderMode({
                 margin-top: 0;
               }
               .ProseMirror div[data-callout] > p:last-child {
-                margin-bottom: 0;
-              }
-
-              /* Toggle / Details blocks — Notion style */
-              .ProseMirror [data-type="details"] {
-                margin: 0.5em 0;
-                border: none !important;
-                background: none !important;
-                padding: 0 !important;
-              }
-              .ProseMirror [data-type="details-summary"] {
-                cursor: pointer;
-                font-weight: 600;
-                display: flex !important;
-                align-items: flex-start;
-                gap: 0.4em;
-                padding: 0.2em 0;
-                border: none !important;
-                background: none !important;
-                color: inherit;
-                user-select: text;
-              }
-              .ProseMirror [data-type="details-summary"]::before {
-                content: '▶';
-                font-size: 0.55em;
-                margin-top: 0.45em;
-                transition: transform 0.15s ease;
-                opacity: 0.5;
-                flex-shrink: 0;
-              }
-              .ProseMirror [data-type="details"][data-open="true"] > [data-type="details-summary"]::before {
-                transform: rotate(90deg);
-              }
-              .ProseMirror [data-type="details-content"] {
-                padding-left: 1.4em;
-                border: none !important;
-                background: none !important;
-              }
-              .ProseMirror [data-type="details"][data-open="false"] > [data-type="details-content"] {
-                display: none !important;
-              }
-              .ProseMirror [data-type="details-content"] > *:first-child {
-                margin-top: 0;
-              }
-              .ProseMirror [data-type="details-content"] > *:last-child {
                 margin-bottom: 0;
               }
 

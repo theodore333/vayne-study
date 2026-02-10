@@ -297,6 +297,7 @@ export default function TodayPage() {
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
+          academicEvents: data.academicEvents,
           apiKey,
           bonusMode: mode, // Tell the API this is a bonus plan
           studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
@@ -359,6 +360,7 @@ export default function TodayPage() {
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
+          academicEvents: data.academicEvents,
           apiKey,
           studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
             name: t.name, slug: t.slug, practiceCount: t.practiceCount,

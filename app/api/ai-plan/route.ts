@@ -38,6 +38,8 @@ interface ScheduleClass {
   day: number;
   time: string;
   type: string;
+  description?: string;
+  topicIds?: string[];
 }
 
 interface GeneratedTask {
@@ -53,7 +55,7 @@ interface GeneratedTask {
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques } = await request.json() as {
+    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques, academicEvents } = await request.json() as {
       subjects: RequestSubject[];
       schedule: ScheduleClass[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
       studyGoals?: { dailyMinutes?: number; weekendDailyMinutes?: number; vacationMode?: boolean; vacationMultiplier?: number };
       bonusMode?: 'tomorrow' | 'review' | 'weak';
       studyTechniques?: Array<{ name: string; slug: string; practiceCount: number; lastPracticedAt: string | null; howToApply: string }>;
+      academicEvents?: Array<{ id: string; type: string; subjectId: string; date: string; name?: string; topicIds?: string[]; weight: number }>;
     };
 
     if (!apiKey) {
@@ -179,6 +182,19 @@ export async function POST(request: NextRequest) {
         setupStatus, // NEW: setup completeness info
         topicsNeedingReview: topicsNeedingReview.length,
         hasExerciseTomorrow: tomorrowExercises.some(e => e.subjectId === s.id),
+        exerciseTomorrowInfo: tomorrowExercises
+          .filter(e => e.subjectId === s.id)
+          .map(e => {
+            const info: { description?: string; topicNames?: string[] } = {};
+            if (e.description) info.description = e.description;
+            if (e.topicIds && e.topicIds.length > 0) {
+              info.topicNames = e.topicIds
+                .map((id: string) => s.topics.find(t => t.id === id)?.name)
+                .filter(Boolean) as string[];
+            }
+            return info;
+          })
+          .filter(e => e.description || e.topicNames),
         topics: s.topics.map(t => ({
           id: t.id,
           number: t.number,
@@ -241,6 +257,42 @@ export async function POST(request: NextRequest) {
 `;
     }
 
+    // Build upcoming academic events section
+    let academicEventsSection = '';
+    if (academicEvents && academicEvents.length > 0) {
+      const upcomingEvents = academicEvents
+        .map(event => {
+          const eventDate = new Date(event.date);
+          const daysUntil = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          return { ...event, daysUntil };
+        })
+        .filter(e => e.daysUntil > 0 && e.daysUntil <= 30)
+        .sort((a, b) => a.daysUntil - b.daysUntil);
+
+      if (upcomingEvents.length > 0) {
+        const eventLines = upcomingEvents.map(event => {
+          const subject = subjects.find(s => s.id === event.subjectId);
+          const subjectName = subject?.name || '?';
+          const eventName = event.name || event.type;
+          let topicInfo = 'всички теми от предмета';
+          if (event.topicIds && event.topicIds.length > 0 && subject) {
+            const topicNames = event.topicIds
+              .map(id => subject.topics.find(t => t.id === id)?.name)
+              .filter(Boolean)
+              .map(n => (n as string).substring(0, 40));
+            topicInfo = `КОНКРЕТНИ теми: ${topicNames.join(', ')}`;
+          }
+          return `- ${eventName} (${subjectName}) след ${event.daysUntil}д | тежест: ${event.weight}x | ${topicInfo}`;
+        });
+
+        academicEventsSection = `
+📋 ПРЕДСТОЯЩИ АКАДЕМИЧНИ СЪБИТИЯ:
+${eventLines.join('\n')}
+⚠️ ПРИОРИТИЗИРАЙ темите от предстоящи събития! Ако събитието е до 7 дни, включи подготовка с HIGH приоритет. Ако има КОНКРЕТНИ теми - фокусирай се САМО върху тях, не върху целия предмет!
+`;
+      }
+    }
+
     // Build the prompt
     const prompt = `Ти си експертен AI планировчик за медицински студент. Твоята задача е да генерираш ОПТИМАЛЕН ${bonusMode ? 'БОНУС' : 'дневен'} план за учене.
 
@@ -254,7 +306,7 @@ ${hasSetupTasks && !bonusMode ? `⚠️ ВАЖНО: НЯКОИ ПРЕДМЕТИ 
 
 ПРЕДИ ДА ГЕНЕРИРАШ ПЛАН ЗА УЧЕНЕ, трябва да дадеш SETUP TASKS за непълните предмети!
 ` : ''}
-
+${academicEventsSection}
 ПРЕДМЕТИ И ТЕМИ:
 ${JSON.stringify(subjectData, null, 2)}
 
@@ -275,6 +327,7 @@ ${hasSetupTasks && !bonusMode ? `0. SETUP TASKS (НАЙ-ВИСОК ПРИОРИ�
 (Следвай СПЕЦИАЛНИТЕ ПРАВИЛА от бонус режима по-горе!)
 ` : `1. КРИТИЧНИ (type: "critical"):
    - Упражнение утре → теми от този предмет ЗАДЪЛЖИТЕЛНО първи
+   - Ако упражнението има exerciseTomorrowInfo с topicNames или description → фокусирай се ТОЧНО върху тези теми!
    - Изпит до 3 дни → максимален фокус
    - САМО за предмети с setupStatus.isReadyForStudy = true!
 

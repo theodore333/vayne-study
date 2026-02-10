@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { X, Calendar, BookOpen } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Calendar, BookOpen, CheckSquare, Square } from 'lucide-react';
 import { AcademicEventType, Subject } from '@/lib/types';
 import { ACADEMIC_EVENT_CONFIG } from '@/lib/constants';
 import { useApp } from '@/lib/context';
@@ -25,10 +25,43 @@ export default function AddAcademicEventModal({
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [weight, setWeight] = useState(ACADEMIC_EVENT_CONFIG.colloquium.defaultWeight);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
+  const [showTopics, setShowTopics] = useState(false);
+
+  const selectedSubject = activeSubjects.find(s => s.id === subjectId);
+  const config = ACADEMIC_EVENT_CONFIG[eventType];
+
+  const subjectTopics = useMemo(() => {
+    if (!selectedSubject) return [];
+    return selectedSubject.topics;
+  }, [selectedSubject]);
 
   const handleTypeChange = (type: AcademicEventType) => {
     setEventType(type);
     setWeight(ACADEMIC_EVENT_CONFIG[type].defaultWeight);
+  };
+
+  const handleSubjectChange = (newSubjectId: string) => {
+    setSubjectId(newSubjectId);
+    setSelectedTopicIds(new Set());
+    setShowTopics(false);
+  };
+
+  const toggleTopic = (topicId: string) => {
+    setSelectedTopicIds(prev => {
+      const next = new Set(prev);
+      if (next.has(topicId)) next.delete(topicId);
+      else next.add(topicId);
+      return next;
+    });
+  };
+
+  const toggleAllTopics = () => {
+    if (selectedTopicIds.size === subjectTopics.length) {
+      setSelectedTopicIds(new Set());
+    } else {
+      setSelectedTopicIds(new Set(subjectTopics.map(t => t.id)));
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,14 +75,12 @@ export default function AddAcademicEventModal({
       date,
       name: name.trim() || undefined,
       description: description.trim() || undefined,
+      topicIds: selectedTopicIds.size > 0 ? Array.from(selectedTopicIds) : undefined,
       weight
     });
 
     onClose();
   };
-
-  const selectedSubject = activeSubjects.find(s => s.id === subjectId);
-  const config = ACADEMIC_EVENT_CONFIG[eventType];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -113,7 +144,7 @@ export default function AddAcademicEventModal({
               <BookOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <select
                 value={subjectId}
-                onChange={e => setSubjectId(e.target.value)}
+                onChange={e => handleSubjectChange(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-10 py-2.5 text-slate-200 font-mono text-sm focus:outline-none focus:border-purple-500"
                 required
               >
@@ -132,6 +163,62 @@ export default function AddAcademicEventModal({
               )}
             </div>
           </div>
+
+          {/* Topic Selection */}
+          {selectedSubject && subjectTopics.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTopics(!showTopics)}
+                className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono hover:text-slate-300 transition-colors"
+              >
+                <span>{showTopics ? '▾' : '▸'} Теми ({selectedTopicIds.size > 0 ? `${selectedTopicIds.size}/${subjectTopics.length}` : 'всички'})</span>
+              </button>
+              {showTopics && (
+                <div className="border border-slate-700 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={toggleAllTopics}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-mono text-purple-400 hover:bg-slate-800/50 border-b border-slate-700 transition-colors"
+                  >
+                    {selectedTopicIds.size === subjectTopics.length
+                      ? <CheckSquare size={14} />
+                      : <Square size={14} />
+                    }
+                    {selectedTopicIds.size === subjectTopics.length ? 'Премахни всички' : 'Избери всички'}
+                  </button>
+                  <div className="max-h-40 overflow-y-auto">
+                    {subjectTopics.map(topic => {
+                      const isSelected = selectedTopicIds.has(topic.id);
+                      return (
+                        <button
+                          key={topic.id}
+                          type="button"
+                          onClick={() => toggleTopic(topic.id)}
+                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs font-mono transition-colors ${
+                            isSelected
+                              ? 'bg-purple-500/10 text-purple-300'
+                              : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300'
+                          }`}
+                        >
+                          {isSelected
+                            ? <CheckSquare size={13} className="shrink-0 text-purple-400" />
+                            : <Square size={13} className="shrink-0 text-slate-600" />
+                          }
+                          <span className="truncate">{topic.number}. {topic.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedTopicIds.size === 0 && (
+                    <div className="px-3 py-1.5 text-xs text-slate-600 font-mono border-t border-slate-700">
+                      Без избор = всички теми от предмета
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Date */}
           <div>

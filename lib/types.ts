@@ -239,6 +239,8 @@ export interface ScheduleClass {
   time: string;
   type: ClassType;
   room: string;
+  description?: string;     // Free-text topic/theme of the exercise
+  topicIds?: string[];       // Specific topics covered in this exercise
 }
 
 export type ClassType = 'exercise';
@@ -930,6 +932,7 @@ export interface AcademicEvent {
   date: string;              // ISO date
   name?: string;             // "Колоквиум 1", "Контролно №2"
   description?: string;
+  topicIds?: string[];       // Specific topics covered (empty/undefined = all topics in subject)
   weight: number;            // 0.5 = light, 1.0 = normal, 1.5 = important
   createdAt: string;
 }

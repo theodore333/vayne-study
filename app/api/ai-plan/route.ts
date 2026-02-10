@@ -40,6 +40,7 @@ interface ScheduleClass {
   type: string;
   description?: string;
   topicIds?: string[];
+  startDate?: string;
 }
 
 interface GeneratedTask {
@@ -105,10 +106,12 @@ export async function POST(request: NextRequest) {
     const MAX_TOPICS_PER_DAY = 12; // Hard limit for reasonable daily workload
     const dailyTopicCapacity = Math.min(rawCapacity, MAX_TOPICS_PER_DAY);
 
-    // Check for exercises tomorrow
-    const tomorrowExercises = schedule.filter(
-      c => c.day === tomorrowDay && c.type === 'exercise'
-    );
+    // Check for exercises tomorrow (respect startDate)
+    const tomorrowExercises = schedule.filter(c => {
+      if (c.day !== tomorrowDay || c.type !== 'exercise') return false;
+      if (c.startDate && new Date(c.startDate) > tomorrow) return false;
+      return true;
+    });
 
     // Build detailed subject data for the prompt
     const subjectData = subjects.map(s => {

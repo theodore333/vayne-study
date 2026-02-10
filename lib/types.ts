@@ -241,6 +241,7 @@ export interface ScheduleClass {
   room: string;
   description?: string;     // Free-text topic/theme of the exercise
   topicIds?: string[];       // Specific topics covered in this exercise
+  startDate?: string;        // ISO date - when this class starts (ignore before this date)
 }
 
 export type ClassType = 'exercise';

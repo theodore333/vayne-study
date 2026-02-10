@@ -26,7 +26,6 @@ export default function AddAcademicEventModal({
   const [description, setDescription] = useState('');
   const [weight, setWeight] = useState(ACADEMIC_EVENT_CONFIG.colloquium.defaultWeight);
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
-  const [showTopics, setShowTopics] = useState(false);
 
   const selectedSubject = activeSubjects.find(s => s.id === subjectId);
   const config = ACADEMIC_EVENT_CONFIG[eventType];
@@ -44,7 +43,6 @@ export default function AddAcademicEventModal({
   const handleSubjectChange = (newSubjectId: string) => {
     setSubjectId(newSubjectId);
     setSelectedTopicIds(new Set());
-    setShowTopics(false);
   };
 
   const toggleTopic = (topicId: string) => {
@@ -85,7 +83,7 @@ export default function AddAcademicEventModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-[#0f0f1a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="relative bg-[#0f0f1a] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[#1e293b]">
           <div className="flex items-center gap-2">
@@ -102,7 +100,7 @@ export default function AddAcademicEventModal({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto">
           {/* Event Type */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono">
@@ -167,56 +165,50 @@ export default function AddAcademicEventModal({
           {/* Topic Selection */}
           {selectedSubject && subjectTopics.length > 0 && (
             <div>
-              <button
-                type="button"
-                onClick={() => setShowTopics(!showTopics)}
-                className="flex items-center gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono hover:text-slate-300 transition-colors"
-              >
-                <span>{showTopics ? '▾' : '▸'} Теми ({selectedTopicIds.size > 0 ? `${selectedTopicIds.size}/${subjectTopics.length}` : 'всички'})</span>
-              </button>
-              {showTopics && (
-                <div className="border border-slate-700 rounded-lg overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={toggleAllTopics}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-mono text-purple-400 hover:bg-slate-800/50 border-b border-slate-700 transition-colors"
-                  >
-                    {selectedTopicIds.size === subjectTopics.length
-                      ? <CheckSquare size={14} />
-                      : <Square size={14} />
-                    }
-                    {selectedTopicIds.size === subjectTopics.length ? 'Премахни всички' : 'Избери всички'}
-                  </button>
-                  <div className="max-h-40 overflow-y-auto">
-                    {subjectTopics.map(topic => {
-                      const isSelected = selectedTopicIds.has(topic.id);
-                      return (
-                        <button
-                          key={topic.id}
-                          type="button"
-                          onClick={() => toggleTopic(topic.id)}
-                          className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs font-mono transition-colors ${
-                            isSelected
-                              ? 'bg-purple-500/10 text-purple-300'
-                              : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300'
-                          }`}
-                        >
-                          {isSelected
-                            ? <CheckSquare size={13} className="shrink-0 text-purple-400" />
-                            : <Square size={13} className="shrink-0 text-slate-600" />
-                          }
-                          <span className="truncate">{topic.number}. {topic.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedTopicIds.size === 0 && (
-                    <div className="px-3 py-1.5 text-xs text-slate-600 font-mono border-t border-slate-700">
-                      Без избор = всички теми от предмета
-                    </div>
-                  )}
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono">
+                Кои теми влизат? ({selectedTopicIds.size > 0 ? `${selectedTopicIds.size} избрани` : 'всички'})
+              </label>
+              <div className="border border-purple-500/30 rounded-lg overflow-hidden bg-slate-800/30">
+                <button
+                  type="button"
+                  onClick={toggleAllTopics}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs font-mono text-purple-400 hover:bg-purple-500/10 border-b border-slate-700 transition-colors"
+                >
+                  {selectedTopicIds.size === subjectTopics.length
+                    ? <CheckSquare size={14} />
+                    : <Square size={14} />
+                  }
+                  {selectedTopicIds.size === subjectTopics.length ? 'Премахни всички' : 'Избери всички'}
+                </button>
+                <div className="max-h-44 overflow-y-auto">
+                  {subjectTopics.map(topic => {
+                    const isSelected = selectedTopicIds.has(topic.id);
+                    return (
+                      <button
+                        key={topic.id}
+                        type="button"
+                        onClick={() => toggleTopic(topic.id)}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs font-mono transition-colors ${
+                          isSelected
+                            ? 'bg-purple-500/10 text-purple-300'
+                            : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300'
+                        }`}
+                      >
+                        {isSelected
+                          ? <CheckSquare size={13} className="shrink-0 text-purple-400" />
+                          : <Square size={13} className="shrink-0 text-slate-600" />
+                        }
+                        <span className="truncate">{topic.number}. {topic.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+                {selectedTopicIds.size === 0 && (
+                  <div className="px-3 py-2 text-xs text-slate-500 font-mono border-t border-slate-700 bg-slate-800/50">
+                    Не си избрал теми — ще се подготвяш от всички
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -1148,9 +1148,11 @@ export function generateDailyPlan(
   const subjectWorkload = new Map(workload.bySubject.map(s => [s.subjectId, s]));
 
   // 1. CRITICAL: Exercises tomorrow - take topics from that subject's workload
-  const tomorrowExercises = schedule.filter(
-    c => c.day === tomorrowDay && CLASS_TYPES[c.type].prepRequired
-  );
+  const tomorrowExercises = schedule.filter(c => {
+    if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (c.startDate && new Date(c.startDate) > tomorrow) return false;
+    return true;
+  });
 
   for (const exercise of tomorrowExercises) {
     const subject = subjects.find(s => s.id === exercise.subjectId);
@@ -1830,9 +1832,11 @@ export function getAlerts(
   const tomorrowDay = (tomorrow.getDay() + 6) % 7;
 
   // Check for exercises tomorrow
-  const tomorrowExercises = schedule.filter(
-    c => c.day === tomorrowDay && CLASS_TYPES[c.type].prepRequired
-  );
+  const tomorrowExercises = schedule.filter(c => {
+    if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (c.startDate && new Date(c.startDate) > tomorrow) return false;
+    return true;
+  });
 
   for (const exercise of tomorrowExercises) {
     const subject = subjects.find(s => s.id === exercise.subjectId);

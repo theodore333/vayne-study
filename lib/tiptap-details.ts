@@ -6,7 +6,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
  *
  * Renders as <div> with data attributes in the editor (ProseMirror controls DOM).
  * Parses <details><summary> from external HTML paste.
- * Serializes to <details><summary> for storage.
+ * Stored as div format (same as rendered).
  */
 
 export const DetailsNode = TiptapNode.create({
@@ -41,11 +41,6 @@ export const DetailsNode = TiptapNode.create({
 
   renderHTML({ HTMLAttributes }: { HTMLAttributes: Record<string, any> }) {
     return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'details' }), 0];
-  },
-
-  // Serialize to <details><summary> for storage/clipboard
-  addStorage() {
-    return {};
   },
 
   addCommands() {
@@ -85,20 +80,23 @@ export const DetailsNode = TiptapNode.create({
 
           if (blocks.length === 0) return false;
 
-          // First block's inline content becomes the summary (like Notion's "Turn into toggle")
+          // If first block is a textblock (paragraph, heading), its content becomes the summary.
+          // If first block is non-textblock (list, table), ALL blocks go into body with placeholder summary.
           const firstBlock = blocks[0];
-          let summaryContent: any;
-          if (firstBlock.isTextblock && firstBlock.content.size > 0) {
-            summaryContent = firstBlock.content;
-          } else {
-            summaryContent = schema.text('Заглавие');
-          }
-          const summary = schema.nodes.detailsSummary.create(null, summaryContent);
+          let summary: any;
+          let bodyBlocks: any[];
 
-          // Remaining blocks go into the body; if only one block, body is empty paragraph
-          const bodyBlocks = blocks.length > 1
-            ? blocks.slice(1)
-            : [schema.nodes.paragraph.create()];
+          if (firstBlock.isTextblock && firstBlock.content.size > 0) {
+            summary = schema.nodes.detailsSummary.create(null, firstBlock.content);
+            bodyBlocks = blocks.length > 1
+              ? blocks.slice(1)
+              : [schema.nodes.paragraph.create()];
+          } else {
+            // Non-textblock (list, table, etc.) — put ALL blocks in body, don't discard anything
+            summary = schema.nodes.detailsSummary.create(null, schema.text('Заглавие'));
+            bodyBlocks = blocks;
+          }
+
           const content = schema.nodes.detailsContent.create(null, bodyBlocks);
           const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
@@ -116,9 +114,7 @@ export const DetailsNode = TiptapNode.create({
         const details = schema.nodes.details.create({ open: true }, [summary, content]);
 
         if (dispatch) {
-          const pos = from;
           tr.replaceSelectionWith(details);
-          // Place cursor at the start of the summary text for immediate editing
           dispatch(tr);
         }
         return true;
@@ -161,16 +157,14 @@ export const DetailsNode = TiptapNode.create({
         props: {
           handleClick(view, pos, event) {
             const target = event.target as HTMLElement;
-            // Check if clicked on the summary area (data-type="details-summary")
             const summaryEl = target.closest('[data-type="details-summary"]');
             if (!summaryEl) return false;
 
-            // Don't toggle if clicking to edit text — only toggle on the arrow
-            // The arrow is the ::before pseudo-element, which registers as click on the summary itself
-            // If the click target IS the summary div (not a child text node), toggle
-            if (target !== summaryEl) return false;
+            // Only toggle if click is on the arrow area (left ~24px).
+            // Clicking on text should place cursor for editing, not toggle.
+            const rect = (summaryEl as HTMLElement).getBoundingClientRect();
+            if (event.clientX - rect.left > 24) return false;
 
-            // Find the details node in ProseMirror
             const detailsEl = summaryEl.closest('[data-type="details"]');
             if (!detailsEl) return false;
 
@@ -204,6 +198,7 @@ export const DetailsSummary = TiptapNode.create({
   name: 'detailsSummary',
   content: 'inline*',
   defining: true,
+  isolating: true,
 
   parseHTML() {
     return [
@@ -235,10 +230,10 @@ export const DetailsContent = TiptapNode.create({
   name: 'detailsContent',
   content: 'block+',
   defining: true,
+  isolating: true,
 
   parseHTML() {
     return [
-      { tag: 'div[data-details-content]' },
       { tag: 'div[data-type="details-content"]' },
     ];
   },
@@ -251,37 +246,51 @@ export const DetailsContent = TiptapNode.create({
 /**
  * transformPastedHTML: converts native <details> to our div structure,
  * so TipTap can parse external HTML correctly.
+ * Uses DOM-based approach to handle nested toggles safely.
  */
 export function transformDetailsHTML(html: string): string {
-  return html.replace(
-    /<details([^>]*)>\s*<summary>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi,
-    (_, attrs, summary, content) => {
-      const isOpen = attrs.includes('open');
-      const wrapped = content.includes('data-type="details-content"') || content.includes('data-details-content')
-        ? content
-        : `<div data-type="details-content">${content}</div>`;
-      return `<div data-type="details" data-open="${isOpen ? 'true' : 'false'}"><div data-type="details-summary">${summary}</div>${wrapped}</div>`;
-    }
-  );
+  if (!html.includes('<details')) return html;
+  if (typeof DOMParser === 'undefined') return html;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Process innermost first (querySelectorAll returns document order,
+  // but replacing from leaves to root avoids nesting issues)
+  const convert = () => {
+    const elements = doc.querySelectorAll('details');
+    if (elements.length === 0) return false;
+    elements.forEach(details => {
+      const div = doc.createElement('div');
+      div.setAttribute('data-type', 'details');
+      div.setAttribute('data-open', details.hasAttribute('open') ? 'true' : 'false');
+
+      const summary = details.querySelector(':scope > summary');
+      if (summary) {
+        const summaryDiv = doc.createElement('div');
+        summaryDiv.setAttribute('data-type', 'details-summary');
+        summaryDiv.innerHTML = summary.innerHTML;
+        div.appendChild(summaryDiv);
+      }
+
+      const contentDiv = doc.createElement('div');
+      contentDiv.setAttribute('data-type', 'details-content');
+      // Move all non-summary children into content wrapper
+      Array.from(details.childNodes).forEach(child => {
+        if (child instanceof Element && child.tagName === 'SUMMARY') return;
+        contentDiv.appendChild(child.cloneNode(true));
+      });
+      if (contentDiv.childNodes.length === 0) {
+        contentDiv.innerHTML = '<p></p>';
+      }
+      div.appendChild(contentDiv);
+
+      details.replaceWith(div);
+    });
+    return true;
+  };
+
+  convert();
+  return doc.body.innerHTML;
 }
 
-/**
- * Converts our div-based toggle HTML back to native <details><summary> for storage.
- * Call this on the HTML before saving to get clean, portable HTML.
- */
-export function detailsToNativeHTML(html: string): string {
-  return html
-    .replace(/<div[^>]*data-type="details"[^>]*data-open="(\w+)"[^>]*>/gi, (_, open) => {
-      return open === 'true' ? '<details open>' : '<details>';
-    })
-    .replace(/<div[^>]*data-open="(\w+)"[^>]*data-type="details"[^>]*>/gi, (_, open) => {
-      return open === 'true' ? '<details open>' : '<details>';
-    })
-    .replace(/<div[^>]*data-type="details-summary"[^>]*>/gi, '<summary>')
-    .replace(/<\/div>(\s*)<summary>/gi, '</details>$1<summary>') // close previous details before new summary (shouldn't happen but safety)
-    .replace(/<div[^>]*data-type="details-content"[^>]*>/gi, '')
-    // Close tags: each details block has 3 closing </div>s that need to become </summary>, nothing, </details>
-    ;
-  // Note: This is a simplified approach. For production, a DOM-based approach would be more robust.
-  // But since our HTML structure is predictable (we generate it), regex works.
-}

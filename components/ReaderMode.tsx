@@ -691,8 +691,10 @@ function cleanupEmptyListItems(html: string): string {
   const doc = parser.parseFromString(html, 'text/html');
 
   // Remove empty <li> elements (including those with only bullet chars or whitespace)
+  // Skip elements inside toggle content to preserve block+ requirement
   const listItems = doc.querySelectorAll('li');
   listItems.forEach(li => {
+    if (li.closest('[data-type="details-content"]')) return;
     const text = li.textContent?.trim() || '';
     if (text.length === 0 || /^[\s\u200B\u00A0•\-*]+$/.test(text)) {
       li.remove();
@@ -700,8 +702,10 @@ function cleanupEmptyListItems(html: string): string {
   });
 
   // Remove empty <ul> and <ol> that have no children
+  // Skip elements inside toggle content to preserve block+ requirement
   const lists = doc.querySelectorAll('ul, ol');
   lists.forEach(list => {
+    if (list.closest('[data-type="details-content"]')) return;
     if (list.children.length === 0) {
       list.remove();
     }
@@ -1464,8 +1468,11 @@ export default function ReaderMode({
       const loadedLen = loadedHtml?.length || 0;
       const originalLen = originalMaterial.length;
 
-      // If we had content but editor loaded empty/near-empty → parse failure → block ALL saves
-      if (originalLen > 50 && (loadedLen < 20 || loadedHtml === '<p></p>')) {
+      // Block saves if editor loaded significantly less content than stored
+      // Catches: empty load, partial parse failures (e.g. toggle blocks dropped)
+      const isEmpty = loadedLen < 20 || loadedHtml === '<p></p>';
+      const bigShrink = originalLen > 100 && loadedLen < originalLen * 0.5;
+      if (originalLen > 50 && (isEmpty || bigShrink)) {
         console.error('[ReaderMode] PARSE FAILURE: had', originalLen, 'chars but editor loaded', loadedLen, '— saves BLOCKED');
         // Do NOT set isEditorInitializedRef — saves will never fire
         return;

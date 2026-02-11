@@ -268,6 +268,7 @@ interface AppContextType {
   addQuestionBank: (subjectId: string, name: string) => string;
   addQuestionsToBank: (bankId: string, questions: Omit<BankQuestion, 'id'>[], cases: Omit<ClinicalCase, 'id'>[]) => void;
   updateQuestionStats: (bankId: string, questionId: string, correct: boolean) => void;
+  updateQuestionLinkedTopics: (bankId: string, updates: Array<{ questionId: string; linkedTopicIds: string[] }>) => void;
   deleteQuestionBank: (bankId: string) => void;
   deleteQuestion: (bankId: string, questionId: string) => void;
 
@@ -1526,6 +1527,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const updateQuestionLinkedTopics = useCallback(
+    (bankId: string, updates: Array<{ questionId: string; linkedTopicIds: string[] }>) => {
+      updateData(prev => ({
+        ...prev,
+        questionBanks: (prev.questionBanks || []).map(bank => {
+          if (bank.id !== bankId) return bank;
+          const updateMap = new Map(updates.map(u => [u.questionId, u.linkedTopicIds]));
+          return {
+            ...bank,
+            questions: bank.questions.map(q =>
+              updateMap.has(q.id) ? { ...q, linkedTopicIds: updateMap.get(q.id)! } : q
+            )
+          };
+        })
+      }));
+    },
+    [updateData]
+  );
+
   const deleteQuestionBank = useCallback((bankId: string) => {
     updateData(prev => ({
       ...prev,
@@ -2150,6 +2170,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addQuestionBank,
     addQuestionsToBank,
     updateQuestionStats,
+    updateQuestionLinkedTopics,
     deleteQuestionBank,
     deleteQuestion,
     updatePomodoroSettings,

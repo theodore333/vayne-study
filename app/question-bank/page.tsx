@@ -1,21 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useApp } from '@/lib/context';
-import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine } from 'lucide-react';
+import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine, Link2, Unlink, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import ImportQuestionsModal from '@/components/modals/ImportQuestionsModal';
 import AddQuestionModal from '@/components/modals/AddQuestionModal';
 import ConfirmDialog from '@/components/modals/ConfirmDialog';
 
 export default function QuestionBankPage() {
-  const { data, deleteQuestionBank } = useApp();
+  const { data, deleteQuestionBank, updateQuestionLinkedTopics, incrementApiCalls } = useApp();
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(
     data.subjects.filter(s => !s.archived && !s.deletedAt).length > 0 ? data.subjects.filter(s => !s.archived && !s.deletedAt)[0].id : null
   );
   const [showImportModal, setShowImportModal] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [deletingBank, setDeletingBank] = useState<{ id: string; name: string } | null>(null);
+  const [linkingBankId, setLinkingBankId] = useState<string | null>(null);
+  const [linkResult, setLinkResult] = useState<{ bankId: string; linked: number; total: number } | null>(null);
 
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
@@ -28,6 +30,62 @@ export default function QuestionBankPage() {
   const totalCorrect = subjectBanks.reduce((sum, bank) =>
     sum + bank.questions.reduce((s, q) => s + q.stats.correct, 0), 0);
   const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+  const handleAutoLink = useCallback(async (bankId: string) => {
+    if (!selectedSubject || linkingBankId) return;
+    const bank = subjectBanks.find(b => b.id === bankId);
+    if (!bank) return;
+
+    const unlinked = bank.questions.filter(q => !q.linkedTopicIds || q.linkedTopicIds.length === 0);
+    if (unlinked.length === 0) return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return;
+
+    setLinkingBankId(bankId);
+    setLinkResult(null);
+
+    try {
+      const response = await fetch('/api/auto-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          questions: unlinked.map(q => ({ id: q.id, text: q.text })),
+          topics: selectedSubject.topics.map(t => ({ id: t.id, name: t.name }))
+        })
+      });
+
+      const result = await response.json();
+      if (response.ok && result.links) {
+        const updates = result.links.map((link: { questionId: string; topicId: string }) => ({
+          questionId: link.questionId,
+          linkedTopicIds: [link.topicId]
+        }));
+        if (updates.length > 0) {
+          updateQuestionLinkedTopics(bankId, updates);
+        }
+        setLinkResult({ bankId, linked: result.linked, total: result.total });
+        if (result.usage?.cost) {
+          incrementApiCalls(result.usage.cost);
+        }
+        setTimeout(() => setLinkResult(null), 5000);
+      }
+    } catch (err) {
+      console.error('Auto-link failed:', err);
+    } finally {
+      setLinkingBankId(null);
+    }
+  }, [selectedSubject, subjectBanks, linkingBankId, updateQuestionLinkedTopics, incrementApiCalls]);
+
+  const handleUnlinkAll = useCallback((bankId: string) => {
+    const bank = subjectBanks.find(b => b.id === bankId);
+    if (!bank) return;
+    const linked = bank.questions.filter(q => q.linkedTopicIds && q.linkedTopicIds.length > 0);
+    if (linked.length === 0) return;
+    const updates = linked.map(q => ({ questionId: q.id, linkedTopicIds: [] as string[] }));
+    updateQuestionLinkedTopics(bankId, updates);
+  }, [subjectBanks, updateQuestionLinkedTopics]);
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -197,6 +255,10 @@ export default function QuestionBankPage() {
                       const mcqCount = bank.questions.filter(q => q.type === 'mcq').length;
                       const caseCount = bank.questions.filter(q => q.type === 'case_study').length;
                       const openCount = bank.questions.filter(q => q.type === 'open').length;
+                      const unlinkedCount = bank.questions.filter(q => !q.linkedTopicIds || q.linkedTopicIds.length === 0).length;
+                      const linkedCount = bank.questions.length - unlinkedCount;
+                      const isLinking = linkingBankId === bank.id;
+                      const hasTopics = selectedSubject && selectedSubject.topics.length > 0;
 
                       return (
                         <div key={bank.id} className="p-4 hover:bg-slate-800/30 transition-colors">
@@ -212,12 +274,31 @@ export default function QuestionBankPage() {
                                 <span>
                                   {new Date(bank.uploadedAt).toLocaleDateString('bg-BG')}
                                 </span>
+                                {linkedCount > 0 && (
+                                  <>
+                                    <span>|</span>
+                                    <span className="text-blue-400">{linkedCount} свързани</span>
+                                  </>
+                                )}
+                                {unlinkedCount > 0 && (
+                                  <>
+                                    <span>|</span>
+                                    <span className="text-amber-400">{unlinkedCount} несвързани</span>
+                                  </>
+                                )}
                               </div>
+
+                              {/* Link result message */}
+                              {linkResult?.bankId === bank.id && (
+                                <div className="mt-2 text-xs text-green-400 font-mono">
+                                  Свързани {linkResult.linked} от {linkResult.total} въпроса
+                                </div>
+                              )}
                             </div>
 
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
                               {bankAccuracy !== null && (
-                                <div className="flex items-center gap-2 text-sm font-mono">
+                                <div className="flex items-center gap-2 text-sm font-mono mr-2">
                                   <BarChart3 size={14} className="text-slate-400" />
                                   <span className={
                                     bankAccuracy >= 80 ? 'text-green-400' :
@@ -226,6 +307,29 @@ export default function QuestionBankPage() {
                                     {bankAccuracy}%
                                   </span>
                                 </div>
+                              )}
+
+                              {/* Auto-link button */}
+                              {unlinkedCount > 0 && hasTopics && (
+                                <button
+                                  onClick={() => handleAutoLink(bank.id)}
+                                  disabled={isLinking}
+                                  className="p-2 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-colors disabled:opacity-50"
+                                  title={`Свържи ${unlinkedCount} несвързани въпроса с теми (AI)`}
+                                >
+                                  {isLinking ? <Loader2 size={18} className="animate-spin" /> : <Link2 size={18} />}
+                                </button>
+                              )}
+
+                              {/* Unlink all button */}
+                              {linkedCount > 0 && (
+                                <button
+                                  onClick={() => handleUnlinkAll(bank.id)}
+                                  className="p-2 hover:bg-amber-500/20 text-amber-400/60 rounded-lg transition-colors"
+                                  title={`Премахни връзките на ${linkedCount} въпроса`}
+                                >
+                                  <Unlink size={18} />
+                                </button>
                               )}
 
                               <Link
@@ -278,6 +382,7 @@ export default function QuestionBankPage() {
           subjectId={selectedSubjectId}
           subjectName={selectedSubject.name}
           existingBanks={subjectBanks.map(b => ({ id: b.id, name: b.name }))}
+          topics={selectedSubject.topics.map(t => ({ id: t.id, name: t.name }))}
           onClose={() => setShowAddModal(false)}
         />
       )}

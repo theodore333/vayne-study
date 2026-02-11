@@ -8,6 +8,7 @@ interface AddQuestionModalProps {
   subjectId: string;
   subjectName: string;
   existingBanks: Array<{ id: string; name: string }>;
+  topics: Array<{ id: string; name: string }>;
   onClose: () => void;
 }
 
@@ -15,6 +16,7 @@ export default function AddQuestionModal({
   subjectId,
   subjectName,
   existingBanks,
+  topics,
   onClose
 }: AddQuestionModalProps) {
   // Close on Escape key
@@ -32,6 +34,9 @@ export default function AddQuestionModal({
     existingBanks.length > 0 ? existingBanks[0].id : 'new'
   );
   const [newBankName, setNewBankName] = useState('');
+
+  // Topic linking
+  const [selectedTopicId, setSelectedTopicId] = useState<string>('');
 
   // Question data
   const [questionText, setQuestionText] = useState('');
@@ -140,7 +145,7 @@ export default function AddQuestionModal({
         options: formattedOptions,
         correctAnswer: finalCorrectAnswer,
         explanation: explanation.trim() || undefined,
-        linkedTopicIds: [] as string[],
+        linkedTopicIds: selectedTopicId ? [selectedTopicId] : [],
         caseId: undefined,
         stats: { attempts: 0, correct: 0, lastAttempt: undefined }
       };
@@ -167,6 +172,7 @@ export default function AddQuestionModal({
         setCorrectAnswer('А');
         setCorrectAnswers(new Set(['А']));
         setExplanation('');
+        setSelectedTopicId('');
         setSuccess(false);
       }, 1500);
 
@@ -244,6 +250,25 @@ export default function AddQuestionModal({
               <p className="text-xs text-amber-400 mt-1 font-mono">{2000 - questionText.length} символа остават</p>
             )}
           </div>
+
+          {/* Topic Linking */}
+          {topics.length > 0 && (
+            <div>
+              <label className="block text-xs text-slate-500 font-mono uppercase mb-2">
+                Свързана тема
+              </label>
+              <select
+                value={selectedTopicId}
+                onChange={(e) => setSelectedTopicId(e.target.value)}
+                className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-purple-500"
+              >
+                <option value="">— Без тема —</option>
+                {topics.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Options */}
           <div>

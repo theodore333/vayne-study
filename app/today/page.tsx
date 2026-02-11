@@ -659,9 +659,13 @@ export default function TodayPage() {
                       </div>
                       <div className="flex items-center gap-2 mb-2">
                         <div className="w-3 h-3 rounded-full" style={{ backgroundColor: task.subjectColor }} />
-                        <span className={"font-medium " + (isCompleted ? "line-through text-slate-500" : "text-slate-200")}>
+                        <Link
+                          href={`/subjects?id=${task.subjectId}`}
+                          className={"font-medium transition-colors " + (isCompleted ? "line-through text-slate-500" : "text-slate-200 hover:text-blue-400")}
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           {task.subjectName}
-                        </span>
+                        </Link>
                       </div>
                       <p className={"text-sm mb-3 " + (isCompleted ? "text-slate-600" : "text-slate-400")}>
                         {task.description}
@@ -1077,7 +1081,9 @@ export default function TodayPage() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full" style={{ backgroundColor: subjectData?.color || '#64748b' }} />
-                        <span className="text-sm font-medium text-slate-200 font-mono">{subject.subjectName}</span>
+                        <Link href={`/subjects?id=${subject.subjectId}`} className="text-sm font-medium text-slate-200 hover:text-blue-400 font-mono transition-colors">
+                          {subject.subjectName}
+                        </Link>
                       </div>
                       <div className="flex items-center gap-2">
                         {subject.urgency === 'critical' && (

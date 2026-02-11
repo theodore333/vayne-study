@@ -340,6 +340,7 @@ export interface BankQuestion {
   explanation?: string;            // Обяснение (ако има)
   linkedTopicIds: string[];        // Свързани теми (AI auto-link)
   caseId?: string;                 // Ако е част от казус
+  bloomLevel?: number;             // 1-6 Bloom taxonomy level
   stats: {
     attempts: number;
     correct: number;

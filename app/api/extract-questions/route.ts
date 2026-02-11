@@ -14,6 +14,7 @@ interface ExtractedQuestion {
   correctAnswer: string;
   explanation?: string | null;
   linkedTopicIndex?: number | null;
+  bloomLevel?: number | null;
   caseId?: string | null;
 }
 
@@ -232,23 +233,31 @@ async function extractQuestionsFromText(
     ? `\n\nТЕМИ ЗА СВЪРЗВАНЕ:\n${topics.map((t, i) => `${i + 1}. ${t}`).join('\n')}`
     : '';
 
-  const prompt = `Извлечи ВСИЧКИ MCQ въпроси от този текст (${chunkInfo}) по "${subjectName}".
+  const prompt = `Извлечи ВСИЧКИ въпроси от този текст (${chunkInfo}) по "${subjectName}".
 
 ТЕКСТ:
 ${text}
-
-ВАЖНО: Извличай САМО MCQ въпроси. ПРОПУСКАЙ казуси и отворени въпроси.
 ${topicListForPrompt}
 
-MCQ ФОРМАТИ:
+=== ТИПОВЕ ВЪПРОСИ ===
+
+MCQ (type: "mcq") - въпрос с готови отговори:
 ФОРМАТ А: Въпрос + буквени отговори → text=въпрос, options=отговори
 ФОРМАТ Б: Твърдения (1.2.3.) + комбинации (А.1,2,3) → text=въпрос+твърдения, options=комбинации
 
-JSON: {"questions": [{"type": "mcq", "text": "...", "options": ["А...", "Б..."], "correctAnswer": "А", "explanation": "Кратко обяснение защо този отговор е верен (1-2 изречения)", "linkedTopicIndex": null}]}
+ОТВОРЕН (type: "open") - въпрос без готови отговори:
+- Въпроси като "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте..."
+- correctAnswer = кратък модерен отговор (2-4 изречения)
+- options = НЕ се попълва (null)
 
-ВАЖНО ЗА explanation: Напиши кратко (1-2 изречения) обяснение защо верният отговор е правилен. Ако не знаеш със сигурност, напиши null.
+JSON: {"questions": [
+  {"type": "mcq", "text": "...", "options": ["А...", "Б..."], "correctAnswer": "А", "explanation": "...", "linkedTopicIndex": null, "bloomLevel": 1},
+  {"type": "open", "text": "...", "options": null, "correctAnswer": "Кратък отговор...", "explanation": null, "linkedTopicIndex": null, "bloomLevel": 4}
+]}
 
-linkedTopicIndex = 1-based или null. Върни САМО JSON.`;
+bloomLevel = 1-6 по Bloom's taxonomy (1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create).
+ВАЖНО ЗА explanation: Напиши кратко (1-2 изречения) обяснение. Ако не знаеш със сигурност, напиши null.
+linkedTopicIndex = 1-based или null. ПРОПУСКАЙ казуси (клинични случаи). Върни САМО JSON.`;
 
   let fullText = '';
   let inputTokens = 0;
@@ -377,6 +386,7 @@ export async function POST(request: Request) {
           linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
             ? [topicIds[q.linkedTopicIndex - 1]]
             : [],
+          bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
           caseId: q.caseId || null,
           stats: { attempts: 0, correct: 0 }
         }));
@@ -485,6 +495,7 @@ export async function POST(request: Request) {
           linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
             ? [topicIds[q.linkedTopicIndex - 1]]
             : [],
+          bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
           caseId: q.caseId || null,
           stats: { attempts: 0, correct: 0 }
         }));
@@ -555,28 +566,31 @@ export async function POST(request: Request) {
 
     content.push({
       type: 'text',
-      text: `Извлечи ВСИЧКИ MCQ въпроси от този сборник по "${subjectName}".${scannedPdfNote}
+      text: `Извлечи ВСИЧКИ въпроси от този сборник по "${subjectName}".${scannedPdfNote}
 
-ВАЖНО: Извличай САМО MCQ (multiple choice) въпроси. ПРОПУСКАЙ казуси и отворени въпроси.
+=== ТИПОВЕ ВЪПРОСИ ===
 
-=== MCQ ФОРМАТИ ===
+1. MCQ (type: "mcq") - въпрос с готови отговори:
 
 ФОРМАТ А - Стандартен MCQ:
 - Въпрос + буквени отговори (А/Б/В/Г или A/B/C/D)
-- "text" = само въпросът
-- "options" = отговорите
+- "text" = само въпросът, "options" = отговорите
 
 ФОРМАТ Б - Твърдения + Комбинации (често в български мед. тестове):
 - Въпрос + Номерирани твърдения (1. 2. 3. 4.)
 - Буквени отговори = комбинации (А.1,2,3 / Б.Всички / В.Никои)
-- "text" = въпросът + ВСИЧКИ твърдения
-- "options" = САМО буквените комбинации
+- "text" = въпросът + ВСИЧКИ твърдения, "options" = САМО буквените комбинации
 
-ПРИМЕР ФОРМАТ А:
-"Коя е столицата?" → {"text": "Коя е столицата?", "options": ["А. Варна", "Б. София"], "correctAnswer": "Б"}
+2. ОТВОРЕН (type: "open") - въпрос без готови отговори:
+- "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте..."
+- correctAnswer = кратък модерен отговор (2-4 изречения)
+- options = null (НЯМА опции)
 
-ПРИМЕР ФОРМАТ Б:
-"Кои са верни? 1.X 2.Y 3.Z А.1,2 Б.Всички" → {"text": "Кои са верни?\n1. X\n2. Y\n3. Z", "options": ["А. 1 и 2", "Б. Всички"], "correctAnswer": "Б"}
+ПРИМЕР MCQ:
+"Коя е столицата?" → {"type": "mcq", "text": "Коя е столицата?", "options": ["А. Варна", "Б. София"], "correctAnswer": "Б", "explanation": "...", "linkedTopicIndex": null}
+
+ПРИМЕР OPEN:
+"Дефинирайте хомеостаза." → {"type": "open", "text": "Дефинирайте хомеостаза.", "options": null, "correctAnswer": "Хомеостазата е способността на организма да поддържа стабилна вътрешна среда чрез регулаторни механизми.", "explanation": null, "linkedTopicIndex": null}
 ${topicListForPrompt}
 
 === JSON ФОРМАТ ===
@@ -588,17 +602,28 @@ ${topicListForPrompt}
       "text": "Текст на въпроса",
       "options": ["А. ...", "Б. ...", "В. ...", "Г. ..."],
       "correctAnswer": "Б",
-      "explanation": "Кратко обяснение защо Б е верният отговор (1-2 изречения)",
-      "linkedTopicIndex": 5
+      "explanation": "Кратко обяснение (1-2 изречения)",
+      "linkedTopicIndex": 5,
+      "bloomLevel": 1
+    },
+    {
+      "type": "open",
+      "text": "Дефинирайте...",
+      "options": null,
+      "correctAnswer": "Кратък модерен отговор (2-4 изречения)",
+      "explanation": null,
+      "linkedTopicIndex": 3,
+      "bloomLevel": 4
     }
   ]
 }
 
 === ПРАВИЛА ===
-- type винаги е "mcq"
+- type е "mcq" или "open"
 - linkedTopicIndex = 1-based индекс от темите, или null
-- explanation = кратко обяснение (1-2 изречения) ЗАЩО верният отговор е правилен. Ако не знаеш със сигурност, напиши null.
-- ПРОПУСКАЙ казуси (клинични случаи) и отворени въпроси
+- bloomLevel = 1-6 по Bloom's taxonomy (1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create)
+- explanation = кратко обяснение (1-2 изречения). Ако не знаеш със сигурност, напиши null.
+- ПРОПУСКАЙ казуси (клинични случаи)
 - Върни САМО JSON, без markdown`
     });
 
@@ -694,6 +719,7 @@ ${topicListForPrompt}
       linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
         ? [topicIds[q.linkedTopicIndex - 1]]
         : [],
+      bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
       caseId: q.caseId || null,
       stats: { attempts: 0, correct: 0 }
     }));

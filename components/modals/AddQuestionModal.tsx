@@ -38,10 +38,14 @@ export default function AddQuestionModal({
   // Topic linking
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
 
+  // Question type
+  const [questionType, setQuestionType] = useState<'mcq' | 'open'>('mcq');
+
   // Question data
   const [questionText, setQuestionText] = useState('');
   const [options, setOptions] = useState(['', '', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState<string>('А');
+  const [openAnswer, setOpenAnswer] = useState('');
   const [explanation, setExplanation] = useState('');
 
   // Multiple correct answers
@@ -125,30 +129,45 @@ export default function AddQuestionModal({
 
   const handleSave = async () => {
     if (!questionText.trim()) return;
-    if (options.filter(o => o.trim()).length < 2) return;
+    if (questionType === 'mcq' && options.filter(o => o.trim()).length < 2) return;
+    if (questionType === 'open' && !openAnswer.trim()) return;
 
     setSaving(true);
 
     try {
-      // Build question object
-      const formattedOptions = options
-        .filter(o => o.trim())
-        .map((opt, i) => `${letters[i]}. ${opt}`);
+      let question;
 
-      const finalCorrectAnswer = multipleCorrect
-        ? Array.from(correctAnswers).sort().join(', ')
-        : correctAnswer;
+      if (questionType === 'open') {
+        question = {
+          type: 'open' as const,
+          text: questionText.trim(),
+          options: undefined,
+          correctAnswer: openAnswer.trim(),
+          explanation: explanation.trim() || undefined,
+          linkedTopicIds: selectedTopicId ? [selectedTopicId] : [],
+          caseId: undefined,
+          stats: { attempts: 0, correct: 0, lastAttempt: undefined }
+        };
+      } else {
+        const formattedOptions = options
+          .filter(o => o.trim())
+          .map((opt, i) => `${letters[i]}. ${opt}`);
 
-      const question = {
-        type: 'mcq' as const,
-        text: questionText.trim(),
-        options: formattedOptions,
-        correctAnswer: finalCorrectAnswer,
-        explanation: explanation.trim() || undefined,
-        linkedTopicIds: selectedTopicId ? [selectedTopicId] : [],
-        caseId: undefined,
-        stats: { attempts: 0, correct: 0, lastAttempt: undefined }
-      };
+        const finalCorrectAnswer = multipleCorrect
+          ? Array.from(correctAnswers).sort().join(', ')
+          : correctAnswer;
+
+        question = {
+          type: 'mcq' as const,
+          text: questionText.trim(),
+          options: formattedOptions,
+          correctAnswer: finalCorrectAnswer,
+          explanation: explanation.trim() || undefined,
+          linkedTopicIds: selectedTopicId ? [selectedTopicId] : [],
+          caseId: undefined,
+          stats: { attempts: 0, correct: 0, lastAttempt: undefined }
+        };
+      }
 
       if (selectedBankId === 'new') {
         // Create new bank, then add question
@@ -171,6 +190,7 @@ export default function AddQuestionModal({
         setOptions(['', '', '', '']);
         setCorrectAnswer('А');
         setCorrectAnswers(new Set(['А']));
+        setOpenAnswer('');
         setExplanation('');
         setSelectedTopicId('');
         setSuccess(false);
@@ -183,7 +203,9 @@ export default function AddQuestionModal({
     }
   };
 
-  const isValid = questionText.trim() && options.filter(o => o.trim()).length >= 2;
+  const isValid = questionText.trim() && (
+    questionType === 'open' ? openAnswer.trim() : options.filter(o => o.trim()).length >= 2
+  );
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -230,6 +252,37 @@ export default function AddQuestionModal({
             )}
           </div>
 
+          {/* Question Type */}
+          <div>
+            <label className="block text-xs text-slate-500 font-mono uppercase mb-2">
+              Тип въпрос
+            </label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setQuestionType('mcq')}
+                className={`flex-1 py-2.5 rounded-lg font-mono text-sm font-semibold transition-all ${
+                  questionType === 'mcq'
+                    ? 'bg-blue-500/20 text-blue-300 border-2 border-blue-500'
+                    : 'bg-slate-800/50 text-slate-400 border border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                MCQ (с отговори)
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuestionType('open')}
+                className={`flex-1 py-2.5 rounded-lg font-mono text-sm font-semibold transition-all ${
+                  questionType === 'open'
+                    ? 'bg-green-500/20 text-green-300 border-2 border-green-500'
+                    : 'bg-slate-800/50 text-slate-400 border border-slate-700 hover:border-slate-600'
+                }`}
+              >
+                Отворен
+              </button>
+            </div>
+          </div>
+
           {/* Question Text */}
           <div>
             <label className="block text-xs text-slate-500 font-mono uppercase mb-2">
@@ -270,77 +323,99 @@ export default function AddQuestionModal({
             </div>
           )}
 
-          {/* Options */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-slate-500 font-mono uppercase">
-                Отговори *
-              </label>
-              <label className="flex items-center gap-2 text-xs text-slate-400 font-mono cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={multipleCorrect}
-                  onChange={(e) => {
-                    setMultipleCorrect(e.target.checked);
-                    if (!e.target.checked) {
-                      setCorrectAnswer(Array.from(correctAnswers)[0] || 'А');
-                    }
-                  }}
-                  className="rounded border-slate-600 bg-slate-700 text-purple-500"
-                />
-                Няколко верни
-              </label>
-            </div>
-
-            <div className="space-y-2">
-              {options.map((opt, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleCorrectAnswer(letters[i])}
-                    className={`w-10 h-10 rounded-lg font-mono font-semibold flex items-center justify-center transition-all shrink-0 ${
-                      (multipleCorrect ? correctAnswers.has(letters[i]) : correctAnswer === letters[i])
-                        ? 'bg-green-500/20 text-green-400 border-2 border-green-500'
-                        : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
-                    }`}
-                    title={multipleCorrect ? 'Цъкни за да избереш верен отговор' : 'Избери верен отговор'}
-                  >
-                    {(multipleCorrect ? correctAnswers.has(letters[i]) : correctAnswer === letters[i]) ? (
-                      <Check size={18} />
-                    ) : (
-                      letters[i]
-                    )}
-                  </button>
+          {/* MCQ Options */}
+          {questionType === 'mcq' && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs text-slate-500 font-mono uppercase">
+                  Отговори *
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-400 font-mono cursor-pointer">
                   <input
-                    type="text"
-                    value={opt}
-                    onChange={(e) => updateOption(i, e.target.value)}
-                    placeholder={`Отговор ${letters[i]}`}
-                    className="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    type="checkbox"
+                    checked={multipleCorrect}
+                    onChange={(e) => {
+                      setMultipleCorrect(e.target.checked);
+                      if (!e.target.checked) {
+                        setCorrectAnswer(Array.from(correctAnswers)[0] || 'А');
+                      }
+                    }}
+                    className="rounded border-slate-600 bg-slate-700 text-purple-500"
                   />
-                  {options.length > 2 && (
+                  Няколко верни
+                </label>
+              </div>
+
+              <div className="space-y-2">
+                {options.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => removeOption(i)}
-                      className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      onClick={() => toggleCorrectAnswer(letters[i])}
+                      className={`w-10 h-10 rounded-lg font-mono font-semibold flex items-center justify-center transition-all shrink-0 ${
+                        (multipleCorrect ? correctAnswers.has(letters[i]) : correctAnswer === letters[i])
+                          ? 'bg-green-500/20 text-green-400 border-2 border-green-500'
+                          : 'bg-slate-800 text-slate-400 border border-slate-700 hover:border-slate-600'
+                      }`}
+                      title={multipleCorrect ? 'Цъкни за да избереш верен отговор' : 'Избери верен отговор'}
                     >
-                      <Trash2 size={18} />
+                      {(multipleCorrect ? correctAnswers.has(letters[i]) : correctAnswer === letters[i]) ? (
+                        <Check size={18} />
+                      ) : (
+                        letters[i]
+                      )}
                     </button>
-                  )}
-                </div>
-              ))}
-            </div>
+                    <input
+                      type="text"
+                      value={opt}
+                      onChange={(e) => updateOption(i, e.target.value)}
+                      placeholder={`Отговор ${letters[i]}`}
+                      className="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500"
+                    />
+                    {options.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeOption(i)}
+                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
 
-            {options.length < 6 && (
-              <button
-                type="button"
-                onClick={addOption}
-                className="mt-2 flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 font-mono"
-              >
-                <Plus size={16} /> Добави отговор
-              </button>
-            )}
-          </div>
+              {options.length < 6 && (
+                <button
+                  type="button"
+                  onClick={addOption}
+                  className="mt-2 flex items-center gap-2 text-sm text-purple-400 hover:text-purple-300 font-mono"
+                >
+                  <Plus size={16} /> Добави отговор
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Open Question Answer */}
+          {questionType === 'open' && (
+            <div>
+              <label className="block text-xs text-slate-500 font-mono uppercase mb-2">
+                Верен отговор *
+              </label>
+              <textarea
+                value={openAnswer}
+                onChange={(e) => setOpenAnswer(e.target.value.slice(0, 3000))}
+                placeholder="Напиши модерния отговор тук..."
+                rows={4}
+                maxLength={3000}
+                className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500 resize-none"
+              />
+              {openAnswer.length >= 2700 && (
+                <p className="text-xs text-amber-400 mt-1 font-mono">{3000 - openAnswer.length} символа остават</p>
+              )}
+            </div>
+          )}
 
           {/* Explanation */}
           <div>

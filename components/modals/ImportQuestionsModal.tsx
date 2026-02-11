@@ -21,6 +21,7 @@ interface ExtractedQuestion {
   correctAnswer: string;
   explanation?: string;
   linkedTopicIds: string[];
+  bloomLevel?: number;
   caseId?: string;
   stats: { attempts: number; correct: number };
 }
@@ -385,6 +386,7 @@ export default function ImportQuestionsModal({
         correctAnswer: q.correctAnswer,
         explanation: q.explanation || '',
         linkedTopicIds: q.linkedTopicIds || [],
+        bloomLevel: q.bloomLevel,
         caseId: q.caseId || undefined,
         stats: { attempts: 0, correct: 0 }
       }));

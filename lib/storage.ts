@@ -1,7 +1,7 @@
 'use client';
 
 import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession, DevelopmentProject, ProjectModule, StudyTechnique } from './types';
-import { STORAGE_KEY } from './constants';
+import { STORAGE_KEY, DEFAULT_TECHNIQUES } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
 import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
@@ -364,7 +364,7 @@ export function migrateData(rawData: any): AppData {
 
   // Migrate built-in technique names to English (from Bulgarian) if they exist
   if (data.studyTechniques.length > 0) {
-    const { DEFAULT_TECHNIQUES } = require('./constants');
+    // DEFAULT_TECHNIQUES imported at top of file
     const defaultsBySlug: Record<string, any> = {};
     for (const d of DEFAULT_TECHNIQUES) defaultsBySlug[(d as any).slug] = d;
     data.studyTechniques = data.studyTechniques.map((t: any) => {
@@ -377,7 +377,7 @@ export function migrateData(rawData: any): AppData {
 
   // Pre-seed built-in techniques if empty (first load or migration)
   if (data.studyTechniques.length === 0) {
-    const { DEFAULT_TECHNIQUES } = require('./constants');
+    // DEFAULT_TECHNIQUES imported at top of file
     data.studyTechniques = DEFAULT_TECHNIQUES.map((t: any) => ({
       id: `technique-${t.slug}`,
       name: t.name,

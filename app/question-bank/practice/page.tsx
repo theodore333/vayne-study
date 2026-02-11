@@ -122,6 +122,7 @@ function PracticeContent() {
   const [answers, setAnswers] = useState<{ correct: boolean; questionId: string }[]>([]);
   const [sessionComplete, setSessionComplete] = useState(false);
   const [openAnswer, setOpenAnswer] = useState('');
+  const [openSelfEval, setOpenSelfEval] = useState<boolean | null>(null);
 
   // Timer state
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -182,20 +183,55 @@ function PracticeContent() {
     if (!practiceStarted || shuffledQuestions.length === 0 || sessionComplete) return;
 
     const question = shuffledQuestions[currentIndex];
-    if (!question || question.type === 'open') return;
+    if (!question) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't capture keys when typing in textarea
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
+
+      // Open question self-evaluation shortcuts (1/Y = correct, 2/N = wrong)
+      if (question.type === 'open' && showResult && openSelfEval === null) {
+        const isCorrectKey = e.key === '1' || e.key.toLowerCase() === 'y';
+        const isWrongKey = e.key === '2' || e.key.toLowerCase() === 'n';
+        if (isCorrectKey || isWrongKey) {
+          e.preventDefault();
+          const correct = isCorrectKey;
+          setOpenSelfEval(correct);
+          updateQuestionStats(question.bankId, question.id, correct);
+          setAnswers(prev => [...prev, { correct, questionId: question.id }]);
+        }
+        return;
+      }
+
+      // Open question: Enter to advance after self-eval
+      if (question.type === 'open' && showResult && openSelfEval !== null) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (currentIndex >= shuffledQuestions.length - 1) {
+            setSessionComplete(true);
+          } else {
+            setCurrentIndex(prev => prev + 1);
+            setSelectedAnswers(new Set());
+            setShowResult(false);
+            setOpenAnswer('');
+            setOpenSelfEval(null);
+          }
+        }
+        return;
+      }
+
+      // Skip MCQ shortcuts for open questions
+      if (question.type === 'open') return;
 
       const options = question.options || [];
       const isMultiple = hasMultipleCorrect(question.correctAnswer);
 
       if (!showResult) {
-        if (e.key.toUpperCase() >= 'A' && e.key.toUpperCase() <= 'E') {
+        const keyCode = e.key.toUpperCase().charCodeAt(0);
+        if (keyCode >= 65 && keyCode <= 69) { // A=65 to E=69
           const letter = e.key.toUpperCase();
-          const index = letter.charCodeAt(0) - 65;
+          const index = keyCode - 65;
           if (index < options.length) {
-            // Handle answer inline to avoid stale closure
             if (isMultiple) {
               setSelectedAnswers(prev => {
                 const newSet = new Set(prev);
@@ -214,7 +250,6 @@ function PracticeContent() {
 
         if (e.key === 'Enter' && selectedAnswers.size > 0) {
           e.preventDefault();
-          // Handle submit inline
           const correctAnswersList = parseCorrectAnswers(question.correctAnswer);
           const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
           const isCorrect =
@@ -228,7 +263,6 @@ function PracticeContent() {
       } else {
         if (e.key === 'Enter') {
           e.preventDefault();
-          // Handle next inline
           if (currentIndex >= shuffledQuestions.length - 1) {
             setSessionComplete(true);
           } else {
@@ -236,6 +270,7 @@ function PracticeContent() {
             setSelectedAnswers(new Set());
             setShowResult(false);
             setOpenAnswer('');
+            setOpenSelfEval(null);
           }
         }
       }
@@ -243,7 +278,7 @@ function PracticeContent() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers, updateQuestionStats]);
+  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers, openSelfEval, updateQuestionStats]);
 
   const handleAnswer = (answer: string) => {
     if (showResult) return;
@@ -264,9 +299,6 @@ function PracticeContent() {
       setSelectedAnswers(new Set([answer]));
     }
   };
-
-  // Open question self-evaluation state
-  const [openSelfEval, setOpenSelfEval] = useState<boolean | null>(null);
 
   const handleSubmit = () => {
     if (!currentQuestion || showResult) return;
@@ -720,6 +752,7 @@ function PracticeContent() {
                 onChange={(e) => setOpenAnswer(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.ctrlKey && e.key === 'Enter' && openAnswer.trim()) {
+                    e.preventDefault();
                     handleSubmit();
                   }
                 }}

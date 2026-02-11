@@ -207,12 +207,10 @@ async function analyzePDF(buffer: Buffer, extractPageText = false): Promise<PDFA
     const isScanned = charsPerPage < 100;
 
     let confidence: 'high' | 'medium' | 'low' = 'high';
-    if (charsPerPage >= 50 && charsPerPage < 200) {
+    if (charsPerPage < 50) {
+      confidence = 'low';
+    } else if (charsPerPage < 200) {
       confidence = 'medium';
-    } else if (charsPerPage < 50) {
-      confidence = 'high';
-    } else if (charsPerPage > 500) {
-      confidence = 'high';
     }
 
     return { isScanned, textLength, pageCount, confidence, textByPage };
@@ -386,7 +384,7 @@ export async function POST(request: Request) {
           linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
             ? [topicIds[q.linkedTopicIndex - 1]]
             : [],
-          bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+          bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
           caseId: q.caseId || null,
           stats: { attempts: 0, correct: 0 }
         }));
@@ -495,7 +493,7 @@ export async function POST(request: Request) {
           linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
             ? [topicIds[q.linkedTopicIndex - 1]]
             : [],
-          bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+          bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
           caseId: q.caseId || null,
           stats: { attempts: 0, correct: 0 }
         }));
@@ -719,7 +717,7 @@ ${topicListForPrompt}
       linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
         ? [topicIds[q.linkedTopicIndex - 1]]
         : [],
-      bloomLevel: (q.bloomLevel && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+      bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
       caseId: q.caseId || null,
       stats: { attempts: 0, correct: 0 }
     }));

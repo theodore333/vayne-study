@@ -42,7 +42,7 @@ interface PDFAnalysisResult {
 
 // Normalize text for duplicate comparison
 function normalizeText(text: string): string {
-  return text.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '');
+  return text.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N}\s\-]/gu, '');
 }
 
 // Check if two questions are likely duplicates
@@ -200,6 +200,7 @@ export default function ImportQuestionsModal({
         const allCases: ExtractedCase[] = [];
         let totalCost = 0;
         let lastPdfAnalysis: PDFAnalysisResult | null = null;
+        const failedParts: string[] = [];
 
         for (let i = 0; i < fileParts.length; i++) {
           const part = fileParts[i];
@@ -224,27 +225,31 @@ export default function ImportQuestionsModal({
             result = JSON.parse(responseText);
           } catch {
             console.error(`Part ${i + 1} parse error:`, responseText.substring(0, 500));
-            continue; // Skip failed part, continue with others
+            failedParts.push(`Част ${i + 1} (${part.name}): невалиден отговор`);
+            continue;
           }
 
           if (response.ok && result.questions) {
-            // Add part number to questions for reference
-            const questionsWithPart = result.questions.map((q: any) => ({
-              ...q,
-              partNumber: i + 1
-            }));
-            allQuestions.push(...questionsWithPart);
+            allQuestions.push(...result.questions);
             if (result.cases) allCases.push(...result.cases);
             if (result.usage?.cost) totalCost += result.usage.cost;
             if (result.pdfAnalysis) lastPdfAnalysis = result.pdfAnalysis;
+          } else {
+            failedParts.push(`Част ${i + 1} (${part.name}): ${result.error || 'неуспех'}`);
           }
         }
 
         setProcessingStatus(null);
 
         if (allQuestions.length === 0) {
-          setError('Не бяха извлечени въпроси от нито един файл');
+          setError('Не бяха извлечени въпроси от нито един файл' +
+            (failedParts.length > 0 ? '\n' + failedParts.join('\n') : ''));
           return;
+        }
+
+        // Show partial failure warning
+        if (failedParts.length > 0) {
+          setError(`${failedParts.length} от ${fileParts.length} части не успяха:\n${failedParts.join('\n')}`);
         }
 
         setExtractedQuestions(allQuestions);

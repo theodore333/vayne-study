@@ -336,7 +336,9 @@ export default function AddQuestionModal({
                     checked={multipleCorrect}
                     onChange={(e) => {
                       setMultipleCorrect(e.target.checked);
-                      if (!e.target.checked) {
+                      if (e.target.checked) {
+                        setCorrectAnswers(new Set([correctAnswer]));
+                      } else {
                         setCorrectAnswer(Array.from(correctAnswers)[0] || 'А');
                       }
                     }}

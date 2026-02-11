@@ -486,7 +486,7 @@ function QuizContent() {
           if (q.type !== 'mcq' && q.type !== 'open') return false;
           if (q.type === 'mcq' && !(q.options?.length)) return false;
           // Filter by Bloom level if mode is specific and question has a level
-          if (bloomRange && q.bloomLevel) {
+          if (bloomRange && typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) {
             if (q.bloomLevel < bloomRange[0] || q.bloomLevel > bloomRange[1]) return false;
           }
           return true;
@@ -494,8 +494,8 @@ function QuizContent() {
       );
       if (linkedBankQs.length > 0) {
         // Deduplicate: skip bank questions already covered by AI
-        const aiTexts = new Set(allQuestions.map(q => q.question.toLowerCase().trim().substring(0, 50)));
-        const uniqueBankQs = linkedBankQs.filter(q => !aiTexts.has(q.text.toLowerCase().trim().substring(0, 50)));
+        const aiTexts = new Set(allQuestions.map(q => q.question.toLowerCase().trim().substring(0, 100)));
+        const uniqueBankQs = linkedBankQs.filter(q => !aiTexts.has(q.text.toLowerCase().trim().substring(0, 100)));
         // Pick up to 3 random bank questions
         const shuffled = uniqueBankQs.sort(() => Math.random() - 0.5);
         const picked = shuffled.slice(0, Math.min(3, shuffled.length));

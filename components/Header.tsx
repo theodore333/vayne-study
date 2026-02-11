@@ -1,30 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw, HardDrive, AlertTriangle, X } from 'lucide-react';
+import { useState } from 'react';
+import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getLevelInfo, getXpForNextLevel } from '@/lib/gamification';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from './modals/DailyCheckinModal';
-import StorageCleanupModal from './modals/StorageCleanupModal';
 
 export default function Header() {
   const [showCheckin, setShowCheckin] = useState(false);
-  const [showStorageCleanup, setShowStorageCleanup] = useState(false);
-  const [storageWarningDismissed, setStorageWarningDismissed] = useState(false);
-  const { data, isLoading, isSyncing, lastSynced, syncNow, getStorageUsage: getUsage, storageError, clearStorageError } = useApp();
-
-  // Get storage usage
-  const storageUsage = getUsage();
-  const isStorageCritical = storageUsage.percentage >= 90;
-  const isStorageWarning = storageUsage.percentage >= 70;
-
-  // Reset dismissed state on new session or when storage gets worse
-  useEffect(() => {
-    if (isStorageCritical) {
-      setStorageWarningDismissed(false);
-    }
-  }, [isStorageCritical]);
+  const { data, isLoading, isSyncing, lastSynced, syncNow } = useApp();
 
   if (isLoading) {
     return (
@@ -52,48 +37,6 @@ export default function Header() {
 
   return (
     <>
-      {/* Storage Warning Banner */}
-      {(isStorageWarning || storageError) && !storageWarningDismissed && (
-        <div className={`sticky top-0 z-40 px-4 py-2 flex items-center justify-between ${
-          isStorageCritical || storageError
-            ? 'bg-red-900/90 border-b border-red-500/50'
-            : 'bg-yellow-900/90 border-b border-yellow-500/50'
-        }`}>
-          <div className="flex items-center gap-3">
-            <AlertTriangle size={16} className={isStorageCritical || storageError ? 'text-red-400' : 'text-yellow-400'} />
-            <span className="text-sm font-mono">
-              {storageError ? (
-                <span className="text-red-300">{storageError.message || 'Грешка при запазване - паметта е пълна!'}</span>
-              ) : isStorageCritical ? (
-                <span className="text-red-300">Критично ниво на паметта ({storageUsage.percentage}%)! Изчисти стари данни.</span>
-              ) : (
-                <span className="text-yellow-300">Паметта е над 70% ({storageUsage.percentage}%). Препоръчително е да изчистиш стари данни.</span>
-              )}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowStorageCleanup(true)}
-              className="px-3 py-1 text-xs font-mono bg-slate-800 hover:bg-slate-700 text-white rounded transition-colors"
-            >
-              Изчисти
-            </button>
-            {!isStorageCritical && (
-              <button
-                onClick={() => {
-                  setStorageWarningDismissed(true);
-                  if (storageError) clearStorageError();
-                }}
-                className="p-1 hover:bg-slate-800 rounded"
-                aria-label="Затвори предупреждението"
-              >
-                <X size={14} className="text-slate-400" />
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
       <header className="sticky top-0 z-30 bg-[rgba(10,10,15,0.9)] backdrop-blur-sm border-b border-[#1e293b] px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Level & XP */}
@@ -138,30 +81,6 @@ export default function Header() {
                 <span className="text-sm font-mono text-slate-400">Нормален</span>
               </>
             )}
-          </button>
-
-          {/* Storage Usage */}
-          <button
-            onClick={() => setShowStorageCleanup(true)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all ${
-              isStorageCritical
-                ? 'bg-red-900/30 border-red-500/50 hover:border-red-400'
-                : isStorageWarning
-                ? 'bg-yellow-900/30 border-yellow-500/50 hover:border-yellow-400'
-                : 'bg-slate-800/30 border-slate-800 hover:border-slate-600'
-            }`}
-            title={`Памет: ${(storageUsage.used / 1024 / 1024).toFixed(1)}MB от ${(storageUsage.total / 1024 / 1024).toFixed(0)}MB`}
-          >
-            <HardDrive size={14} className={
-              isStorageCritical ? 'text-red-400' :
-              isStorageWarning ? 'text-yellow-400' : 'text-slate-400'
-            } />
-            <span className={`text-xs font-mono ${
-              isStorageCritical ? 'text-red-400' :
-              isStorageWarning ? 'text-yellow-400' : 'text-slate-400'
-            }`}>
-              {storageUsage.percentage}%
-            </span>
           </button>
 
           {/* API Usage */}
@@ -213,7 +132,6 @@ export default function Header() {
       </header>
 
       {showCheckin && <DailyCheckinModal onClose={() => setShowCheckin(false)} />}
-      {showStorageCleanup && <StorageCleanupModal onClose={() => setShowStorageCleanup(false)} />}
     </>
   );
 }

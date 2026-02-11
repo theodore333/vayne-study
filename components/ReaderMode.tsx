@@ -1288,9 +1288,39 @@ export default function ReaderMode({
         // Check for HTML content first (Notion pastes HTML)
         const html = clipboardData.getData('text/html');
         if (html) {
-          // Check if Notion HTML contains a table
+          // Check if HTML contains a table — parse it ourselves for clean structure
           if (html.includes('<table') || html.includes('<tr')) {
-            // Let TipTap handle HTML tables directly
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            const rows = tempDiv.querySelectorAll('tr');
+            if (rows.length > 0) {
+              let cleanRows = '';
+              rows.forEach((row, i) => {
+                const cells = row.querySelectorAll('td, th');
+                const tag = i === 0 ? 'th' : 'td';
+                const cellsHtml = Array.from(cells).map(cell => {
+                  // Keep inner text only (strips Notion's complex styling)
+                  const text = (cell.textContent || '').trim();
+                  return `<${tag}>${text}</${tag}>`;
+                }).join('');
+                if (cellsHtml) cleanRows += `<tr>${cellsHtml}</tr>`;
+              });
+              if (cleanRows) {
+                const tableHtml = `<table><tbody>${cleanRows}</tbody></table>`;
+                event.preventDefault();
+                const cleanDiv = document.createElement('div');
+                cleanDiv.innerHTML = tableHtml;
+                const slice = view.someProp('clipboardParser')?.parseSlice(cleanDiv, {
+                  preserveWhitespace: false,
+                  context: view.state.selection.$from,
+                });
+                if (slice) {
+                  view.dispatch(view.state.tr.replaceSelection(slice).scrollIntoView());
+                  return true;
+                }
+              }
+            }
+            // Fallback: let TipTap try
             return false;
           }
 

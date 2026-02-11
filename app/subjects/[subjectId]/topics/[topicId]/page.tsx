@@ -58,12 +58,15 @@ export default function TopicDetailPage() {
   const [isEditingName, setIsEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
 
-  // Track read only once per reader mode session
+  // Track read only after 30 seconds in reader mode (not immediately on open)
   const hasTrackedReadRef = useRef(false);
   useEffect(() => {
     if (readerFromUrl && !hasTrackedReadRef.current) {
-      hasTrackedReadRef.current = true;
-      trackTopicRead(subjectId, topicId);
+      const timer = setTimeout(() => {
+        hasTrackedReadRef.current = true;
+        trackTopicRead(subjectId, topicId);
+      }, 30000);
+      return () => clearTimeout(timer);
     }
     if (!readerFromUrl) {
       hasTrackedReadRef.current = false;
@@ -795,6 +798,28 @@ export default function TopicDetailPage() {
                 </div>
                 <div className="mt-2 text-xs text-slate-500 font-mono">
                   {Number(topic.quizCount) || 0} {topic.quizCount === 1 ? 'тест' : 'теста'}
+                </div>
+
+                {/* Activity dates */}
+                <div className="mt-2 space-y-1 text-xs font-mono">
+                  {topic.lastRead && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Последно четене:</span>
+                      <span className="text-slate-400">{new Date(topic.lastRead).toLocaleDateString('bg-BG')}</span>
+                    </div>
+                  )}
+                  {topic.quizHistory?.length > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Последен тест:</span>
+                      <span className="text-slate-400">{new Date(topic.quizHistory[topic.quizHistory.length - 1].date).toLocaleDateString('bg-BG')}</span>
+                    </div>
+                  )}
+                  {topic.lastReview && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Последен преговор:</span>
+                      <span className="text-slate-400">{new Date(topic.lastReview).toLocaleDateString('bg-BG')}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* FSRS Memory Indicator */}

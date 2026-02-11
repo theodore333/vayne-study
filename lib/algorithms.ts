@@ -1399,6 +1399,65 @@ export function generateDailyPlan(
     capacityAfterFsrs -= 1;
   }
 
+  // 4c. BLOOM PROGRESSION - Push green/yellow topics toward higher-order thinking
+  // Topics stuck at Bloom 1-2 (Remember/Understand) with 3+ quizzes should be challenged
+  if (capacityAfterFsrs > 0) {
+    const bloomCandidates: { topic: Topic; subject: Subject }[] = [];
+    for (const subject of subjects) {
+      for (const topic of subject.topics) {
+        const bl = topic.currentBloomLevel || 1;
+        if (
+          (topic.status === 'green' || topic.status === 'yellow') &&
+          bl <= 2 &&
+          topic.quizCount >= 3 &&
+          (topic.material?.trim()?.length ?? 0) > 0
+        ) {
+          bloomCandidates.push({ topic, subject });
+        }
+      }
+    }
+    // Sort: lowest bloom first, then most quizzes (most "stuck" at low level)
+    bloomCandidates.sort((a, b) => {
+      const blDiff = (a.topic.currentBloomLevel || 1) - (b.topic.currentBloomLevel || 1);
+      if (blDiff !== 0) return blDiff;
+      return (b.topic.quizCount || 0) - (a.topic.quizCount || 0);
+    });
+
+    // Group by subject, max 2 total
+    const bloomBySubject = new Map<string, { topics: Topic[]; subject: Subject }>();
+    let bloomCount = 0;
+    for (const { topic, subject } of bloomCandidates) {
+      if (bloomCount >= 2) break;
+      // Skip if topic already in a task
+      if (tasks.some(t => t.topics.some(tt => tt.id === topic.id))) continue;
+      const existing = bloomBySubject.get(subject.id);
+      if (existing) {
+        existing.topics.push(topic);
+      } else {
+        bloomBySubject.set(subject.id, { topics: [topic], subject });
+      }
+      bloomCount++;
+    }
+
+    for (const [, { topics: bloomTopics, subject }] of bloomBySubject) {
+      const names = bloomTopics.map(t => t.name).join(', ');
+      const bl = bloomTopics[0].currentBloomLevel || 1;
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'medium',
+        typeLabel: 'Higher Order',
+        description: `Bloom ${bl} \u2192 опитай Higher Order quiz (${names})`,
+        topics: bloomTopics,
+        estimatedMinutes: bloomTopics.length * 20,
+        completed: false
+      });
+      capacityAfterFsrs -= bloomTopics.length;
+    }
+  }
+
   // 5. NEW MATERIAL - Cover gray topics after reviews
   // Uses dynamic quota (30-50%) based on gray% and exam proximity
   const availableForNew = reservedForNew + Math.max(0, capacityAfterFsrs);

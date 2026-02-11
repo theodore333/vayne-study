@@ -45,7 +45,10 @@ async function getRedisClient(): Promise<RedisClientType | null> {
 
 function checkAuth(request: NextRequest): boolean {
   const token = process.env.SYNC_AUTH_TOKEN;
-  if (!token) return true; // No token configured = open access (dev mode)
+  if (!token) {
+    if (process.env.NODE_ENV === 'production') return false;
+    return true; // No token configured = open access (dev mode only)
+  }
 
   const auth = request.headers.get('authorization');
   return auth === `Bearer ${token}`;

@@ -467,13 +467,42 @@ function QuizContent() {
 
     if (result.usage) incrementApiCalls(result.usage.cost);
     setCountWarning(result.countWarning || null);
+
+    // Mix in question bank questions linked to this topic
+    let allQuestions = result.questions!;
+    if (topicId && subjectId && !isMultiMode && !isModuleQuiz) {
+      const banks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+      const linkedBankQs = banks.flatMap(b =>
+        b.questions.filter(q =>
+          q.linkedTopicIds?.includes(topicId) && q.type === 'mcq' && q.options?.length
+        )
+      );
+      if (linkedBankQs.length > 0) {
+        // Deduplicate: skip bank questions already covered by AI
+        const aiTexts = new Set(allQuestions.map(q => q.question.toLowerCase().trim().substring(0, 50)));
+        const uniqueBankQs = linkedBankQs.filter(q => !aiTexts.has(q.text.toLowerCase().trim().substring(0, 50)));
+        // Pick up to 3 random bank questions
+        const shuffled = uniqueBankQs.sort(() => Math.random() - 0.5);
+        const picked = shuffled.slice(0, Math.min(3, shuffled.length));
+        const converted: Question[] = picked.map(q => ({
+          type: 'multiple_choice' as const,
+          question: q.text,
+          options: q.options,
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation || '',
+        }));
+        // Shuffle bank questions into the mix
+        allQuestions = [...allQuestions, ...converted].sort(() => Math.random() - 0.5);
+      }
+    }
+
     setQuizState({
-      questions: result.questions!,
+      questions: allQuestions,
       currentIndex: 0,
-      answers: new Array(result.questions!.length).fill(null),
+      answers: new Array(allQuestions.length).fill(null),
       showResult: false, isGenerating: false, error: null
     });
-    timer.initQuestionTimes(result.questions!.length);
+    timer.initQuestionTimes(allQuestions.length);
 
     // Save to cache for reuse
     if (isCacheable && topicId && mode && result.questions) {

@@ -121,7 +121,7 @@ function PracticeContent() {
   const [showResult, setShowResult] = useState(false);
   const [answers, setAnswers] = useState<{ correct: boolean; questionId: string }[]>([]);
   const [sessionComplete, setSessionComplete] = useState(false);
-  const [, setOpenAnswer] = useState(''); // For future open-ended questions
+  const [openAnswer, setOpenAnswer] = useState('');
 
   // Timer state
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -265,26 +265,38 @@ function PracticeContent() {
     }
   };
 
+  // Open question self-evaluation state
+  const [openSelfEval, setOpenSelfEval] = useState<boolean | null>(null);
+
   const handleSubmit = () => {
     if (!currentQuestion || showResult) return;
 
-    let isCorrect: boolean;
+    if (currentQuestion.type === 'open') {
+      // For open questions, just show the model answer for self-evaluation
+      setShowResult(true);
+      return;
+    }
 
     // MCQ questions - check answer
-    {
-      const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
-      const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
+    const correctAnswersList = parseCorrectAnswers(currentQuestion.correctAnswer);
+    const selectedList = Array.from(selectedAnswers).map(a => a.toUpperCase());
 
-      isCorrect =
-        selectedList.length === correctAnswersList.length &&
-        selectedList.every(a => correctAnswersList.includes(a)) &&
-        correctAnswersList.every(a => selectedList.includes(a));
-    }
+    const isCorrect =
+      selectedList.length === correctAnswersList.length &&
+      selectedList.every(a => correctAnswersList.includes(a)) &&
+      correctAnswersList.every(a => selectedList.includes(a));
 
     updateQuestionStats(currentQuestion.bankId, currentQuestion.id, isCorrect);
 
     setAnswers(prev => [...prev, { correct: isCorrect, questionId: currentQuestion.id }]);
     setShowResult(true);
+  };
+
+  const handleOpenSelfEval = (correct: boolean) => {
+    if (!currentQuestion) return;
+    setOpenSelfEval(correct);
+    updateQuestionStats(currentQuestion.bankId, currentQuestion.id, correct);
+    setAnswers(prev => [...prev, { correct, questionId: currentQuestion.id }]);
   };
 
   const handleNext = () => {
@@ -295,6 +307,7 @@ function PracticeContent() {
       setSelectedAnswers(new Set());
       setShowResult(false);
       setOpenAnswer('');
+      setOpenSelfEval(null);
     }
   };
 
@@ -614,8 +627,12 @@ function PracticeContent() {
         {/* Question */}
         <div className="p-6">
           <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs px-2 py-1 rounded font-mono bg-blue-500/20 text-blue-300">
-              MCQ
+            <span className={`text-xs px-2 py-1 rounded font-mono ${
+              currentQuestion.type === 'open'
+                ? 'bg-green-500/20 text-green-300'
+                : 'bg-blue-500/20 text-blue-300'
+            }`}>
+              {currentQuestion.type === 'open' ? 'Open' : 'MCQ'}
             </span>
             {/* Question stats */}
             {currentQuestion.stats.attempts > 0 && (
@@ -634,7 +651,7 @@ function PracticeContent() {
           </h2>
 
           {/* MCQ Options */}
-          {currentQuestion.options && (
+          {currentQuestion.type !== 'open' && currentQuestion.options && (
             <div className="space-y-2">
               {/* Multiple answer hint */}
               {hasMultipleCorrect(currentQuestion.correctAnswer) && !showResult && (
@@ -695,9 +712,83 @@ function PracticeContent() {
             </div>
           )}
 
+          {/* Open Question Answer */}
+          {currentQuestion.type === 'open' && !showResult && (
+            <div className="space-y-2">
+              <textarea
+                value={openAnswer}
+                onChange={(e) => setOpenAnswer(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.ctrlKey && e.key === 'Enter' && openAnswer.trim()) {
+                    handleSubmit();
+                  }
+                }}
+                placeholder="Напиши отговора тук..."
+                rows={4}
+                className="w-full p-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-purple-500 resize-none"
+              />
+              <p className="text-xs text-slate-500 font-mono">Ctrl+Enter за провери</p>
+            </div>
+          )}
 
-          {/* Result Feedback */}
-          {showResult && (
+          {/* Open Question - Model Answer + Self Evaluation */}
+          {currentQuestion.type === 'open' && showResult && (
+            <div className="space-y-4">
+              {/* Your answer */}
+              {openAnswer.trim() && (
+                <div className="p-4 bg-slate-800/30 rounded-lg">
+                  <p className="text-xs text-slate-500 font-mono mb-2">Твоят отговор:</p>
+                  <p className="text-sm text-slate-300">{openAnswer}</p>
+                </div>
+              )}
+
+              {/* Model answer */}
+              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                <p className="text-xs text-blue-400 font-mono mb-2">Верен отговор:</p>
+                <p className="text-sm text-slate-200 whitespace-pre-wrap">{currentQuestion.correctAnswer}</p>
+              </div>
+
+              {currentQuestion.explanation && (
+                <div className="p-3 bg-slate-800/30 rounded-lg">
+                  <p className="text-xs text-slate-500 font-mono mb-1">Обяснение:</p>
+                  <p className="text-sm text-slate-400">{currentQuestion.explanation}</p>
+                </div>
+              )}
+
+              {/* Self evaluation */}
+              {openSelfEval === null ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-400 font-mono text-center">Оцени се:</p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleOpenSelfEval(true)}
+                      className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-mono flex items-center justify-center gap-2"
+                    >
+                      <Check size={18} />
+                      Знаех го
+                    </button>
+                    <button
+                      onClick={() => handleOpenSelfEval(false)}
+                      className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-lg font-mono flex items-center justify-center gap-2"
+                    >
+                      <X size={18} />
+                      Не знаех
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className={`p-3 rounded-lg text-center font-mono ${
+                  openSelfEval ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                }`}>
+                  {openSelfEval ? 'Вярно!' : 'Грешно — повтори тази тема'}
+                </div>
+              )}
+            </div>
+          )}
+
+
+          {/* Result Feedback - MCQ only (open has its own above) */}
+          {showResult && currentQuestion.type !== 'open' && (
             <div className={`mt-4 p-4 rounded-lg ${
               answers[answers.length - 1]?.correct
                 ? 'bg-green-500/20 border border-green-500/30'
@@ -716,7 +807,7 @@ function PracticeContent() {
                 </span>
               </div>
 
-              {currentQuestion.type !== 'open' && !answers[answers.length - 1]?.correct && (
+              {!answers[answers.length - 1]?.correct && (
                 <p className="text-sm text-slate-300 font-mono">
                   Верен отговор: {currentQuestion.correctAnswer}
                 </p>
@@ -736,7 +827,7 @@ function PracticeContent() {
           {!showResult ? (
             <button
               onClick={handleSubmit}
-              disabled={selectedAnswers.size === 0}
+              disabled={currentQuestion.type === 'open' ? !openAnswer.trim() : selectedAnswers.size === 0}
               className="flex-1 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Check size={18} />
@@ -745,7 +836,8 @@ function PracticeContent() {
           ) : (
             <button
               onClick={handleNext}
-              className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-mono flex items-center justify-center gap-2"
+              disabled={currentQuestion.type === 'open' && openSelfEval === null}
+              className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {currentIndex >= shuffledQuestions.length - 1 ? 'Виж резултата' : 'Следващ'}
               <ArrowRight size={18} />

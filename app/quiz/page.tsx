@@ -474,7 +474,9 @@ function QuizContent() {
       const banks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
       const linkedBankQs = banks.flatMap(b =>
         b.questions.filter(q =>
-          q.linkedTopicIds?.includes(topicId) && q.type === 'mcq' && q.options?.length
+          q.linkedTopicIds?.includes(topicId) &&
+          (q.type === 'mcq' || q.type === 'open') &&
+          (q.type === 'open' || (q.options?.length ?? 0) > 0)
         )
       );
       if (linkedBankQs.length > 0) {
@@ -485,9 +487,9 @@ function QuizContent() {
         const shuffled = uniqueBankQs.sort(() => Math.random() - 0.5);
         const picked = shuffled.slice(0, Math.min(3, shuffled.length));
         const converted: Question[] = picked.map(q => ({
-          type: 'multiple_choice' as const,
+          type: q.type === 'mcq' ? 'multiple_choice' as const : 'open' as const,
           question: q.text,
-          options: q.options,
+          options: q.type === 'mcq' ? q.options : undefined,
           correctAnswer: q.correctAnswer,
           explanation: q.explanation || '',
         }));

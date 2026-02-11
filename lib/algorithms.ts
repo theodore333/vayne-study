@@ -1809,6 +1809,49 @@ export function generateDailyPlan(
 
   }
 
+  // ================ INTERLEAVE SUBJECTS ================
+  // Avoid consecutive tasks from the same subject — interleaving improves retention
+  // Greedy: for each position, pick the nearest different-subject task within ±1 priority level
+  if (tasks.length > 2) {
+    const priorityValue = (type: string): number => {
+      switch (type) {
+        case 'critical': return 0;
+        case 'high': return 1;
+        case 'medium': return 2;
+        case 'normal': return 3;
+        case 'project': return 4;
+        default: return 5;
+      }
+    };
+
+    // Sort by priority first
+    const sorted = [...tasks].sort((a, b) => priorityValue(a.type) - priorityValue(b.type));
+
+    const result: DailyTask[] = [sorted[0]];
+    const remaining = sorted.slice(1);
+
+    while (remaining.length > 0) {
+      const lastSubject = result[result.length - 1].subjectId;
+      const nextPriority = priorityValue(remaining[0].type);
+      let picked = -1;
+
+      // Find nearest task from a different subject, within 1 priority level
+      for (let i = 0; i < remaining.length; i++) {
+        if (remaining[i].subjectId !== lastSubject) {
+          if (priorityValue(remaining[i].type) <= nextPriority + 1) {
+            picked = i;
+            break;
+          }
+        }
+      }
+
+      if (picked === -1) picked = 0; // No swap possible, take next in order
+      result.push(remaining.splice(picked, 1)[0]);
+    }
+
+    return result;
+  }
+
   return tasks;
 }
 

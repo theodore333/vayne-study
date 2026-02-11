@@ -33,7 +33,7 @@ export default function Dashboard() {
     const lastBackup = localStorage.getItem('vayne-last-backup');
     if (!lastBackup) { setShowBackupReminder(true); return; }
     const daysSince = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince > 7) setShowBackupReminder(true);
+    if (daysSince > 3) setShowBackupReminder(true);
   }, [data.subjects.length]);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
           <Download size={16} className="text-amber-400 shrink-0" />
           <span className="flex-1 text-xs text-amber-300 font-mono">
-            Не си свалял backup повече от 7 дни.
+            Не си свалял backup повече от 3 дни.
           </span>
           <button
             onClick={async () => {

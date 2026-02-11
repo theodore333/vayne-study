@@ -9,7 +9,7 @@ const MATERIALS_STORE = 'materials';
 const BACKUPS_STORE = 'backups';
 export const IMAGES_STORE = 'images';
 const QUIZ_CACHE_STORE = 'quiz-cache';
-const MAX_AUTO_BACKUPS = 7;
+const MAX_AUTO_BACKUPS = 30;
 
 let dbInstance: IDBDatabase | null = null;
 let dbInitPromise: Promise<IDBDatabase> | null = null;

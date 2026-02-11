@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain, GraduationCap, Plus, Download, Database, Loader2 } from 'lucide-react';
+import { Settings, Key, Save, Eye, EyeOff, CheckCircle, AlertCircle, Cpu, Sparkles, DollarSign, AlertTriangle, Upload, FileSpreadsheet, X, RefreshCw, Layers, Palmtree, Brain, GraduationCap, Plus, Download, Database, Loader2, Cloud, History } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { TopicStatus, MedicalStage } from '@/lib/types';
 import { MEDICAL_SPECIALTIES } from '@/lib/constants';
@@ -34,6 +34,11 @@ export default function SettingsPage() {
   const [csvPreview, setCsvPreview] = useState<{ headers: string[]; rows: string[][] } | null>(null);
   const [columnMapping, setColumnMapping] = useState<{ name: string; status: string }>({ name: '', status: '' });
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
+
+  // Cloud backup state
+  const [cloudBackups, setCloudBackups] = useState<{ ts: number; subjectCount: number; topicCount: number }[]>([]);
+  const [loadingCloudBackups, setLoadingCloudBackups] = useState(false);
+  const [restoringTs, setRestoringTs] = useState<number | null>(null);
 
   // Anki state
   const [ankiConnected, setAnkiConnected] = useState<boolean | null>(null);
@@ -1361,9 +1366,93 @@ export default function SettingsPage() {
         </div>
 
         <p className="text-xs text-slate-600 font-mono mt-3">
-          Автоматични резервни копия се пазят в IndexedDB (последните 3).
+          Автоматични резервни копия се пазят в IndexedDB (последните 30).
           При загуба на localStorage данните се възстановяват автоматично.
         </p>
+
+        {/* Cloud Backup History */}
+        <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-xs font-semibold text-slate-400 font-mono uppercase flex items-center gap-2">
+              <Cloud size={14} className="text-blue-400" />
+              Cloud backup история
+            </h4>
+            <button
+              onClick={async () => {
+                setLoadingCloudBackups(true);
+                try {
+                  const { fetchWithTimeout } = await import('@/lib/fetch-utils');
+                  const token = process.env.NEXT_PUBLIC_SYNC_AUTH_TOKEN;
+                  const headers: Record<string, string> = {};
+                  if (token) headers['Authorization'] = `Bearer ${token}`;
+                  const res = await fetchWithTimeout('/api/data?action=list-backups', { headers, timeout: 10000 });
+                  if (res.ok) {
+                    const json = await res.json();
+                    setCloudBackups(json.backups || []);
+                  }
+                } catch (e) {
+                  console.error('Failed to load cloud backups:', e);
+                } finally {
+                  setLoadingCloudBackups(false);
+                }
+              }}
+              className="flex items-center gap-1.5 px-3 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded text-xs font-mono transition-colors"
+            >
+              {loadingCloudBackups ? <Loader2 size={12} className="animate-spin" /> : <History size={12} />}
+              Зареди
+            </button>
+          </div>
+
+          {cloudBackups.length > 0 ? (
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {cloudBackups.map((b) => (
+                <div key={b.ts} className="flex items-center justify-between p-2 bg-slate-800/40 rounded border border-slate-700/30 text-xs font-mono">
+                  <div className="text-slate-300">
+                    {new Date(b.ts).toLocaleDateString('bg-BG', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    {' '}
+                    {new Date(b.ts).toLocaleTimeString('bg-BG', { hour: '2-digit', minute: '2-digit' })}
+                    <span className="text-slate-500 ml-2">{b.subjectCount} предм. / {b.topicCount} теми</span>
+                  </div>
+                  <button
+                    disabled={restoringTs === b.ts}
+                    onClick={async () => {
+                      if (!confirm(`Възстанови от ${new Date(b.ts).toLocaleString('bg-BG')}? Ще замени всички текущи данни!`)) return;
+                      setRestoringTs(b.ts);
+                      try {
+                        const { fetchWithTimeout } = await import('@/lib/fetch-utils');
+                        const token = process.env.NEXT_PUBLIC_SYNC_AUTH_TOKEN;
+                        const headers: Record<string, string> = {};
+                        if (token) headers['Authorization'] = `Bearer ${token}`;
+                        const res = await fetchWithTimeout(`/api/data?action=restore-backup&ts=${b.ts}`, { headers, timeout: 15000 });
+                        if (!res.ok) { alert('Backup не е намерен или е изтекъл.'); return; }
+                        const json = await res.json();
+                        if (json.data) {
+                          const { migrateData, saveData } = await import('@/lib/storage');
+                          const migrated = migrateData(json.data);
+                          saveData(migrated);
+                          alert(`Възстановени: ${migrated.subjects.length} предмета. Страницата ще се презареди.`);
+                          window.location.reload();
+                        }
+                      } catch (e) {
+                        console.error('Cloud restore failed:', e);
+                        alert('Грешка при възстановяване.');
+                      } finally {
+                        setRestoringTs(null);
+                      }
+                    }}
+                    className="px-2 py-0.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-400 rounded transition-colors disabled:opacity-50"
+                  >
+                    {restoringTs === b.ts ? <Loader2 size={12} className="animate-spin" /> : 'Възстанови'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-600 font-mono">
+              {loadingCloudBackups ? 'Зареждане...' : 'Натисни "Зареди" за да видиш cloud backup-ите. Автоматично се създават на всеки 6 часа.'}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* Model Info */}

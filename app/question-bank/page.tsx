@@ -222,7 +222,7 @@ export default function QuestionBankPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {selectedSubject ? (
             <div className="space-y-6">
               {/* Stats Card */}
@@ -445,7 +445,7 @@ export default function QuestionBankPage() {
 
                           {/* Expanded Browse View */}
                           {isExpanded && (
-                            <div className="border-t border-slate-800 bg-slate-900/30">
+                            <div className="border-t border-slate-800 bg-slate-900/30 overflow-hidden">
                               {/* Search & Filter Bar */}
                               <div className="p-4 flex gap-3 items-center flex-wrap">
                                 <div className="relative flex-1 min-w-[200px]">
@@ -472,12 +472,14 @@ export default function QuestionBankPage() {
                                   <select
                                     value={filterTopicId}
                                     onChange={(e) => setFilterTopicId(e.target.value)}
-                                    className="py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-purple-500"
+                                    className="py-2 px-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm focus:outline-none focus:border-purple-500 max-w-[250px]"
                                   >
                                     <option value="all">Всички теми</option>
                                     <option value="unlinked">Несвързани</option>
                                     {selectedSubject?.topics.map(t => (
-                                      <option key={t.id} value={t.id}>{t.name}</option>
+                                      <option key={t.id} value={t.id}>
+                                        {t.name.length > 50 ? t.name.substring(0, 47) + '...' : t.name}
+                                      </option>
                                     ))}
                                   </select>
                                 </div>
@@ -554,7 +556,7 @@ export default function QuestionBankPage() {
                                                 <select
                                                   value={question.linkedTopicIds?.[0] || ''}
                                                   onChange={(e) => handleChangeQuestionTopic(bank.id, question.id, e.target.value)}
-                                                  className={`text-xs py-1 px-2 rounded border font-mono focus:outline-none focus:border-purple-500 ${
+                                                  className={`text-xs py-1 px-2 rounded border font-mono focus:outline-none focus:border-purple-500 max-w-[280px] truncate ${
                                                     topicName
                                                       ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
                                                       : 'bg-slate-800/50 border-slate-700 text-slate-500'
@@ -562,7 +564,9 @@ export default function QuestionBankPage() {
                                                 >
                                                   <option value="">— Без тема —</option>
                                                   {selectedSubject?.topics.map(t => (
-                                                    <option key={t.id} value={t.id}>{t.name}</option>
+                                                    <option key={t.id} value={t.id}>
+                                                      {t.name.length > 60 ? t.name.substring(0, 57) + '...' : t.name}
+                                                    </option>
                                                   ))}
                                                 </select>
 

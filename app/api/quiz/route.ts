@@ -858,10 +858,10 @@ The student is a Bulgarian medical student testing their general knowledge of "$
 Use established medical textbook knowledge. Focus on core concepts, key mechanisms, clinical relevance.
 Questions should be appropriate for a university-level medical education exam.`;
 
-  // Instructor/exercise questions to include
+  // Custom questions added by the student
   const customQuestionsSection = customQuestions && customQuestions.length > 0
-    ? `\n\nINSTRUCTOR QUESTIONS (from exercises/seminars — MUST BE INCLUDED):
-The student's instructor asked these questions during exercises. You MUST include them in the quiz (rephrase slightly if needed, but keep the core question intact). If an answer is provided, use it as the correct answer basis.
+    ? `\n\nCUSTOM QUESTIONS (added by student — MUST BE INCLUDED):
+The student has added these questions manually. You MUST include them in the quiz (rephrase slightly if needed, but keep the core question intact). If an answer is provided, use it as the correct answer basis.
 ${customQuestions.map((q, i) => `${i + 1}. Q: ${q.question}${q.answer ? `\n   A: ${q.answer}` : ''}`).join('\n')}`
     : '';
 

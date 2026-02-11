@@ -202,7 +202,7 @@ export interface Topic {
   highlights: TextHighlight[]; // Highlighted text passages
   // Section: theoretical or practical
   section?: TopicSection;
-  // Custom questions from instructor/exercises
+  // Custom questions added manually by the student
   customQuestions?: Array<{ question: string; answer: string }>;
 }
 

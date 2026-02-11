@@ -977,7 +977,7 @@ export default function TopicDetailPage() {
               <div className="flex items-center gap-2">
                 <MessageSquarePlus size={16} className="text-cyan-400" />
                 <span className="text-sm font-medium text-cyan-400 font-mono">
-                  Въпроси от упражнения ({topic.customQuestions?.length || 0})
+                  Мои въпроси ({topic.customQuestions?.length || 0})
                 </span>
               </div>
               {showQuickAdd ? (
@@ -1020,7 +1020,7 @@ export default function TopicDetailPage() {
                 <textarea
                   value={quickQuestion}
                   onChange={(e) => { setQuickQuestion(e.target.value); setQuickSaved(false); }}
-                  placeholder="Въпрос от асистент/упражнение..."
+                  placeholder="Напиши въпрос..."
                   rows={2}
                   className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
                 />
@@ -1053,7 +1053,7 @@ export default function TopicDetailPage() {
                   )}
                 </button>
                 <p className="text-xs text-slate-600 font-mono">
-                  Тези въпроси ще се включват в AI quiz-овете за тази тема.
+                  Ще се включват в AI quiz-овете за тази тема.
                 </p>
               </div>
             )}

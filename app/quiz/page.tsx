@@ -30,7 +30,7 @@ function QuizContent() {
   const projectId = searchParams.get('project');
   const moduleId = searchParams.get('module');
 
-  const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule } = useApp();
+  const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule, addQuestionBank, addQuestionsToBank } = useApp();
 
   // Get project and module if this is a module quiz
   const project = projectId ? data.developmentProjects.find(p => p.id === projectId) : null;
@@ -1070,6 +1070,39 @@ function QuizContent() {
         wrongAnswers: mergedWrongAnswers
       });
     }
+    // Auto-save quiz questions to question bank (for drilling later)
+    if (subjectId && quizState.questions.length > 0 && !isModuleQuiz) {
+      try {
+        const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+        let aiBank = existingBanks.find(b => b.name === 'AI Quiz');
+        let bankId: string;
+        if (aiBank) {
+          bankId = aiBank.id;
+        } else {
+          bankId = addQuestionBank(subjectId, 'AI Quiz');
+          aiBank = { id: bankId, subjectId, name: 'AI Quiz', questions: [], cases: [], uploadedAt: new Date().toISOString() };
+        }
+        // Deduplicate: skip questions whose text already exists in the bank
+        const existingTexts = new Set((aiBank.questions || []).map(q => q.text.toLowerCase().trim()));
+        const newBankQuestions = quizState.questions
+          .filter(q => !existingTexts.has(q.question.toLowerCase().trim()))
+          .map(q => ({
+            type: (q.type === 'multiple_choice' ? 'mcq' : q.type) as 'mcq' | 'open' | 'case_study',
+            text: q.question,
+            options: q.options,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+            linkedTopicIds: topicId ? [topicId] : [],
+            stats: { attempts: 0, correct: 0 }
+          }));
+        if (newBankQuestions.length > 0) {
+          addQuestionsToBank(bankId, newBankQuestions, []);
+        }
+      } catch (e) {
+        console.error('Auto-save to question bank failed:', e);
+      }
+    }
+
     // Mark as saved and show feedback
     setGradeSaved(true);
     setIsSavingGrade(false);

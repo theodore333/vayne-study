@@ -219,6 +219,19 @@ export async function initMaterialsCache(): Promise<void> {
         }
       }
 
+      // One-time migration: if localStorage still has materials, migrate to IDB and clear
+      if (Object.keys(lsMaterials).length > 0 && isIndexedDBAvailable()) {
+        // Ensure all localStorage materials are in IDB
+        for (const [topicId, content] of Object.entries(lsMaterials)) {
+          if (content && !idbMaterials[topicId]) {
+            await setMaterialInIDB(topicId, content);
+          }
+        }
+        // Free localStorage space
+        localStorage.removeItem(MATERIALS_KEY);
+        console.log('[STORAGE] Migrated materials from localStorage to IndexedDB, freed space');
+      }
+
       materialsCacheLoaded = true;
     } catch (error) {
       console.error('[LOAD] Error initializing materials cache:', error);
@@ -270,7 +283,8 @@ export function getMaterial(topicId: string): string {
 }
 
 /**
- * Set material - updates cache and persists to BOTH IndexedDB AND localStorage
+ * Set material - updates cache and persists to IndexedDB
+ * (localStorage backup removed — it was filling up the 5MB limit)
  */
 export function setMaterial(topicId: string, material: string): void {
   // Update cache immediately
@@ -280,10 +294,7 @@ export function setMaterial(topicId: string, material: string): void {
     delete materialsCache[topicId];
   }
 
-  // Save to localStorage as backup (synchronous, reliable)
-  saveMaterialsToLocalStorage(materialsCache);
-
-  // Also save to IndexedDB (async, larger capacity)
+  // Save to IndexedDB (async, large capacity)
   if (isIndexedDBAvailable()) {
     setMaterialInIDB(topicId, material).catch(error => {
       console.error('[SAVE] IndexedDB error:', error);

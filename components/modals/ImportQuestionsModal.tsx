@@ -39,13 +39,33 @@ interface PDFAnalysisResult {
 
 // ExtractionWarning interface kept for future use with wasRepaired flag
 
+// Normalize text for duplicate comparison
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N}\s]/gu, '');
+}
+
+// Check if two questions are likely duplicates
+function isDuplicate(a: string, b: string): boolean {
+  const na = normalizeText(a);
+  const nb = normalizeText(b);
+  if (na === nb) return true;
+  // Check first 40 chars match (catches minor trailing differences)
+  if (na.length >= 40 && nb.length >= 40 && na.substring(0, 40) === nb.substring(0, 40)) return true;
+  // Check if one contains the other (for subset matches)
+  if (na.length > 20 && nb.length > 20) {
+    if (na.includes(nb.substring(0, Math.min(40, nb.length)))) return true;
+    if (nb.includes(na.substring(0, Math.min(40, na.length)))) return true;
+  }
+  return false;
+}
+
 export default function ImportQuestionsModal({
   subjectId,
   subjectName,
   topics,
   onClose
 }: ImportQuestionsModalProps) {
-  const { addQuestionBank, addQuestionsToBank, incrementApiCalls } = useApp();
+  const { data, addQuestionBank, addQuestionsToBank, incrementApiCalls } = useApp();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const multiFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +82,9 @@ export default function ImportQuestionsModal({
   const [wasRepaired, setWasRepaired] = useState(false);
   const [wasChunked, setWasChunked] = useState(false);
   const [numChunks, setNumChunks] = useState(0);
+
+  // Duplicate detection
+  const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
 
   // Multi-part file support
   const [isMultiPart, setIsMultiPart] = useState(false);
@@ -93,6 +116,7 @@ export default function ImportQuestionsModal({
       setWasRepaired(false);
       setWasChunked(false);
       setNumChunks(0);
+      setDuplicateIndices(new Set());
       // Auto-generate bank name from file name
       if (!bankName) {
         setBankName(selectedFile.name.replace(/\.[^/.]+$/, ''));
@@ -116,6 +140,7 @@ export default function ImportQuestionsModal({
         setWasRepaired(false);
         setWasChunked(false);
         setNumChunks(0);
+        setDuplicateIndices(new Set());
         if (!bankName) {
           setBankName(droppedFile.name.replace(/\.[^/.]+$/, ''));
         }
@@ -144,6 +169,7 @@ export default function ImportQuestionsModal({
     });
     setExtractedQuestions(null);
     setError(null);
+    setDuplicateIndices(new Set());
   };
 
   const removeFilePart = (index: number) => {
@@ -222,7 +248,7 @@ export default function ImportQuestionsModal({
 
         setExtractedQuestions(allQuestions);
         setExtractedCases(allCases);
-        setSelectedQuestions(new Set(allQuestions.map((_, i) => i)));
+        detectDuplicates(allQuestions);
         if (lastPdfAnalysis) setPdfAnalysis(lastPdfAnalysis);
         setWasChunked(true);
         setNumChunks(fileParts.length);
@@ -265,7 +291,7 @@ export default function ImportQuestionsModal({
 
       setExtractedQuestions(result.questions);
       setExtractedCases(result.cases || []);
-      setSelectedQuestions(new Set(result.questions.map((_: any, i: number) => i)));
+      detectDuplicates(result.questions);
 
       // Set PDF analysis if available
       if (result.pdfAnalysis) {
@@ -303,6 +329,38 @@ export default function ImportQuestionsModal({
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Detect duplicates against existing bank questions
+  const detectDuplicates = (questions: ExtractedQuestion[]) => {
+    const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+    const existingTexts = existingBanks.flatMap(b => b.questions.map(q => q.text));
+
+    const dupes = new Set<number>();
+    // Also detect duplicates within the extracted batch itself
+    const seenTexts: string[] = [];
+
+    questions.forEach((q, i) => {
+      // Check against existing bank questions
+      const isExistingDupe = existingTexts.some(existing => isDuplicate(q.text, existing));
+      if (isExistingDupe) {
+        dupes.add(i);
+        return;
+      }
+      // Check against earlier questions in this batch
+      const isBatchDupe = seenTexts.some(seen => isDuplicate(q.text, seen));
+      if (isBatchDupe) {
+        dupes.add(i);
+      }
+      seenTexts.push(q.text);
+    });
+
+    setDuplicateIndices(dupes);
+
+    // Auto-deselect duplicates, select the rest
+    const selected = new Set(questions.map((_, i) => i));
+    dupes.forEach(i => selected.delete(i));
+    setSelectedQuestions(selected);
   };
 
   const toggleQuestion = (index: number) => {
@@ -677,6 +735,12 @@ export default function ImportQuestionsModal({
                   {extractedQuestions.filter(q => q.type === 'open').length} Отворени
                 </span>
 
+                {duplicateIndices.size > 0 && (
+                  <span className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded">
+                    {duplicateIndices.size} дубликати
+                  </span>
+                )}
+
                 {/* PDF Analysis indicator */}
                 {pdfAnalysis && (
                   <span className={`px-2 py-1 rounded flex items-center gap-1 ${
@@ -710,6 +774,16 @@ export default function ImportQuestionsModal({
                 </div>
               )}
 
+              {/* Duplicate detection info */}
+              {duplicateIndices.size > 0 && (
+                <div className="p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
+                  <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-300 font-mono">
+                    Намерени {duplicateIndices.size} дубликати (вече съществуват или се повтарят). Автоматично са махнати от селекцията.
+                  </div>
+                </div>
+              )}
+
               {/* Warning if response was truncated and repaired */}
               {wasRepaired && !wasChunked && (
                 <div className="p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
@@ -727,7 +801,11 @@ export default function ImportQuestionsModal({
                     key={i}
                     onClick={() => toggleQuestion(i)}
                     className={`flex items-start gap-2 p-2 rounded-lg transition-all cursor-pointer ${
-                      selectedQuestions.has(i)
+                      duplicateIndices.has(i)
+                        ? selectedQuestions.has(i)
+                          ? 'bg-amber-500/10 border border-amber-500/30 opacity-70'
+                          : 'bg-amber-500/5 border border-amber-500/20 opacity-50'
+                        : selectedQuestions.has(i)
                         ? 'bg-purple-500/20 border border-purple-500/30'
                         : 'hover:bg-slate-700/50 border border-transparent'
                     }`}
@@ -755,8 +833,13 @@ export default function ImportQuestionsModal({
                            question.type === 'case_study' ? 'Казус' : 'Open'}
                         </span>
                         <span className="text-xs text-slate-500 font-mono">#{i + 1}</span>
+                        {duplicateIndices.has(i) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded font-mono bg-amber-500/20 text-amber-300">
+                            Дубликат
+                          </span>
+                        )}
                       </div>
-                      <p className="text-sm text-slate-200 line-clamp-2">{question.text}</p>
+                      <p className={`text-sm line-clamp-2 ${duplicateIndices.has(i) ? 'text-slate-400 line-through' : 'text-slate-200'}`}>{question.text}</p>
                       {question.options && (
                         <p className="text-xs text-slate-500 mt-1 font-mono">
                           Отговор: {question.correctAnswer}

@@ -74,6 +74,7 @@ interface LegacyTopic {
   sizeSetBy?: 'ai' | 'user' | null;
   wrongAnswers?: Array<{ question: string; userAnswer: string | null; correctAnswer: string; concept: string; bloomLevel: number; date: string; drillCount: number }>;
   highlights?: Array<{ id: string; text: string; startOffset: number; endOffset: number; color: 'yellow' | 'green' | 'blue' | 'pink'; createdAt: string }>;
+  customQuestions?: Array<{ question: string; answer: string }>;
 }
 
 interface LegacySubject {
@@ -471,7 +472,8 @@ export function migrateData(rawData: any): AppData {
       size: topic.size ?? null,
       sizeSetBy: topic.sizeSetBy ?? null,
       wrongAnswers: topic.wrongAnswers ?? [],
-      highlights: topic.highlights ?? []
+      highlights: topic.highlights ?? [],
+      customQuestions: Array.isArray(topic.customQuestions) ? topic.customQuestions : []
     }))
   }));
 

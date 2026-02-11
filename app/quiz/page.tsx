@@ -450,7 +450,8 @@ function QuizContent() {
           ? (crossTopicDrill ? crossTopicWrongAnswers : topic?.wrongAnswers)
           : mode === 'gap_analysis' ? topic?.wrongAnswers : undefined,
         model: selectedModel,
-        masteryContext: topic ? buildMasteryContext(topic) : undefined
+        masteryContext: topic ? buildMasteryContext(topic) : undefined,
+        customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined
       };
     }
 

@@ -202,6 +202,8 @@ export interface Topic {
   highlights: TextHighlight[]; // Highlighted text passages
   // Section: theoretical or practical
   section?: TopicSection;
+  // Custom questions from instructor/exercises
+  customQuestions?: Array<{ question: string; answer: string }>;
 }
 
 // Text highlight for reader mode

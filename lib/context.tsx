@@ -732,6 +732,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lastRead: null,
           wrongAnswers: [],
           highlights: [],
+          customQuestions: [],
           fsrs: undefined
         }))
       };
@@ -804,6 +805,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           lastRead: null,
           wrongAnswers: [],
           highlights: [],
+          customQuestions: [],
           fsrs: undefined
         }))
       };

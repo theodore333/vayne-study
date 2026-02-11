@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
   ssr: false,
@@ -53,6 +53,12 @@ export default function TopicDetailPage() {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null); // For enlarged view
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
+
+  // Quick-add question state
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickQuestion, setQuickQuestion] = useState('');
+  const [quickAnswer, setQuickAnswer] = useState('');
+  const [quickSaved, setQuickSaved] = useState(false);
 
   // Inline topic name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -961,6 +967,97 @@ export default function TopicDetailPage() {
               </div>
             );
           })()}
+
+          {/* Quick Add Question (for quiz AI) */}
+          <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border border-cyan-700/30 rounded-xl p-5">
+            <button
+              onClick={() => setShowQuickAdd(!showQuickAdd)}
+              className="w-full flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquarePlus size={16} className="text-cyan-400" />
+                <span className="text-sm font-medium text-cyan-400 font-mono">
+                  Въпроси от упражнения ({topic.customQuestions?.length || 0})
+                </span>
+              </div>
+              {showQuickAdd ? (
+                <ChevronUp size={16} className="text-cyan-400" />
+              ) : (
+                <ChevronDown size={16} className="text-cyan-400" />
+              )}
+            </button>
+
+            {showQuickAdd && (
+              <div className="mt-4 space-y-3">
+                {/* Existing questions */}
+                {topic.customQuestions && topic.customQuestions.length > 0 && (
+                  <div className="space-y-2 mb-3">
+                    {topic.customQuestions.map((q, i) => (
+                      <div key={i} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 group">
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-200 font-mono">{q.question}</p>
+                            {q.answer && (
+                              <p className="text-xs text-slate-400 font-mono mt-1">→ {q.answer}</p>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => {
+                              const updated = topic.customQuestions!.filter((_, idx) => idx !== i);
+                              updateTopic(subjectId, topicId, { customQuestions: updated });
+                            }}
+                            className="p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                          >
+                            <Trash size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new */}
+                <textarea
+                  value={quickQuestion}
+                  onChange={(e) => { setQuickQuestion(e.target.value); setQuickSaved(false); }}
+                  placeholder="Въпрос от асистент/упражнение..."
+                  rows={2}
+                  className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
+                />
+                <textarea
+                  value={quickAnswer}
+                  onChange={(e) => { setQuickAnswer(e.target.value); setQuickSaved(false); }}
+                  placeholder="Отговор (ако го знаеш)..."
+                  rows={2}
+                  className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
+                />
+                <button
+                  onClick={() => {
+                    if (!quickQuestion.trim()) return;
+                    const existing = topic.customQuestions || [];
+                    updateTopic(subjectId, topicId, {
+                      customQuestions: [...existing, { question: quickQuestion.trim(), answer: quickAnswer.trim() }]
+                    });
+                    setQuickQuestion('');
+                    setQuickAnswer('');
+                    setQuickSaved(true);
+                    setTimeout(() => setQuickSaved(false), 2000);
+                  }}
+                  disabled={!quickQuestion.trim()}
+                  className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-mono text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                >
+                  {quickSaved ? (
+                    <><Check size={16} /> Записан!</>
+                  ) : (
+                    <><MessageSquarePlus size={16} /> Запиши</>
+                  )}
+                </button>
+                <p className="text-xs text-slate-600 font-mono">
+                  Тези въпроси ще се включват в AI quiz-овете за тази тема.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Quick Quiz Prompt */}
           <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-700/30 rounded-xl p-5">

@@ -90,7 +90,9 @@ export async function POST(request: Request) {
       // Mastery context for smarter quiz generation
       masteryContext,
       // Study techniques for recommendations
-      studyTechniques
+      studyTechniques,
+      // Custom questions from instructor/exercises
+      customQuestions
     } = body;
 
     if (!apiKey) {
@@ -173,7 +175,8 @@ export async function POST(request: Request) {
       currentBloomLevel,
       matchExamFormat,
       model,
-      masteryContext
+      masteryContext,
+      customQuestions
     });
 
   } catch (error: unknown) {
@@ -728,9 +731,10 @@ async function handleStandardQuiz(
       masteredConcepts: string[];
       weakConcepts: Array<{ concept: string; drillCount: number }>;
     };
+    customQuestions?: Array<{ question: string; answer: string }>;
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -854,6 +858,13 @@ The student is a Bulgarian medical student testing their general knowledge of "$
 Use established medical textbook knowledge. Focus on core concepts, key mechanisms, clinical relevance.
 Questions should be appropriate for a university-level medical education exam.`;
 
+  // Instructor/exercise questions to include
+  const customQuestionsSection = customQuestions && customQuestions.length > 0
+    ? `\n\nINSTRUCTOR QUESTIONS (from exercises/seminars — MUST BE INCLUDED):
+The student's instructor asked these questions during exercises. You MUST include them in the quiz (rephrase slightly if needed, but keep the core question intact). If an answer is provided, use it as the correct answer basis.
+${customQuestions.map((q, i) => `${i + 1}. Q: ${q.question}${q.answer ? `\n   A: ${q.answer}` : ''}`).join('\n')}`
+    : '';
+
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 8192,
@@ -869,6 +880,7 @@ ${bloomInstructions}
 ${masteryInstructions}
 
 ${materialSection}
+${customQuestionsSection}
 
 Generate ${targetQuestionCount}.
 

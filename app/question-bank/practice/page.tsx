@@ -4,7 +4,9 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useApp } from '@/lib/context';
 import { BankQuestion } from '@/lib/types';
-import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Timer, Shuffle, AlertTriangle, Calendar, FileText } from 'lucide-react';
+import { OpenAnswerEvaluation } from '@/lib/quiz-types';
+import { fetchWithTimeout } from '@/lib/fetch-utils';
+import { ArrowLeft, ArrowRight, Check, X, RotateCcw, Trophy, Timer, Shuffle, AlertTriangle, Calendar, FileText, Loader2, CheckCircle, AlertCircle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 
 // Practice modes
@@ -47,7 +49,7 @@ export default function PracticePage() {
 
 function PracticeContent() {
   const searchParams = useSearchParams();
-  const { data, updateQuestionStats } = useApp();
+  const { data, updateQuestionStats, incrementApiCalls } = useApp();
 
   const subjectId = searchParams.get('subject');
   const bankId = searchParams.get('bank');
@@ -124,6 +126,15 @@ function PracticeContent() {
   const [openAnswer, setOpenAnswer] = useState('');
   const [openSelfEval, setOpenSelfEval] = useState<boolean | null>(null);
 
+  // AI evaluation for open questions
+  const [openEvaluations, setOpenEvaluations] = useState<Record<number, OpenAnswerEvaluation>>({});
+  const [isEvaluatingOpen, setIsEvaluatingOpen] = useState(false);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApiKey(localStorage.getItem('claude-api-key'));
+  }, []);
+
   // Timer state
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -160,6 +171,8 @@ function PracticeContent() {
     setAnswers([]);
     setSessionComplete(false);
     setOpenAnswer('');
+    setOpenEvaluations({});
+    setIsEvaluatingOpen(false);
     setStartTime(Date.now());
     setElapsedTime(0);
     setPracticeStarted(true);
@@ -189,8 +202,8 @@ function PracticeContent() {
       // Don't capture keys when typing in textarea
       if (e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement) return;
 
-      // Open question self-evaluation shortcuts (1/Y = correct, 2/N = wrong)
-      if (question.type === 'open' && showResult && openSelfEval === null) {
+      // Open question self-evaluation shortcuts (1/Y = correct, 2/N = wrong) — only when no AI eval
+      if (question.type === 'open' && showResult && openSelfEval === null && !openEvaluations[currentIndex] && !isEvaluatingOpen) {
         const isCorrectKey = e.key === '1' || e.key.toLowerCase() === 'y';
         const isWrongKey = e.key === '2' || e.key.toLowerCase() === 'n';
         if (isCorrectKey || isWrongKey) {
@@ -203,8 +216,8 @@ function PracticeContent() {
         return;
       }
 
-      // Open question: Enter to advance after self-eval
-      if (question.type === 'open' && showResult && openSelfEval !== null) {
+      // Open question: Enter to advance after AI eval or self-eval
+      if (question.type === 'open' && showResult && (openSelfEval !== null || openEvaluations[currentIndex])) {
         if (e.key === 'Enter') {
           e.preventDefault();
           if (currentIndex >= shuffledQuestions.length - 1) {
@@ -278,7 +291,7 @@ function PracticeContent() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers, openSelfEval, updateQuestionStats]);
+  }, [practiceStarted, shuffledQuestions, currentIndex, sessionComplete, showResult, selectedAnswers, openSelfEval, openEvaluations, isEvaluatingOpen, updateQuestionStats]);
 
   const handleAnswer = (answer: string) => {
     if (showResult) return;
@@ -300,12 +313,45 @@ function PracticeContent() {
     }
   };
 
-  const handleSubmit = () => {
-    if (!currentQuestion || showResult) return;
+  const handleSubmit = async () => {
+    if (!currentQuestion || showResult || isEvaluatingOpen) return;
 
     if (currentQuestion.type === 'open') {
-      // For open questions, just show the model answer for self-evaluation
       setShowResult(true);
+
+      // If API key available, use AI evaluation
+      if (apiKey && openAnswer.trim()) {
+        setIsEvaluatingOpen(true);
+        try {
+          const idx = currentIndex; // capture before async
+          const response = await fetchWithTimeout('/api/quiz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              apiKey,
+              mode: 'evaluate_open',
+              question: currentQuestion.text,
+              userAnswer: openAnswer,
+              correctAnswer: currentQuestion.correctAnswer,
+              bloomLevel: currentQuestion.bloomLevel || 3
+            }),
+            timeout: 30000
+          });
+          const result = await response.json();
+          if (result.evaluation) {
+            setOpenEvaluations(prev => ({ ...prev, [idx]: result.evaluation }));
+            const isCorrect = result.evaluation.score >= 0.7;
+            updateQuestionStats(currentQuestion.bankId, currentQuestion.id, isCorrect);
+            setAnswers(prev => [...prev, { correct: isCorrect, questionId: currentQuestion.id }]);
+            if (result.usage?.cost) incrementApiCalls(result.usage.cost);
+          }
+        } catch (e) {
+          console.error('AI eval failed:', e);
+          // Fallback: user can still self-eval
+        } finally {
+          setIsEvaluatingOpen(false);
+        }
+      }
       return;
     }
 
@@ -357,6 +403,8 @@ function PracticeContent() {
     setAnswers([]);
     setSessionComplete(false);
     setShowCustomPicker(false);
+    setOpenEvaluations({});
+    setIsEvaluatingOpen(false);
   };
 
   // No subject or questions
@@ -788,10 +836,76 @@ function PracticeContent() {
                 </div>
               )}
 
-              {/* Self evaluation */}
-              {openSelfEval === null ? (
+              {/* AI Evaluation or Self-eval fallback */}
+              {isEvaluatingOpen ? (
+                <div className="flex items-center justify-center gap-3 py-6">
+                  <Loader2 size={24} className="animate-spin text-purple-400" />
+                  <span className="text-sm text-purple-300 font-mono">AI оценява...</span>
+                </div>
+              ) : openEvaluations[currentIndex] ? (
+                <div className="space-y-3">
+                  {/* Score */}
+                  <div className={`p-4 rounded-lg border ${
+                    openEvaluations[currentIndex].score >= 0.7
+                      ? 'bg-green-500/15 border-green-500/30'
+                      : openEvaluations[currentIndex].score >= 0.4
+                      ? 'bg-yellow-500/15 border-yellow-500/30'
+                      : 'bg-red-500/15 border-red-500/30'
+                  }`}>
+                    <div className="flex items-center gap-3 mb-2">
+                      {openEvaluations[currentIndex].score >= 0.7 ? (
+                        <CheckCircle size={20} className="text-green-400" />
+                      ) : openEvaluations[currentIndex].score >= 0.4 ? (
+                        <AlertCircle size={20} className="text-yellow-400" />
+                      ) : (
+                        <XCircle size={20} className="text-red-400" />
+                      )}
+                      <span className={`text-lg font-bold font-mono ${
+                        openEvaluations[currentIndex].score >= 0.7 ? 'text-green-400'
+                        : openEvaluations[currentIndex].score >= 0.4 ? 'text-yellow-400'
+                        : 'text-red-400'
+                      }`}>
+                        {Math.round(openEvaluations[currentIndex].score * 100)}%
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-300">{openEvaluations[currentIndex].feedback}</p>
+                  </div>
+
+                  {/* Key points covered */}
+                  {openEvaluations[currentIndex].keyPointsCovered?.length > 0 && (
+                    <div className="p-3 bg-green-500/10 rounded-lg">
+                      <p className="text-xs text-green-400 font-mono mb-1.5">Покрити точки:</p>
+                      <ul className="space-y-1">
+                        {openEvaluations[currentIndex].keyPointsCovered.map((point: string, i: number) => (
+                          <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                            <Check size={14} className="text-green-400 mt-0.5 shrink-0" />
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Key points missed */}
+                  {openEvaluations[currentIndex].keyPointsMissed?.length > 0 && (
+                    <div className="p-3 bg-red-500/10 rounded-lg">
+                      <p className="text-xs text-red-400 font-mono mb-1.5">Пропуснати точки:</p>
+                      <ul className="space-y-1">
+                        {openEvaluations[currentIndex].keyPointsMissed.map((point: string, i: number) => (
+                          <li key={i} className="text-sm text-slate-300 flex items-start gap-2">
+                            <X size={14} className="text-red-400 mt-0.5 shrink-0" />
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : openSelfEval === null ? (
                 <div className="space-y-2">
-                  <p className="text-sm text-slate-400 font-mono text-center">Оцени се:</p>
+                  <p className="text-sm text-slate-400 font-mono text-center">
+                    {apiKey ? 'AI оценката не успя. Оцени се:' : 'Оцени се:'}
+                  </p>
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleOpenSelfEval(true)}
@@ -869,7 +983,7 @@ function PracticeContent() {
           ) : (
             <button
               onClick={handleNext}
-              disabled={currentQuestion.type === 'open' && openSelfEval === null}
+              disabled={currentQuestion.type === 'open' && openSelfEval === null && !openEvaluations[currentIndex]}
               className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white rounded-lg font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {currentIndex >= shuffledQuestions.length - 1 ? 'Виж резултата' : 'Следващ'}

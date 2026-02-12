@@ -86,6 +86,8 @@ export default function ImportQuestionsModal({
 
   // Duplicate detection
   const [duplicateIndices, setDuplicateIndices] = useState<Set<number>>(new Set());
+  const [semanticDuplicateIndices, setSemanticDuplicateIndices] = useState<Set<number>>(new Set());
+  const [isCheckingSemantic, setIsCheckingSemantic] = useState(false);
 
   // Multi-part file support
   const [isMultiPart, setIsMultiPart] = useState(false);
@@ -362,11 +364,72 @@ export default function ImportQuestionsModal({
     });
 
     setDuplicateIndices(dupes);
+    setSemanticDuplicateIndices(new Set());
 
     // Auto-deselect duplicates, select the rest
     const selected = new Set(questions.map((_, i) => i));
     dupes.forEach(i => selected.delete(i));
     setSelectedQuestions(selected);
+  };
+
+  // Semantic (AI) duplicate check for remaining non-text-duplicate questions
+  const handleSemanticCheck = async () => {
+    if (!extractedQuestions || !apiKey) return;
+
+    const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+    const existingTexts = existingBanks.flatMap(b => b.questions.map(q => q.text));
+    if (existingTexts.length === 0) return;
+
+    // Only check questions that aren't already text-duplicates
+    const nonDupeIndices = extractedQuestions
+      .map((_, i) => i)
+      .filter(i => !duplicateIndices.has(i));
+
+    if (nonDupeIndices.length === 0) return;
+
+    const newTexts = nonDupeIndices.map(i => extractedQuestions[i].text);
+
+    setIsCheckingSemantic(true);
+    try {
+      const response = await fetchWithTimeout('/api/check-duplicates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          newQuestions: newTexts,
+          existingQuestions: existingTexts
+        }),
+        timeout: 30000
+      });
+
+      const result = await response.json();
+      if (result.duplicateIndices?.length > 0) {
+        // Map back from filtered indices to original indices
+        const semDupes = new Set<number>();
+        result.duplicateIndices.forEach((filteredIdx: number) => {
+          const originalIdx = nonDupeIndices[filteredIdx];
+          if (originalIdx !== undefined) {
+            semDupes.add(originalIdx);
+          }
+        });
+        setSemanticDuplicateIndices(semDupes);
+
+        // Deselect semantic duplicates
+        setSelectedQuestions(prev => {
+          const updated = new Set(prev);
+          semDupes.forEach(i => updated.delete(i));
+          return updated;
+        });
+      }
+
+      if (result.usage?.cost) {
+        incrementApiCalls(result.usage.cost);
+      }
+    } catch (e) {
+      console.error('Semantic duplicate check failed:', e);
+    } finally {
+      setIsCheckingSemantic(false);
+    }
   };
 
   const toggleQuestion = (index: number) => {
@@ -747,6 +810,11 @@ export default function ImportQuestionsModal({
                     {duplicateIndices.size} дубликати
                   </span>
                 )}
+                {semanticDuplicateIndices.size > 0 && (
+                  <span className="px-2 py-1 bg-purple-500/20 text-purple-300 rounded">
+                    {semanticDuplicateIndices.size} семантични
+                  </span>
+                )}
 
                 {/* PDF Analysis indicator */}
                 {pdfAnalysis && (
@@ -782,13 +850,37 @@ export default function ImportQuestionsModal({
               )}
 
               {/* Duplicate detection info */}
-              {duplicateIndices.size > 0 && (
+              {(duplicateIndices.size > 0 || semanticDuplicateIndices.size > 0) && (
                 <div className="p-2 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
                   <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
                   <div className="text-xs text-amber-300 font-mono">
-                    Намерени {duplicateIndices.size} дубликати (вече съществуват или се повтарят). Автоматично са махнати от селекцията.
+                    {duplicateIndices.size > 0 && `${duplicateIndices.size} текстови дубликати`}
+                    {duplicateIndices.size > 0 && semanticDuplicateIndices.size > 0 && ' + '}
+                    {semanticDuplicateIndices.size > 0 && `${semanticDuplicateIndices.size} семантични дубликати`}
+                    {' — автоматично махнати от селекцията.'}
                   </div>
                 </div>
+              )}
+
+              {/* AI semantic duplicate check button */}
+              {apiKey && extractedQuestions.length > duplicateIndices.size && semanticDuplicateIndices.size === 0 && (
+                <button
+                  onClick={handleSemanticCheck}
+                  disabled={isCheckingSemantic}
+                  className="w-full py-2 bg-purple-600/20 border border-purple-500/30 text-purple-300 rounded-lg font-mono text-sm hover:bg-purple-600/30 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isCheckingSemantic ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      AI проверява за семантични дубликати...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} />
+                      AI проверка за дубликати (Haiku)
+                    </>
+                  )}
+                </button>
               )}
 
               {/* Warning if response was truncated and repaired */}
@@ -812,6 +904,10 @@ export default function ImportQuestionsModal({
                         ? selectedQuestions.has(i)
                           ? 'bg-amber-500/10 border border-amber-500/30 opacity-70'
                           : 'bg-amber-500/5 border border-amber-500/20 opacity-50'
+                        : semanticDuplicateIndices.has(i)
+                        ? selectedQuestions.has(i)
+                          ? 'bg-purple-500/10 border border-purple-500/30 opacity-70'
+                          : 'bg-purple-500/5 border border-purple-500/20 opacity-50'
                         : selectedQuestions.has(i)
                         ? 'bg-purple-500/20 border border-purple-500/30'
                         : 'hover:bg-slate-700/50 border border-transparent'
@@ -845,8 +941,13 @@ export default function ImportQuestionsModal({
                             Дубликат
                           </span>
                         )}
+                        {semanticDuplicateIndices.has(i) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded font-mono bg-purple-500/20 text-purple-300">
+                            Семантичен дубликат
+                          </span>
+                        )}
                       </div>
-                      <p className={`text-sm line-clamp-2 ${duplicateIndices.has(i) ? 'text-slate-400 line-through' : 'text-slate-200'}`}>{question.text}</p>
+                      <p className={`text-sm line-clamp-2 ${duplicateIndices.has(i) || semanticDuplicateIndices.has(i) ? 'text-slate-400 line-through' : 'text-slate-200'}`}>{question.text}</p>
                       {question.options && (
                         <p className="text-xs text-slate-500 mt-1 font-mono">
                           Отговор: {question.correctAnswer}

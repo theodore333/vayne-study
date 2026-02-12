@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { useApp } from '@/lib/context';
-import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine, Link2, Unlink, Loader2, Search, Eye, EyeOff, ChevronDown, X } from 'lucide-react';
+import { Book, Upload, Play, Trash2, FileQuestion, BarChart3, PenLine, Link2, Unlink, Loader2, Search, Eye, EyeOff, ChevronDown, X, TrendingUp, TrendingDown, Target, Zap } from 'lucide-react';
 import Link from 'next/link';
 import ImportQuestionsModal from '@/components/modals/ImportQuestionsModal';
 import AddQuestionModal from '@/components/modals/AddQuestionModal';
@@ -45,6 +45,81 @@ export default function QuestionBankPage() {
   const totalCorrect = subjectBanks.reduce((sum, bank) =>
     sum + bank.questions.reduce((s, q) => s + q.stats.correct, 0), 0);
   const accuracy = totalAttempts > 0 ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+  // Analytics data
+  const analytics = useMemo(() => {
+    const allQs = subjectBanks.flatMap(b => b.questions);
+    const mcqCount = allQs.filter(q => q.type === 'mcq').length;
+    const openCount = allQs.filter(q => q.type === 'open').length;
+    const practiced = allQs.filter(q => q.stats.attempts > 0);
+    const mastered = practiced.filter(q => q.stats.attempts >= 2 && (q.stats.correct / q.stats.attempts) >= 0.8);
+
+    // Bloom performance
+    const bloomNames: Record<number, string> = {
+      1: 'Запомняне', 2: 'Разбиране', 3: 'Приложение',
+      4: 'Анализ', 5: 'Оценяване', 6: 'Създаване'
+    };
+    const bloomStats: { level: number; name: string; attempts: number; correct: number; count: number }[] = [];
+    for (let lvl = 1; lvl <= 6; lvl++) {
+      const qs = allQs.filter(q => q.bloomLevel === lvl);
+      if (qs.length === 0) continue;
+      const att = qs.reduce((s, q) => s + q.stats.attempts, 0);
+      const cor = qs.reduce((s, q) => s + q.stats.correct, 0);
+      bloomStats.push({ level: lvl, name: bloomNames[lvl], attempts: att, correct: cor, count: qs.length });
+    }
+
+    // Weakest topics (top 5)
+    const topicAccuracy: { topicId: string; name: string; attempts: number; correct: number; accuracy: number }[] = [];
+    const topicGroups = new Map<string, { attempts: number; correct: number }>();
+    allQs.forEach(q => {
+      if (!q.linkedTopicIds?.length || q.stats.attempts === 0) return;
+      q.linkedTopicIds.forEach(tid => {
+        const existing = topicGroups.get(tid) || { attempts: 0, correct: 0 };
+        existing.attempts += q.stats.attempts;
+        existing.correct += q.stats.correct;
+        topicGroups.set(tid, existing);
+      });
+    });
+    topicGroups.forEach((val, tid) => {
+      const name = topicNameMap.get(tid);
+      if (!name) return;
+      topicAccuracy.push({
+        topicId: tid,
+        name,
+        attempts: val.attempts,
+        correct: val.correct,
+        accuracy: Math.round((val.correct / val.attempts) * 100)
+      });
+    });
+    const weakestTopics = topicAccuracy.sort((a, b) => a.accuracy - b.accuracy).slice(0, 5);
+
+    // Recent 7-day activity
+    const now = Date.now();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const fourteenDaysAgo = now - 14 * 24 * 60 * 60 * 1000;
+    const recent7 = allQs.filter(q => q.stats.lastAttempt && new Date(q.stats.lastAttempt).getTime() >= sevenDaysAgo);
+    const prev7 = allQs.filter(q => {
+      if (!q.stats.lastAttempt) return false;
+      const t = new Date(q.stats.lastAttempt).getTime();
+      return t >= fourteenDaysAgo && t < sevenDaysAgo;
+    });
+    const recent7Acc = recent7.reduce((s, q) => s + q.stats.attempts, 0) > 0
+      ? Math.round(recent7.reduce((s, q) => s + q.stats.correct, 0) / recent7.reduce((s, q) => s + q.stats.attempts, 0) * 100)
+      : null;
+    const prev7Acc = prev7.reduce((s, q) => s + q.stats.attempts, 0) > 0
+      ? Math.round(prev7.reduce((s, q) => s + q.stats.correct, 0) / prev7.reduce((s, q) => s + q.stats.attempts, 0) * 100)
+      : null;
+
+    return {
+      total: allQs.length, mcqCount, openCount,
+      practiced: practiced.length,
+      mastered: mastered.length,
+      bloomStats, weakestTopics,
+      recent7Count: recent7.length,
+      recent7Acc, prev7Acc,
+      accDelta: recent7Acc !== null && prev7Acc !== null ? recent7Acc - prev7Acc : null
+    };
+  }, [subjectBanks, topicNameMap]);
 
   const handleAutoLink = useCallback(async (bankId: string) => {
     if (!selectedSubject || linkingBankId) return;
@@ -263,36 +338,152 @@ export default function QuestionBankPage() {
                   </div>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-                    <div className="text-3xl font-bold text-purple-400 font-mono">
-                      {totalQuestions}
+                {/* Row 1: Summary Cards */}
+                <div className="grid grid-cols-4 gap-3">
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-purple-400 font-mono">
+                      {analytics.total}
                     </div>
-                    <div className="text-xs text-slate-500 font-mono mt-1">Въпроси</div>
-                  </div>
-                  <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-                    <div className="text-3xl font-bold text-blue-400 font-mono">
-                      {totalAttempts}
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">
+                      {analytics.mcqCount} MCQ / {analytics.openCount} Open
                     </div>
-                    <div className="text-xs text-slate-500 font-mono mt-1">Опити</div>
                   </div>
-                  <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-                    <div className="text-3xl font-bold text-green-400 font-mono">
-                      {totalCorrect}
-                    </div>
-                    <div className="text-xs text-slate-500 font-mono mt-1">Верни</div>
-                  </div>
-                  <div className="bg-slate-800/50 rounded-lg p-4 text-center">
-                    <div className={`text-3xl font-bold font-mono ${
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div className={`text-2xl font-bold font-mono ${
                       accuracy >= 80 ? 'text-green-400' :
-                      accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'
+                      accuracy >= 60 ? 'text-yellow-400' :
+                      totalAttempts > 0 ? 'text-red-400' : 'text-slate-600'
                     }`}>
-                      {accuracy}%
+                      {totalAttempts > 0 ? `${accuracy}%` : '—'}
                     </div>
-                    <div className="text-xs text-slate-500 font-mono mt-1">Точност</div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">Точност</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-cyan-400 font-mono">
+                      {analytics.practiced}/{analytics.total}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">Покритие</div>
+                  </div>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-emerald-400 font-mono">
+                      {analytics.mastered}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-mono mt-1">Mastered (≥80%)</div>
                   </div>
                 </div>
+
+                {/* Row 2: Bloom Performance */}
+                {analytics.bloomStats.length > 0 && (
+                  <div className="mt-4">
+                    <h4 className="text-xs text-slate-500 font-mono uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                      <Target size={12} />
+                      Bloom&apos;s Taxonomy
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {analytics.bloomStats.map(b => {
+                        const acc = b.attempts > 0 ? Math.round((b.correct / b.attempts) * 100) : 0;
+                        const barColor = b.attempts === 0 ? 'bg-slate-700'
+                          : acc >= 80 ? 'bg-green-500' : acc >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+                        return (
+                          <div key={b.level} className="bg-slate-800/30 rounded p-2">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] text-slate-400 font-mono">{b.level}. {b.name}</span>
+                              <span className="text-[10px] text-slate-500 font-mono">{b.count}q</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${barColor}`}
+                                style={{ width: b.attempts > 0 ? `${acc}%` : '0%' }}
+                              />
+                            </div>
+                            <div className="text-right mt-0.5">
+                              <span className={`text-[10px] font-mono font-semibold ${
+                                b.attempts === 0 ? 'text-slate-600' :
+                                acc >= 80 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'
+                              }`}>
+                                {b.attempts > 0 ? `${acc}%` : '—'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Row 3: Weakest Topics + Recent Activity side-by-side */}
+                {(analytics.weakestTopics.length > 0 || analytics.recent7Count > 0) && (
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    {/* Weakest Topics */}
+                    {analytics.weakestTopics.length > 0 && (
+                      <div>
+                        <h4 className="text-xs text-slate-500 font-mono uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Zap size={12} />
+                          Слаби теми
+                        </h4>
+                        <div className="space-y-1.5">
+                          {analytics.weakestTopics.map(t => (
+                            <div key={t.topicId} className="flex items-center gap-2 bg-slate-800/30 rounded p-2">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-slate-300 font-mono truncate">{t.name}</p>
+                              </div>
+                              <span className={`text-xs font-mono font-bold shrink-0 ${
+                                t.accuracy >= 80 ? 'text-green-400' :
+                                t.accuracy >= 60 ? 'text-yellow-400' : 'text-red-400'
+                              }`}>
+                                {t.accuracy}%
+                              </span>
+                              <Link
+                                href={`/question-bank/practice?subject=${selectedSubjectId}&topic=${t.topicId}`}
+                                className="text-[10px] px-1.5 py-0.5 bg-purple-600/30 text-purple-300 rounded font-mono hover:bg-purple-600/50 shrink-0"
+                              >
+                                Drill
+                              </Link>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Recent Activity */}
+                    <div>
+                      <h4 className="text-xs text-slate-500 font-mono uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <BarChart3 size={12} />
+                        Последни 7 дни
+                      </h4>
+                      <div className="bg-slate-800/30 rounded p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400 font-mono">Практикувани:</span>
+                          <span className="text-sm font-bold text-cyan-400 font-mono">{analytics.recent7Count}</span>
+                        </div>
+                        {analytics.recent7Acc !== null && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-slate-400 font-mono">Точност:</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-sm font-bold font-mono ${
+                                analytics.recent7Acc >= 80 ? 'text-green-400' :
+                                analytics.recent7Acc >= 60 ? 'text-yellow-400' : 'text-red-400'
+                              }`}>
+                                {analytics.recent7Acc}%
+                              </span>
+                              {analytics.accDelta !== null && analytics.accDelta !== 0 && (
+                                <span className={`flex items-center text-[10px] font-mono ${
+                                  analytics.accDelta > 0 ? 'text-green-400' : 'text-red-400'
+                                }`}>
+                                  {analytics.accDelta > 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                                  {analytics.accDelta > 0 ? '+' : ''}{analytics.accDelta}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {analytics.recent7Count === 0 && (
+                          <p className="text-xs text-slate-600 font-mono text-center py-2">Няма активност</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Banks List */}

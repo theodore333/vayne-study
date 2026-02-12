@@ -94,6 +94,10 @@ export default function ImportQuestionsModal({
   const [fileParts, setFileParts] = useState<File[]>([]);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
+  // Paste text mode
+  const [isPasteMode, setIsPasteMode] = useState(false);
+  const [pastedText, setPastedText] = useState('');
+
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -187,8 +191,8 @@ export default function ImportQuestionsModal({
   };
 
   const handleExtract = async () => {
-    // Check if we have files to process
-    const hasFiles = isMultiPart ? fileParts.length > 0 : file !== null;
+    // Check if we have input to process
+    const hasFiles = isPasteMode ? pastedText.trim().length > 50 : (isMultiPart ? fileParts.length > 0 : file !== null);
     if (!hasFiles || !apiKey) return;
 
     setIsProcessing(true);
@@ -196,6 +200,50 @@ export default function ImportQuestionsModal({
     setRawResponse(null);
 
     try {
+      // Paste mode: send text as a .txt file blob
+      if (isPasteMode && pastedText.trim()) {
+        const textBlob = new Blob([pastedText], { type: 'text/plain' });
+        const textFile = new File([textBlob], 'pasted-text.txt', { type: 'text/plain' });
+
+        const formData = new FormData();
+        formData.append('file', textFile);
+        formData.append('apiKey', apiKey);
+        formData.append('subjectName', subjectName);
+        formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
+        formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
+        formData.append('rawText', pastedText); // Send raw text directly
+
+        const response = await fetchWithTimeout('/api/extract-questions', {
+          method: 'POST',
+          body: formData,
+          timeout: 180000
+        });
+
+        const responseText = await response.text();
+        let result;
+        try {
+          result = JSON.parse(responseText);
+        } catch {
+          setError('Сървърът върна невалиден отговор');
+          setRawResponse(responseText.substring(0, 1000));
+          return;
+        }
+
+        if (!response.ok) {
+          setError(result.error || 'Грешка при извличане');
+          if (result.raw) setRawResponse(result.raw);
+          return;
+        }
+
+        setExtractedQuestions(result.questions);
+        setExtractedCases(result.cases || []);
+        detectDuplicates(result.questions);
+        if (result.wasRepaired) setWasRepaired(true);
+        if (result.wasChunked) { setWasChunked(true); setNumChunks(result.numChunks || 0); }
+        if (result.usage) incrementApiCalls(result.usage.cost);
+        return;
+      }
+
       // Multi-part: process each file separately and combine results
       if (isMultiPart && fileParts.length > 0) {
         const allQuestions: ExtractedQuestion[] = [];
@@ -533,7 +581,7 @@ export default function ImportQuestionsModal({
         <div className="flex items-center justify-between p-4 border-b border-slate-800">
           <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2 font-mono">
             <Sparkles size={20} className="text-purple-400" />
-            Импорт на въпроси от PDF
+            Импорт на въпроси
           </h2>
           <button
             onClick={() => {
@@ -566,31 +614,54 @@ export default function ImportQuestionsModal({
             />
           </div>
 
-          {/* Multi-part toggle */}
-          <label className="flex items-center gap-3 p-3 bg-slate-800/30 rounded-lg cursor-pointer hover:bg-slate-800/50 transition-colors">
-            <input
-              type="checkbox"
-              checked={isMultiPart}
-              onChange={(e) => {
-                setIsMultiPart(e.target.checked);
-                setFile(null);
-                setFileParts([]);
-                setExtractedQuestions(null);
-                setError(null);
-              }}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-purple-500 focus:ring-purple-500"
-            />
-            <div className="flex items-center gap-2">
-              <Files size={18} className="text-purple-400" />
-              <span className="text-sm text-slate-300 font-mono">Файлът е разделен на части</span>
-            </div>
-            <span className="text-xs text-slate-500 font-mono ml-auto">
-              (въпроси + отговори в отделни файлове)
-            </span>
-          </label>
+          {/* Input mode selector */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => { setIsPasteMode(false); setIsMultiPart(false); setExtractedQuestions(null); setError(null); }}
+              className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
+                !isPasteMode && !isMultiPart ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
+              }`}
+            >
+              <Upload size={16} />
+              Файл
+            </button>
+            <button
+              onClick={() => { setIsPasteMode(false); setIsMultiPart(true); setFile(null); setExtractedQuestions(null); setError(null); }}
+              className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
+                isMultiPart ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
+              }`}
+            >
+              <Files size={16} />
+              Много файлове
+            </button>
+            <button
+              onClick={() => { setIsPasteMode(true); setIsMultiPart(false); setFile(null); setFileParts([]); setExtractedQuestions(null); setError(null); }}
+              className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
+                isPasteMode ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
+              }`}
+            >
+              <FileText size={16} />
+              Постави текст
+            </button>
+          </div>
 
-          {/* File Upload - Single or Multi */}
-          {!isMultiPart ? (
+          {/* Input area based on mode */}
+          {isPasteMode ? (
+            /* Paste text mode */
+            <div className="space-y-2">
+              <textarea
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                placeholder="Копирай и постави въпросите тук...&#10;&#10;1. Какво е фармакопея?&#10;Отговор: Фармакопеята е сборник от стандарти...&#10;&#10;2. Кой от следните е...&#10;А. ...&#10;Б. ..."
+                className="w-full h-48 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-purple-500 font-mono text-sm resize-y"
+              />
+              {pastedText.length > 0 && (
+                <p className="text-xs text-slate-500 font-mono">
+                  {pastedText.length} символа • ~{Math.ceil(pastedText.length / 8000)} част{Math.ceil(pastedText.length / 8000) > 1 ? 'и' : ''}
+                </p>
+              )}
+            </div>
+          ) : !isMultiPart ? (
             /* Single file upload */
             <div
               onClick={() => fileInputRef.current?.click()}
@@ -759,14 +830,15 @@ export default function ImportQuestionsModal({
             <button
               onClick={handleExtract}
               disabled={
-                (!isMultiPart && !file) ||
-                (isMultiPart && fileParts.length === 0) ||
+                (isPasteMode && pastedText.trim().length < 50) ||
+                (!isPasteMode && !isMultiPart && !file) ||
+                (!isPasteMode && isMultiPart && fileParts.length === 0) ||
                 !bankName.trim()
               }
               className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-lg hover:from-purple-500 hover:to-pink-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               <Sparkles size={18} />
-              {isMultiPart ? `Обработи ${fileParts.length} части последователно` : 'Извлечи въпроси'}
+              {isPasteMode ? 'Извлечи от текст' : isMultiPart ? `Обработи ${fileParts.length} части последователно` : 'Извлечи въпроси'}
             </button>
           )}
 

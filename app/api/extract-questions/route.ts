@@ -313,10 +313,19 @@ export async function POST(request: Request) {
     const topicNames = formData.get('topicNames') as string;
     const topicIdsRaw = formData.get('topicIds') as string;
 
-    console.log('[EXTRACT-Q] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type);
+    const rawText = formData.get('rawText') as string | null;
 
-    if (!file || !apiKey) {
-      return new Response(JSON.stringify({ error: 'Missing file or API key' }), {
+    console.log('[EXTRACT-Q] File:', file?.name, 'Size:', file?.size, 'Type:', file?.type, 'Has rawText:', !!rawText);
+
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Missing API key' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!file && !rawText) {
+      return new Response(JSON.stringify({ error: 'Missing file or text' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
@@ -324,14 +333,6 @@ export async function POST(request: Request) {
 
     console.log('[EXTRACT-Q] Creating Anthropic client...');
     const anthropic = new Anthropic({ apiKey });
-
-    console.log('[EXTRACT-Q] Reading file buffer...');
-    const fileBuffer = await file.arrayBuffer();
-    const buffer = Buffer.from(fileBuffer);
-    const base64 = buffer.toString('base64');
-    console.log('[EXTRACT-Q] Base64 size:', Math.round(base64.length / 1024), 'KB');
-
-    const isPDF = file.type === 'application/pdf';
 
     // Parse topic names and IDs
     let topics: string[] = [];
@@ -344,11 +345,90 @@ export async function POST(request: Request) {
       topicIds = [];
     }
 
+    // Handle raw pasted text — process directly, no file parsing needed
+    if (rawText && rawText.trim().length > 50) {
+      console.log('[EXTRACT-Q] Processing RAW TEXT, length:', rawText.length);
+
+      // Chunk if needed (same as DOCX chunking)
+      const CHARS_PER_CHUNK = 8000;
+
+      if (rawText.length > CHARS_PER_CHUNK * 1.5) {
+        const paragraphs = rawText.split(/\n\n+/);
+        const chunks: string[] = [];
+        let currentChunk = '';
+
+        for (const para of paragraphs) {
+          if (currentChunk.length + para.length > CHARS_PER_CHUNK && currentChunk.length > 0) {
+            chunks.push(currentChunk.trim());
+            currentChunk = para;
+          } else {
+            currentChunk += (currentChunk ? '\n\n' : '') + para;
+          }
+        }
+        if (currentChunk.trim()) chunks.push(currentChunk.trim());
+
+        console.log(`[EXTRACT-Q] Raw text chunked into ${chunks.length} parts`);
+
+        const allQuestions: ExtractedQuestion[] = [];
+        const allCases: ExtractedCase[] = [];
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+
+        for (let i = 0; i < chunks.length; i++) {
+          const chunkResult = await extractQuestionsFromText(
+            anthropic, chunks[i], subjectName, topics,
+            `текст, част ${i + 1}/${chunks.length}`
+          );
+          allQuestions.push(...(chunkResult.questions || []));
+          allCases.push(...(chunkResult.cases || []));
+          totalInputTokens += chunkResult.inputTokens;
+          totalOutputTokens += chunkResult.outputTokens;
+        }
+
+        const questions = allQuestions.map((q) => ({
+          type: q.type || 'mcq', text: q.text || '', options: q.options || null,
+          correctAnswer: q.correctAnswer || '', explanation: q.explanation || '',
+          linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1] ? [topicIds[q.linkedTopicIndex - 1]] : [],
+          bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+          caseId: q.caseId || null, stats: { attempts: 0, correct: 0 }
+        }));
+
+        const cost = (totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000;
+        return new Response(JSON.stringify({
+          questions, cases: allCases, wasChunked: true, numChunks: chunks.length,
+          usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens, cost: Math.round(cost * 1000000) / 1000000 }
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+
+      // Short text — single call
+      const extractionResult = await extractQuestionsFromText(anthropic, rawText, subjectName, topics, 'поставен текст');
+      const questions = (extractionResult.questions || []).map((q) => ({
+        type: q.type || 'mcq', text: q.text || '', options: q.options || null,
+        correctAnswer: q.correctAnswer || '', explanation: q.explanation || '',
+        linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1] ? [topicIds[q.linkedTopicIndex - 1]] : [],
+        bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+        caseId: q.caseId || null, stats: { attempts: 0, correct: 0 }
+      }));
+      const cost = (extractionResult.inputTokens * 3 + extractionResult.outputTokens * 15) / 1_000_000;
+      return new Response(JSON.stringify({
+        questions, cases: extractionResult.cases || [],
+        usage: { inputTokens: extractionResult.inputTokens, outputTokens: extractionResult.outputTokens, cost: Math.round(cost * 1000000) / 1000000 }
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    console.log('[EXTRACT-Q] Reading file buffer...');
+    const fileBuffer = await file!.arrayBuffer();
+    const buffer = Buffer.from(fileBuffer);
+    const base64 = buffer.toString('base64');
+    console.log('[EXTRACT-Q] Base64 size:', Math.round(base64.length / 1024), 'KB');
+
+    const isPDF = file!.type === 'application/pdf';
+
     // Check for DOCX files
-    const isDOCX = file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                   file.type === 'application/msword' ||
-                   file.name.endsWith('.docx') ||
-                   file.name.endsWith('.doc');
+    const isDOCX = file!.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                   file!.type === 'application/msword' ||
+                   file!.name.endsWith('.docx') ||
+                   file!.name.endsWith('.doc');
 
     // Handle DOCX files - extract as HTML to preserve structure, then process with Claude
     if (isDOCX) {
@@ -399,7 +479,85 @@ export async function POST(request: Request) {
           }), { status: 400, headers: { 'Content-Type': 'application/json' } });
         }
 
-        // Use the text extraction function (same as chunked PDF)
+        // Chunk DOCX text for large documents (same approach as PDF chunking)
+        // ~8000 chars per chunk ≈ ~2000 tokens input, leaving room for output
+        const CHARS_PER_CHUNK = 8000;
+
+        if (docxText.length > CHARS_PER_CHUNK * 1.5) {
+          // Split into chunks at paragraph boundaries
+          const paragraphs = docxText.split(/\n\n+/);
+          const chunks: string[] = [];
+          let currentChunk = '';
+
+          for (const para of paragraphs) {
+            if (currentChunk.length + para.length > CHARS_PER_CHUNK && currentChunk.length > 0) {
+              chunks.push(currentChunk.trim());
+              currentChunk = para;
+            } else {
+              currentChunk += (currentChunk ? '\n\n' : '') + para;
+            }
+          }
+          if (currentChunk.trim()) chunks.push(currentChunk.trim());
+
+          console.log(`[EXTRACT-Q] DOCX chunked into ${chunks.length} parts (${docxText.length} chars total)`);
+
+          const allQuestions: ExtractedQuestion[] = [];
+          const allCases: ExtractedCase[] = [];
+          let totalInputTokens = 0;
+          let totalOutputTokens = 0;
+
+          for (let i = 0; i < chunks.length; i++) {
+            console.log(`[EXTRACT-Q] Processing DOCX chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)`);
+            const chunkResult = await extractQuestionsFromText(
+              anthropic,
+              chunks[i],
+              subjectName,
+              topics,
+              `Word документ: ${file.name}, част ${i + 1}/${chunks.length}`
+            );
+            allQuestions.push(...(chunkResult.questions || []));
+            allCases.push(...(chunkResult.cases || []));
+            totalInputTokens += chunkResult.inputTokens;
+            totalOutputTokens += chunkResult.outputTokens;
+            console.log(`[EXTRACT-Q] Chunk ${i + 1}: ${chunkResult.questions?.length || 0} questions`);
+          }
+
+          const questions = allQuestions.map((q) => ({
+            type: q.type || 'mcq',
+            text: q.text || '',
+            options: q.options || null,
+            correctAnswer: q.correctAnswer || '',
+            explanation: q.explanation || '',
+            linkedTopicIds: q.linkedTopicIndex && topicIds[q.linkedTopicIndex - 1]
+              ? [topicIds[q.linkedTopicIndex - 1]]
+              : [],
+            bloomLevel: (typeof q.bloomLevel === 'number' && q.bloomLevel >= 1 && q.bloomLevel <= 6) ? q.bloomLevel : undefined,
+            caseId: q.caseId || null,
+            stats: { attempts: 0, correct: 0 }
+          }));
+
+          const cost = (totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000;
+
+          console.log(`[EXTRACT-Q] DOCX chunked extraction complete: ${questions.length} total questions from ${chunks.length} chunks`);
+
+          return new Response(JSON.stringify({
+            questions,
+            cases: allCases,
+            wasDocx: true,
+            wasChunked: true,
+            numChunks: chunks.length,
+            usage: {
+              inputTokens: totalInputTokens,
+              outputTokens: totalOutputTokens,
+              cost: Math.round(cost * 1000000) / 1000000
+            }
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        // Small document - single API call
         const extractionResult = await extractQuestionsFromText(
           anthropic,
           docxText,

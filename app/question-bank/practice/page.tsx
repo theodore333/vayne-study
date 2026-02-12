@@ -53,16 +53,20 @@ function PracticeContent() {
 
   const subjectId = searchParams.get('subject');
   const bankId = searchParams.get('bank');
+  const topicId = searchParams.get('topic');
 
   // Get subject and questions
   const subject = data.subjects.find(s => s.id === subjectId);
   const banks = (data.questionBanks || []).filter(b =>
     bankId ? b.id === bankId : b.subjectId === subjectId
   );
-  const allQuestions = useMemo(() =>
-    banks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id }))),
-    [banks]
-  );
+  const allQuestions = useMemo(() => {
+    let qs = banks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id })));
+    if (topicId) {
+      qs = qs.filter(q => q.linkedTopicIds?.includes(topicId));
+    }
+    return qs;
+  }, [banks, topicId]);
 
   // Mode selection state
   const [mode, setMode] = useState<PracticeMode | null>(null);

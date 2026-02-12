@@ -17,11 +17,11 @@ export async function POST(request: Request) {
 
     // Build prompt
     const existingList = existingQuestions
-      .map((q: string, i: number) => `E${i + 1}: ${q}`)
+      .map((q: string, i: number) => `E${i}: ${q}`)
       .join('\n');
 
     const newList = newQuestions
-      .map((q: string, i: number) => `N${i + 1}: ${q}`)
+      .map((q: string, i: number) => `N${i}: ${q}`)
       .join('\n');
 
     const response = await client.messages.create({
@@ -31,13 +31,13 @@ export async function POST(request: Request) {
         role: 'user',
         content: `You are a duplicate question detector. Compare each NEW question against the EXISTING questions and identify semantic duplicates — questions that ask essentially the same thing even if worded differently.
 
-EXISTING QUESTIONS:
+EXISTING QUESTIONS (labeled E0, E1, ...):
 ${existingList}
 
-NEW QUESTIONS:
+NEW QUESTIONS (labeled N0, N1, ...):
 ${newList}
 
-Return ONLY a JSON array of indices (0-based) of NEW questions that are semantic duplicates of any existing question. If no duplicates, return [].
+Return ONLY a JSON array of the 0-based indices of NEW questions that are semantic duplicates. The index matches the number after N (N0=0, N1=1, etc). If no duplicates, return [].
 
 Example: [0, 3, 5]
 

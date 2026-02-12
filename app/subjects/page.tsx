@@ -1121,14 +1121,25 @@ function SubjectsContent() {
                                     onChange={(e) => setEditingTopicName(e.target.value)}
                                     onBlur={() => {
                                       if (editingTopicName.trim() && editingTopicName !== topic.name) {
-                                        updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                        // Parse "17. Topic name" → number: 17, name: "Topic name"
+                                        const numMatch = editingTopicName.trim().match(/^(\d+)[\.\)\-\s]+(.+)$/);
+                                        if (numMatch) {
+                                          updateTopic(selectedSubjectId!, topic.id, { name: numMatch[2].trim(), number: parseInt(numMatch[1], 10) });
+                                        } else {
+                                          updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                        }
                                       }
                                       setEditingTopicId(null);
                                     }}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') {
                                         if (editingTopicName.trim() && editingTopicName !== topic.name) {
-                                          updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                          const numMatch = editingTopicName.trim().match(/^(\d+)[\.\)\-\s]+(.+)$/);
+                                          if (numMatch) {
+                                            updateTopic(selectedSubjectId!, topic.id, { name: numMatch[2].trim(), number: parseInt(numMatch[1], 10) });
+                                          } else {
+                                            updateTopic(selectedSubjectId!, topic.id, { name: editingTopicName.trim() });
+                                          }
                                         }
                                         setEditingTopicId(null);
                                       } else if (e.key === 'Escape') {

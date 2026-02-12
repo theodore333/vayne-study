@@ -203,8 +203,10 @@ export default function ImportQuestionsModal({
   const [fileParts, setFileParts] = useState<File[]>([]);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
-  // Paste text mode
-  const [isPasteMode, setIsPasteMode] = useState(false);
+  // Paste text mode — remember preference
+  const [isPasteMode, setIsPasteMode] = useState(() => {
+    try { return localStorage.getItem('import-mode') === 'paste'; } catch { return false; }
+  });
   const [pastedText, setPastedText] = useState('');
 
   // Close on Escape key
@@ -219,6 +221,8 @@ export default function ImportQuestionsModal({
   useEffect(() => {
     const stored = localStorage.getItem('claude-api-key');
     setApiKey(stored);
+    // Auto-fill bank name if opening in paste mode
+    if (isPasteMode && !bankName) setBankName(`${subjectName} — въпроси`);
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -744,7 +748,7 @@ export default function ImportQuestionsModal({
           {/* Input mode selector */}
           <div className="flex gap-2">
             <button
-              onClick={() => { setIsPasteMode(false); setIsMultiPart(false); setExtractedQuestions(null); setError(null); }}
+              onClick={() => { setIsPasteMode(false); setIsMultiPart(false); setExtractedQuestions(null); setError(null); localStorage.setItem('import-mode', 'file'); }}
               className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
                 !isPasteMode && !isMultiPart ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
               }`}
@@ -753,7 +757,7 @@ export default function ImportQuestionsModal({
               Файл
             </button>
             <button
-              onClick={() => { setIsPasteMode(false); setIsMultiPart(true); setFile(null); setExtractedQuestions(null); setError(null); }}
+              onClick={() => { setIsPasteMode(false); setIsMultiPart(true); setFile(null); setExtractedQuestions(null); setError(null); localStorage.setItem('import-mode', 'multi'); }}
               className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
                 isMultiPart ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
               }`}
@@ -762,7 +766,7 @@ export default function ImportQuestionsModal({
               Много файлове
             </button>
             <button
-              onClick={() => { setIsPasteMode(true); setIsMultiPart(false); setFile(null); setFileParts([]); setExtractedQuestions(null); setError(null); if (!bankName.trim()) setBankName(`${subjectName} — въпроси`); }}
+              onClick={() => { setIsPasteMode(true); setIsMultiPart(false); setFile(null); setFileParts([]); setExtractedQuestions(null); setError(null); localStorage.setItem('import-mode', 'paste'); if (!bankName.trim()) setBankName(`${subjectName} — въпроси`); }}
               className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
                 isPasteMode ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
               }`}

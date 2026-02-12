@@ -350,18 +350,47 @@ export async function POST(request: Request) {
                    file.name.endsWith('.docx') ||
                    file.name.endsWith('.doc');
 
-    // Handle DOCX files - extract text first, then process with Claude
+    // Handle DOCX files - extract as HTML to preserve structure, then process with Claude
     if (isDOCX) {
       console.log('[EXTRACT-Q] Processing DOCX file...');
       console.log('[EXTRACT-Q] Buffer size:', buffer.length, 'bytes');
       try {
-        // Use Node.js Buffer instead of ArrayBuffer for better compatibility
-        const result = await mammoth.extractRawText({ buffer: buffer });
-        const docxText = result.value;
-        console.log('[EXTRACT-Q] DOCX text extracted, length:', docxText.length);
+        // Use convertToHtml to preserve structure (headings, lists, bold, paragraphs)
+        // extractRawText strips ALL formatting making questions unrecognizable
+        const result = await mammoth.convertToHtml({ buffer: buffer });
+        let docxHtml = result.value;
+        console.log('[EXTRACT-Q] DOCX HTML extracted, length:', docxHtml.length);
         if (result.messages && result.messages.length > 0) {
-          console.log('[EXTRACT-Q] DOCX warnings:', result.messages);
+          console.log('[EXTRACT-Q] DOCX warnings:', result.messages.slice(0, 5));
         }
+
+        // Convert HTML to structured text that preserves formatting
+        // This gives Claude clear structure to identify questions vs answers
+        const docxText = docxHtml
+          .replace(/<h[1-6][^>]*>/gi, '\n\n### ')
+          .replace(/<\/h[1-6]>/gi, '\n')
+          .replace(/<p[^>]*>/gi, '\n')
+          .replace(/<\/p>/gi, '\n')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<li[^>]*>/gi, '\n• ')
+          .replace(/<\/li>/gi, '')
+          .replace(/<ol[^>]*>/gi, '\n')
+          .replace(/<\/ol>/gi, '\n')
+          .replace(/<ul[^>]*>/gi, '\n')
+          .replace(/<\/ul>/gi, '\n')
+          .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+          .replace(/<em[^>]*>(.*?)<\/em>/gi, '_$1_')
+          .replace(/<[^>]+>/g, '') // Strip remaining HTML tags
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/\n{3,}/g, '\n\n') // Collapse excess newlines
+          .trim();
+
+        console.log('[EXTRACT-Q] DOCX structured text length:', docxText.length);
+        console.log('[EXTRACT-Q] First 500 chars:', docxText.substring(0, 500));
 
         if (!docxText || docxText.trim().length < 50) {
           return new Response(JSON.stringify({

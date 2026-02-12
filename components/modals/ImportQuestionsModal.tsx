@@ -40,6 +40,115 @@ interface PDFAnalysisResult {
 
 // ExtractionWarning interface kept for future use with wasRepaired flag
 
+// Local structured text parser — instant, free, no AI needed
+// Handles format: numbered questions with А/Б/В/Г options + "Верен:" + "Обяснение:"
+// and open questions with "Отговор:"
+function parseStructuredQuestions(text: string): ExtractedQuestion[] {
+  const questions: ExtractedQuestion[] = [];
+
+  // Normalize newlines
+  let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+  // Remove section headers (ОТВОРЕНИ:, MCQ:, ТЕМА N: ...)
+  normalized = normalized
+    .replace(/\n\s*ОТВОРЕНИ\s*:\s*/gi, '\n')
+    .replace(/\n\s*MCQ\s*:\s*/gi, '\n')
+    .replace(/\n\s*ТЕМА\s+\d+\s*:[^\n]*\n/gi, '\n');
+
+  // Find question boundaries: lines starting with "number. " (with 1+ spaces)
+  const startRegex = /(?:^|\n)\s*(\d+)\.\s+/g;
+  const starts: { index: number; fullMatch: string }[] = [];
+  let m;
+  while ((m = startRegex.exec(normalized)) !== null) {
+    const idx = m.index === 0 ? 0 : m.index + 1; // skip the leading \n
+    starts.push({ index: idx, fullMatch: m[0] });
+  }
+
+  for (let i = 0; i < starts.length; i++) {
+    const blockStart = starts[i].index;
+    const blockEnd = i + 1 < starts.length ? starts[i + 1].index : normalized.length;
+    let block = normalized.substring(blockStart, blockEnd).trim();
+
+    // Remove leading "number.   "
+    block = block.replace(/^\d+\.\s+/, '');
+    if (block.length < 15) continue;
+
+    // Clean trailing section headers that may have been captured
+    block = block.replace(/\n\s*(ОТВОРЕНИ|MCQ|ТЕМА\s+\d+)\s*:?[^\n]*$/gi, '').trim();
+
+    const hasVerenMarker = /Верен\s*[:=]\s*[АБВГДA-E]/i.test(block);
+    const hasOtgovorMarker = /Отговор\s*:/i.test(block);
+
+    if (hasVerenMarker) {
+      // MCQ question
+      // Find first option (А. Б. В. Г. Д.) — single Cyrillic letter + dot + space
+      const firstOptionMatch = block.match(/(?:^|\s)([АБВГД])\.\s/);
+      if (!firstOptionMatch || firstOptionMatch.index === undefined) continue;
+
+      const questionText = block.substring(0, firstOptionMatch.index).trim();
+
+      // Extract options section (from first option to "Верен:")
+      const verenIdx = block.search(/\s*Верен\s*[:=]/i);
+      if (verenIdx === -1) continue;
+      const optionsSection = block.substring(firstOptionMatch.index, verenIdx).trim();
+
+      // Parse individual options
+      const optRegex = /([АБВГД])\.\s/g;
+      const optPositions: { letter: string; pos: number }[] = [];
+      let om;
+      while ((om = optRegex.exec(optionsSection)) !== null) {
+        optPositions.push({ letter: om[1], pos: om.index });
+      }
+
+      const options: string[] = [];
+      for (let j = 0; j < optPositions.length; j++) {
+        const oStart = optPositions[j].pos;
+        const oEnd = j + 1 < optPositions.length ? optPositions[j + 1].pos : optionsSection.length;
+        options.push(optionsSection.substring(oStart, oEnd).trim());
+      }
+
+      // Correct answer letter
+      const correctMatch = block.match(/Верен\s*[:=]\s*([АБВГД])/i);
+      const correctAnswer = correctMatch ? correctMatch[1] : '';
+
+      // Explanation (everything after "Обяснение:")
+      const explMatch = block.match(/Обяснение:\s*([\s\S]*?)$/);
+      const explanation = explMatch ? explMatch[1].trim() : '';
+
+      if (questionText && options.length >= 2) {
+        questions.push({
+          type: 'mcq',
+          text: questionText,
+          options,
+          correctAnswer,
+          explanation,
+          linkedTopicIds: [],
+          stats: { attempts: 0, correct: 0 }
+        });
+      }
+    } else if (hasOtgovorMarker) {
+      // Open question
+      const answerIdx = block.search(/Отговор\s*:/i);
+      const questionText = block.substring(0, answerIdx).trim();
+      const correctAnswer = block.substring(answerIdx).replace(/^Отговор\s*:\s*/i, '').trim();
+
+      if (questionText && correctAnswer) {
+        questions.push({
+          type: 'open',
+          text: questionText,
+          options: undefined,
+          correctAnswer,
+          explanation: '',
+          linkedTopicIds: [],
+          stats: { attempts: 0, correct: 0 }
+        });
+      }
+    }
+  }
+
+  return questions;
+}
+
 // Normalize text for duplicate comparison
 function normalizeText(text: string): string {
   return text.toLowerCase().trim().replace(/\s+/g, ' ').replace(/[^\p{L}\p{N}\s\-]/gu, '');
@@ -192,26 +301,44 @@ export default function ImportQuestionsModal({
 
   const handleExtract = async () => {
     // Check if we have input to process
-    const hasFiles = isPasteMode ? pastedText.trim().length > 50 : (isMultiPart ? fileParts.length > 0 : file !== null);
-    if (!hasFiles || !apiKey) return;
+    const hasInput = isPasteMode ? pastedText.trim().length > 50 : (isMultiPart ? fileParts.length > 0 : file !== null);
+    if (!hasInput) return;
+    // Paste mode doesn't require API key for local parsing
+    if (!isPasteMode && !apiKey) return;
 
     setIsProcessing(true);
     setError(null);
     setRawResponse(null);
 
     try {
-      // Paste mode: send text as a .txt file blob
+      // Paste mode: try local structured parsing first (instant, free)
       if (isPasteMode && pastedText.trim()) {
-        const textBlob = new Blob([pastedText], { type: 'text/plain' });
-        const textFile = new File([textBlob], 'pasted-text.txt', { type: 'text/plain' });
+        const localQuestions = parseStructuredQuestions(pastedText);
+
+        if (localQuestions.length > 0) {
+          // Local parsing succeeded — no API call needed!
+          setExtractedQuestions(localQuestions);
+          setExtractedCases([]);
+          detectDuplicates(localQuestions);
+          setIsProcessing(false);
+          return;
+        }
+
+        // Local parsing found nothing — fall back to AI extraction
+        if (!apiKey) {
+          setError('Текстът не е в разпознаваем формат и няма API ключ за AI извличане.');
+          setIsProcessing(false);
+          return;
+        }
 
         const formData = new FormData();
-        formData.append('file', textFile);
-        formData.append('apiKey', apiKey);
+        const textBlob = new Blob([pastedText], { type: 'text/plain' });
+        formData.append('file', new File([textBlob], 'pasted-text.txt', { type: 'text/plain' }));
+        formData.append('apiKey', apiKey!);
         formData.append('subjectName', subjectName);
         formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
         formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
-        formData.append('rawText', pastedText); // Send raw text directly
+        formData.append('rawText', pastedText);
 
         const response = await fetchWithTimeout('/api/extract-questions', {
           method: 'POST',
@@ -258,7 +385,7 @@ export default function ImportQuestionsModal({
 
           const formData = new FormData();
           formData.append('file', part);
-          formData.append('apiKey', apiKey);
+          formData.append('apiKey', apiKey!);
           formData.append('subjectName', subjectName);
           formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
           formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));
@@ -315,7 +442,7 @@ export default function ImportQuestionsModal({
       // Single file mode
       const formData = new FormData();
       formData.append('file', file!);
-      formData.append('apiKey', apiKey);
+      formData.append('apiKey', apiKey!);
       formData.append('subjectName', subjectName);
       formData.append('topicNames', JSON.stringify(topics.map(t => t.name)));
       formData.append('topicIds', JSON.stringify(topics.map(t => t.id)));

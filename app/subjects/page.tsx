@@ -1124,6 +1124,8 @@ function SubjectsContent() {
                                       }
                                     }}
                                     onClick={(e) => e.preventDefault()}
+                                    onDragStart={(e) => e.preventDefault()}
+                                    draggable={false}
                                     autoFocus
                                     className="flex-1 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-slate-200 text-sm focus:outline-none focus:border-purple-500"
                                   />

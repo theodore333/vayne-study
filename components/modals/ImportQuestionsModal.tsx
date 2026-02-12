@@ -635,7 +635,7 @@ export default function ImportQuestionsModal({
               Много файлове
             </button>
             <button
-              onClick={() => { setIsPasteMode(true); setIsMultiPart(false); setFile(null); setFileParts([]); setExtractedQuestions(null); setError(null); }}
+              onClick={() => { setIsPasteMode(true); setIsMultiPart(false); setFile(null); setFileParts([]); setExtractedQuestions(null); setError(null); if (!bankName.trim()) setBankName(`${subjectName} — въпроси`); }}
               className={`flex-1 py-2 px-3 rounded-lg font-mono text-sm flex items-center justify-center gap-2 transition-all ${
                 isPasteMode ? 'bg-purple-600/30 border border-purple-500/50 text-purple-200' : 'bg-slate-800/30 border border-slate-700 text-slate-400 hover:bg-slate-800/50'
               }`}

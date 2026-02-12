@@ -41,7 +41,7 @@ interface PDFAnalysisResult {
 // ExtractionWarning interface kept for future use with wasRepaired flag
 
 // Local structured text parser — instant, free, no AI needed
-// Handles format: numbered questions with А/Б/В/Г options + "Верен:" + "Обяснение:"
+// Handles format: numbered OR unnumbered questions with А/Б/В/Г options + "Верен:" + "Обяснение:"
 // and open questions with "Отговор:"
 function parseStructuredQuestions(text: string): ExtractedQuestion[] {
   const questions: ExtractedQuestion[] = [];
@@ -55,7 +55,14 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
     .replace(/(?:^|\n)\s*MCQ\s*:\s*/gi, '\n')
     .replace(/(?:^|\n)\s*ТЕМА\s+\d+\s*:[^\n]*(?:\n|$)/gi, '\n');
 
-  // Find question boundaries using multiple strategies
+  // Support both Cyrillic (АБВГД) and Latin (ABCDE) option letters
+  const optLetters = 'АБВГДABCDE';
+  const optLetterClass = `[${optLetters}]`;
+
+  // --- STEP 1: Split text into question blocks ---
+  let blocks: string[] = [];
+
+  // Method 1 & 2: Look for numbered patterns (e.g. "1. Question text...")
   let starts: number[] = [];
   let m;
 
@@ -66,50 +73,124 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
   }
 
   // Method 2: if few found, text might be all on one line or have no newlines
-  // Split at "number." with 2+ spaces after dot (avoids matching "1. " in sentences)
   if (starts.length <= 2) {
     starts = [];
     const allNumRegex = /\d+\.\s{2,}/g;
     while ((m = allNumRegex.exec(normalized)) !== null) {
-      // Only accept if at start of text, or preceded by whitespace/punctuation
       if (m.index === 0 || /[\s.!?):]/.test(normalized[m.index - 1])) {
         starts.push(m.index);
       }
     }
   }
 
-  for (let i = 0; i < starts.length; i++) {
-    const blockStart = starts[i];
-    const blockEnd = i + 1 < starts.length ? starts[i + 1] : normalized.length;
-    let block = normalized.substring(blockStart, blockEnd).trim();
+  if (starts.length > 0) {
+    // Numbered blocks found — extract by position
+    for (let i = 0; i < starts.length; i++) {
+      const blockStart = starts[i];
+      const blockEnd = i + 1 < starts.length ? starts[i + 1] : normalized.length;
+      let block = normalized.substring(blockStart, blockEnd).trim();
+      block = block.replace(/^\d+\.\s+/, ''); // Remove number prefix
+      block = block.replace(/\n\s*(ОТВОРЕНИ|MCQ|ТЕМА\s+\d+)\s*:?[^\n]*$/gi, '').trim();
+      if (block.length >= 15) blocks.push(block);
+    }
+  } else {
+    // Method 3: No numbers — split on blank lines, merge continuations
+    const rawParts = normalized.split(/\n\s*\n/);
+    const merged: string[] = [];
 
-    // Remove leading "number.   "
-    block = block.replace(/^\d+\.\s+/, '');
-    if (block.length < 15) continue;
+    for (const raw of rawParts) {
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
 
-    // Clean trailing section headers that may have been captured
-    block = block.replace(/\n\s*(ОТВОРЕНИ|MCQ|ТЕМА\s+\d+)\s*:?[^\n]*$/gi, '').trim();
+      // Check if this paragraph is a continuation of the previous question
+      // (starts with option letter, answer marker, or explanation)
+      const firstLine = trimmed.split('\n')[0].trim();
+      const isContinuation =
+        new RegExp(`^${optLetterClass}\\.\\s`, 'i').test(firstLine) ||
+        /^Верен\s*[:=]/i.test(firstLine) ||
+        /^Обяснение\s*:/i.test(firstLine) ||
+        /^Отговор\s*:/i.test(firstLine);
 
-    // Support both Cyrillic (АБВГД) and Latin (ABCDE) option letters
-    const optLetters = 'АБВГДABCDE';
-    const optLetterClass = `[${optLetters}]`;
+      if (isContinuation && merged.length > 0) {
+        merged[merged.length - 1] += '\n' + trimmed;
+      } else {
+        merged.push(trimmed);
+      }
+    }
+
+    // Only keep blocks that have answer markers (Верен: or Отговор:)
+    for (const block of merged) {
+      const hasMarker = new RegExp(`Верен\\s*[:=]\\s*${optLetterClass}`, 'i').test(block) ||
+        /Отговор\s*:/i.test(block);
+      if (hasMarker && block.length >= 15) {
+        blocks.push(block.replace(/\n\s*(ОТВОРЕНИ|MCQ|ТЕМА\s+\d+)\s*:?[^\n]*$/gi, '').trim());
+      }
+    }
+
+    // Fallback: if blank-line splitting found too few blocks but text has many markers,
+    // the text may have no blank lines — split using marker endings instead
+    const totalMarkers = (normalized.match(/Верен\s*[:=]/gi)?.length || 0) +
+      (normalized.match(/Отговор\s*:/gi)?.length || 0);
+
+    if (blocks.length <= 1 && totalMarkers > 1) {
+      blocks = [];
+      // Find each "Обяснение: ..." or "Отговор: ..." line end as block boundary
+      const lines = normalized.split('\n');
+      let currentBlock: string[] = [];
+      let afterAnswer = false;
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Start of a new question: non-empty line after a previous answer/explanation ended
+        if (afterAnswer && trimmed && !(/^Обяснение\s*:/i.test(trimmed))) {
+          // Flush previous block
+          const blockText = currentBlock.join('\n').trim();
+          const hasM = new RegExp(`Верен\\s*[:=]\\s*${optLetterClass}`, 'i').test(blockText) ||
+            /Отговор\s*:/i.test(blockText);
+          if (hasM && blockText.length >= 15) blocks.push(blockText);
+          currentBlock = [];
+          afterAnswer = false;
+        }
+
+        if (trimmed) currentBlock.push(trimmed);
+
+        // Detect end of question block
+        if (/^Обяснение\s*:/i.test(trimmed)) {
+          afterAnswer = true;
+        } else if (/^Отговор\s*:/i.test(trimmed)) {
+          // For open questions, the answer text may continue on the same line
+          // Mark as end-of-block
+          afterAnswer = true;
+        }
+      }
+
+      // Flush last block
+      if (currentBlock.length > 0) {
+        const blockText = currentBlock.join('\n').trim();
+        const hasM = new RegExp(`Верен\\s*[:=]\\s*${optLetterClass}`, 'i').test(blockText) ||
+          /Отговор\s*:/i.test(blockText);
+        if (hasM && blockText.length >= 15) blocks.push(blockText);
+      }
+    }
+  }
+
+  // --- STEP 2: Parse each block into a question ---
+  for (const block of blocks) {
     const hasVerenMarker = new RegExp(`Верен\\s*[:=]\\s*${optLetterClass}`, 'i').test(block);
     const hasOtgovorMarker = /Отговор\s*:/i.test(block);
 
     if (hasVerenMarker) {
       // MCQ question
-      // Find first option letter (А. Б. В. Г. or A. B. C. D.)
       const firstOptionMatch = block.match(new RegExp(`(?:^|\\s)(${optLetterClass})\\.\\s`));
       if (!firstOptionMatch || firstOptionMatch.index === undefined) continue;
 
       const questionText = block.substring(0, firstOptionMatch.index).trim();
 
-      // Extract options section (from first option to "Верен:")
       const verenIdx = block.search(/\s*Верен\s*[:=]/i);
       if (verenIdx === -1) continue;
       const optionsSection = block.substring(firstOptionMatch.index, verenIdx).trim();
 
-      // Parse individual options
       const optRegex = new RegExp(`(${optLetterClass})\\.\\s`, 'g');
       const optPositions: { letter: string; pos: number }[] = [];
       let om;
@@ -124,11 +205,9 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
         options.push(optionsSection.substring(oStart, oEnd).trim());
       }
 
-      // Correct answer letter
       const correctMatch = block.match(new RegExp(`Верен\\s*[:=]\\s*(${optLetterClass})`, 'i'));
       const correctAnswer = correctMatch ? correctMatch[1] : '';
 
-      // Explanation (everything after "Обяснение:")
       const explMatch = block.match(/Обяснение:\s*([\s\S]*?)$/);
       const explanation = explMatch ? explMatch[1].trim() : '';
 

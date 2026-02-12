@@ -275,15 +275,17 @@ function SubjectsContent() {
   // Memoize filtered topics for performance (must be before any early return - React hooks rule)
   const filteredTopics = useMemo(() => {
     if (!selectedSubject) return [];
-    return selectedSubject.topics.filter(topic => {
-      const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
-      const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
-      const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
-      const matchesSearch = searchQuery === '' ||
-        topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        topic.number.toString().includes(searchQuery);
-      return matchesStatus && matchesSize && matchesSection && matchesSearch;
-    });
+    return selectedSubject.topics
+      .filter(topic => {
+        const matchesStatus = statusFilter === 'all' || topic.status === statusFilter;
+        const matchesSize = sizeFilter === 'all' || topic.size === sizeFilter;
+        const matchesSection = sectionFilter === 'all' || topic.section === sectionFilter;
+        const matchesSearch = searchQuery === '' ||
+          topic.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          topic.number.toString().includes(searchQuery);
+        return matchesStatus && matchesSize && matchesSection && matchesSearch;
+      })
+      .sort((a, b) => a.number - b.number);
   }, [selectedSubject, statusFilter, sizeFilter, sectionFilter, searchQuery]);
 
   const sortOptions: { value: SortOption; label: string }[] = [

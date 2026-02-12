@@ -1860,8 +1860,10 @@ export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
   return lines.map((line, index) => {
     const match = line.match(/^(\d+)[\.\)\-\s]+(.+)$/);
     const name = match ? match[2].trim() : line.trim();
+    // Use parsed number if available, otherwise sequential
+    const parsedNumber = match ? parseInt(match[1], 10) : index + 1;
     return {
-      number: index + 1,
+      number: parsedNumber,
       name,
       status: 'gray' as TopicStatus,
       lastReview: null,

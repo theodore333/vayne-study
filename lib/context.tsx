@@ -926,9 +926,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const newTopics = topics.map((t, i) => ({
           ...t,
           id: generateId(),
-          number: existingCount + i + 1
+          // Keep topic's own number if it has one, otherwise append sequentially
+          number: t.number > 0 ? t.number : existingCount + i + 1
         }));
-        return { ...s, topics: [...s.topics, ...newTopics] };
+        // Merge and sort by number so new topics slot into correct position
+        const allTopics = [...s.topics, ...newTopics].sort((a, b) => a.number - b.number);
+        return { ...s, topics: allTopics };
       })
     }));
   }, [updateData]);

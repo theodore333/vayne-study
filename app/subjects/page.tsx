@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore, Copy, FileDown, FileUp, CalendarDays, CloudUpload, Check } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore, Copy, FileDown, FileUp, CalendarDays, CloudUpload, Check, ChevronUp } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -87,12 +87,22 @@ function SubjectsContent() {
   const [ankiConnected, setAnkiConnected] = useState(false);
   const [isExportingAnki, setIsExportingAnki] = useState(false);
 
+  // Scroll to top button
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
   // Track if initial subject selection has been done
   const initialSelectionDone = useRef(false);
 
   // Check Anki connection
   useEffect(() => {
     checkAnkiConnect().then(setAnkiConnected);
+  }, []);
+
+  // Show "scroll to top" button when scrolled down
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const toggleTopicForQuiz = (subjectId: string, topicId: string) => {
@@ -1428,6 +1438,17 @@ function SubjectsContent() {
           confirmText="Изтрий"
           variant="danger"
         />
+      )}
+
+      {/* Scroll to top button */}
+      {showScrollTop && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="fixed bottom-6 right-6 z-40 p-3 bg-slate-800/90 backdrop-blur border border-slate-700 rounded-full shadow-lg hover:bg-slate-700 hover:border-purple-500/50 transition-all text-slate-400 hover:text-purple-300"
+          title="Нагоре"
+        >
+          <ChevronUp size={20} />
+        </button>
       )}
     </div>
   );

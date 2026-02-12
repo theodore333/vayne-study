@@ -1097,7 +1097,13 @@ function SubjectsContent() {
 
                           <Link
                             href={quizSelectMode || bulkEditMode ? '#' : `/subjects/${selectedSubjectId}/topics/${topic.id}`}
+                            draggable={editingTopicId === topic.id ? false : undefined}
+                            onDragStart={editingTopicId === topic.id ? (e) => e.preventDefault() : undefined}
                             onClick={(e) => {
+                              if (editingTopicId === topic.id) {
+                                e.preventDefault();
+                                return;
+                              }
                               if (quizSelectMode) {
                                 e.preventDefault();
                                 if (hasMaterial) toggleTopicForQuiz(selectedSubject.id, topic.id);

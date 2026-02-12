@@ -460,7 +460,12 @@ export default function TopicDetailPage() {
                   onChange={(e) => setEditNameValue(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && editNameValue.trim()) {
-                      updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      const numMatch = editNameValue.trim().match(/^(\d+)[\.\)\-\s]+(.+)$/);
+                      if (numMatch) {
+                        updateTopic(subjectId, topicId, { name: numMatch[2].trim(), number: parseInt(numMatch[1], 10) });
+                      } else {
+                        updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      }
                       setIsEditingName(false);
                     }
                     if (e.key === 'Escape') {
@@ -474,7 +479,12 @@ export default function TopicDetailPage() {
                 <button
                   onClick={() => {
                     if (editNameValue.trim()) {
-                      updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      const numMatch = editNameValue.trim().match(/^(\d+)[\.\)\-\s]+(.+)$/);
+                      if (numMatch) {
+                        updateTopic(subjectId, topicId, { name: numMatch[2].trim(), number: parseInt(numMatch[1], 10) });
+                      } else {
+                        updateTopic(subjectId, topicId, { name: editNameValue.trim() });
+                      }
                       setIsEditingName(false);
                     }
                   }}

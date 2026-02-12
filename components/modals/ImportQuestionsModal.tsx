@@ -49,24 +49,38 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
   // Normalize newlines
   let normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Remove section headers (ОТВОРЕНИ:, MCQ:, ТЕМА N: ...)
+  // Remove section headers (ОТВОРЕНИ:, MCQ:, ТЕМА N: ...) — including at start of text
   normalized = normalized
-    .replace(/\n\s*ОТВОРЕНИ\s*:\s*/gi, '\n')
-    .replace(/\n\s*MCQ\s*:\s*/gi, '\n')
-    .replace(/\n\s*ТЕМА\s+\d+\s*:[^\n]*\n/gi, '\n');
+    .replace(/(?:^|\n)\s*ОТВОРЕНИ\s*:\s*/gi, '\n')
+    .replace(/(?:^|\n)\s*MCQ\s*:\s*/gi, '\n')
+    .replace(/(?:^|\n)\s*ТЕМА\s+\d+\s*:[^\n]*(?:\n|$)/gi, '\n');
 
-  // Find question boundaries: lines starting with "number. " (with 1+ spaces)
-  const startRegex = /(?:^|\n)\s*(\d+)\.\s+/g;
-  const starts: { index: number; fullMatch: string }[] = [];
+  // Find question boundaries using multiple strategies
+  let starts: number[] = [];
   let m;
-  while ((m = startRegex.exec(normalized)) !== null) {
-    const idx = m.index === 0 ? 0 : m.index + 1; // skip the leading \n
-    starts.push({ index: idx, fullMatch: m[0] });
+
+  // Method 1: newline + number.spaces (standard multi-line format)
+  const nlRegex = /(?:^|\n)\s*\d+\.\s+/g;
+  while ((m = nlRegex.exec(normalized)) !== null) {
+    starts.push(m.index === 0 ? 0 : m.index + 1);
+  }
+
+  // Method 2: if few found, text might be all on one line or have no newlines
+  // Split at "number." with 2+ spaces after dot (avoids matching "1. " in sentences)
+  if (starts.length <= 2) {
+    starts = [];
+    const allNumRegex = /\d+\.\s{2,}/g;
+    while ((m = allNumRegex.exec(normalized)) !== null) {
+      // Only accept if at start of text, or preceded by whitespace/punctuation
+      if (m.index === 0 || /[\s.!?):]/.test(normalized[m.index - 1])) {
+        starts.push(m.index);
+      }
+    }
   }
 
   for (let i = 0; i < starts.length; i++) {
-    const blockStart = starts[i].index;
-    const blockEnd = i + 1 < starts.length ? starts[i + 1].index : normalized.length;
+    const blockStart = starts[i];
+    const blockEnd = i + 1 < starts.length ? starts[i + 1] : normalized.length;
     let block = normalized.substring(blockStart, blockEnd).trim();
 
     // Remove leading "number.   "
@@ -76,13 +90,16 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
     // Clean trailing section headers that may have been captured
     block = block.replace(/\n\s*(ОТВОРЕНИ|MCQ|ТЕМА\s+\d+)\s*:?[^\n]*$/gi, '').trim();
 
-    const hasVerenMarker = /Верен\s*[:=]\s*[АБВГДA-E]/i.test(block);
+    // Support both Cyrillic (АБВГД) and Latin (ABCDE) option letters
+    const optLetters = 'АБВГДABCDE';
+    const optLetterClass = `[${optLetters}]`;
+    const hasVerenMarker = new RegExp(`Верен\\s*[:=]\\s*${optLetterClass}`, 'i').test(block);
     const hasOtgovorMarker = /Отговор\s*:/i.test(block);
 
     if (hasVerenMarker) {
       // MCQ question
-      // Find first option (А. Б. В. Г. Д.) — single Cyrillic letter + dot + space
-      const firstOptionMatch = block.match(/(?:^|\s)([АБВГД])\.\s/);
+      // Find first option letter (А. Б. В. Г. or A. B. C. D.)
+      const firstOptionMatch = block.match(new RegExp(`(?:^|\\s)(${optLetterClass})\\.\\s`));
       if (!firstOptionMatch || firstOptionMatch.index === undefined) continue;
 
       const questionText = block.substring(0, firstOptionMatch.index).trim();
@@ -93,7 +110,7 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
       const optionsSection = block.substring(firstOptionMatch.index, verenIdx).trim();
 
       // Parse individual options
-      const optRegex = /([АБВГД])\.\s/g;
+      const optRegex = new RegExp(`(${optLetterClass})\\.\\s`, 'g');
       const optPositions: { letter: string; pos: number }[] = [];
       let om;
       while ((om = optRegex.exec(optionsSection)) !== null) {
@@ -108,7 +125,7 @@ function parseStructuredQuestions(text: string): ExtractedQuestion[] {
       }
 
       // Correct answer letter
-      const correctMatch = block.match(/Верен\s*[:=]\s*([АБВГД])/i);
+      const correctMatch = block.match(new RegExp(`Верен\\s*[:=]\\s*(${optLetterClass})`, 'i'));
       const correctAnswer = correctMatch ? correctMatch[1] : '';
 
       // Explanation (everything after "Обяснение:")
@@ -321,6 +338,7 @@ export default function ImportQuestionsModal({
 
         if (localQuestions.length > 0) {
           // Local parsing succeeded — no API call needed!
+          console.log(`[IMPORT] Local parser found ${localQuestions.length} questions (no AI needed)`)
           setExtractedQuestions(localQuestions);
           setExtractedCases([]);
           detectDuplicates(localQuestions);
@@ -329,6 +347,8 @@ export default function ImportQuestionsModal({
         }
 
         // Local parsing found nothing — fall back to AI extraction
+        console.log('[IMPORT] Local parser found 0 questions, falling back to AI...');
+        setProcessingStatus('Парсерът не разпозна формата, пробвам с AI...');
         if (!apiKey) {
           setError('Текстът не е в разпознаваем формат и няма API ключ за AI извличане.');
           setIsProcessing(false);

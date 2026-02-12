@@ -239,18 +239,23 @@ ${topicListForPrompt}
 
 === ТИПОВЕ ВЪПРОСИ ===
 
-MCQ (type: "mcq") - въпрос с готови отговори:
+1. MCQ (type: "mcq") - въпрос с готови отговори (А/Б/В/Г):
 ФОРМАТ А: Въпрос + буквени отговори → text=въпрос, options=отговори
 ФОРМАТ Б: Твърдения (1.2.3.) + комбинации (А.1,2,3) → text=въпрос+твърдения, options=комбинации
 
-ОТВОРЕН (type: "open") - въпрос без готови отговори:
-- Въпроси като "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте..."
-- correctAnswer = кратък модерен отговор (2-4 изречения)
-- options = НЕ се попълва (null)
+2. ОТВОРЕН (type: "open") - въпрос БЕЗ готови буквени отговори:
+- Въпроси с "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте...", "Каква е разликата..."
+- ВКЛЮЧВА и въпроси с предоставен отговор след тях (напр. "Отговор: ...", "Р: ...")
+- text = САМО въпросът (без отговора)
+- correctAnswer = отговорът от текста (или кратък модерен отговор ако няма)
+- options = null (НЯМА опции)
+
+ВАЖНО: Номерирани въпроси (1. 2. 3.) последвани от "Отговор:" са ОТВОРЕНИ въпроси — извлечи ги!
+Ако текстът съдържа едновременно MCQ тестове И отворени въпроси с отговори, извлечи И ДВАТА типа.
 
 JSON: {"questions": [
   {"type": "mcq", "text": "...", "options": ["А...", "Б..."], "correctAnswer": "А", "explanation": "...", "linkedTopicIndex": null, "bloomLevel": 1},
-  {"type": "open", "text": "...", "options": null, "correctAnswer": "Кратък отговор...", "explanation": null, "linkedTopicIndex": null, "bloomLevel": 4}
+  {"type": "open", "text": "Какво представлява X и каква е разликата с Y?", "options": null, "correctAnswer": "X е ... За разлика от Y, ...", "explanation": null, "linkedTopicIndex": null, "bloomLevel": 2}
 ]}
 
 bloomLevel = 1-6 по Bloom's taxonomy (1=Remember, 2=Understand, 3=Apply, 4=Analyze, 5=Evaluate, 6=Create).
@@ -389,7 +394,7 @@ export async function POST(request: Request) {
           stats: { attempts: 0, correct: 0 }
         }));
 
-        const cost = (extractionResult.inputTokens * 0.003 + extractionResult.outputTokens * 0.015) / 1000000;
+        const cost = (extractionResult.inputTokens * 3 + extractionResult.outputTokens * 15) / 1_000_000;
 
         if (isDev) console.log(`[EXTRACT-Q] DOCX extraction complete: ${questions.length} questions`);
 
@@ -498,7 +503,7 @@ export async function POST(request: Request) {
           stats: { attempts: 0, correct: 0 }
         }));
 
-        const cost = (totalInputTokens * 0.003 + totalOutputTokens * 0.015) / 1000000;
+        const cost = (totalInputTokens * 3 + totalOutputTokens * 15) / 1_000_000;
 
         if (isDev) console.log(`[EXTRACT-Q] CHUNKED extraction complete: ${questions.length} total questions from ${numChunks} chunks`);
 
@@ -568,7 +573,7 @@ export async function POST(request: Request) {
 
 === ТИПОВЕ ВЪПРОСИ ===
 
-1. MCQ (type: "mcq") - въпрос с готови отговори:
+1. MCQ (type: "mcq") - въпрос с готови буквени отговори (А/Б/В/Г):
 
 ФОРМАТ А - Стандартен MCQ:
 - Въпрос + буквени отговори (А/Б/В/Г или A/B/C/D)
@@ -579,16 +584,21 @@ export async function POST(request: Request) {
 - Буквени отговори = комбинации (А.1,2,3 / Б.Всички / В.Никои)
 - "text" = въпросът + ВСИЧКИ твърдения, "options" = САМО буквените комбинации
 
-2. ОТВОРЕН (type: "open") - въпрос без готови отговори:
-- "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте..."
-- correctAnswer = кратък модерен отговор (2-4 изречения)
+2. ОТВОРЕН (type: "open") - въпрос БЕЗ готови буквени отговори:
+- "Опишете...", "Какво е...", "Обяснете...", "Избройте...", "Дефинирайте...", "Каква е разликата..."
+- ВКЛЮЧВА и въпроси с предоставен отговор ("Отговор: ...", "Р: ...")
+- text = САМО въпросът (без отговора)
+- correctAnswer = отговорът от текста (или кратък модерен отговор ако няма)
 - options = null (НЯМА опции)
+
+ВАЖНО: Номерирани въпроси (1. 2. 3.) последвани от "Отговор:" са ОТВОРЕНИ въпроси — извлечи ги!
+Ако документът съдържа едновременно MCQ тестове И отворени въпроси с отговори, извлечи И ДВАТА типа.
 
 ПРИМЕР MCQ:
 "Коя е столицата?" → {"type": "mcq", "text": "Коя е столицата?", "options": ["А. Варна", "Б. София"], "correctAnswer": "Б", "explanation": "...", "linkedTopicIndex": null}
 
-ПРИМЕР OPEN:
-"Дефинирайте хомеостаза." → {"type": "open", "text": "Дефинирайте хомеостаза.", "options": null, "correctAnswer": "Хомеостазата е способността на организма да поддържа стабилна вътрешна среда чрез регулаторни механизми.", "explanation": null, "linkedTopicIndex": null}
+ПРИМЕР OPEN (с отговор в текста):
+"3. Какво представлява фармакопеята? Отговор: Фармакопеята е сборник от стандарти..." → {"type": "open", "text": "Какво представлява фармакопеята?", "options": null, "correctAnswer": "Фармакопеята е сборник от стандарти...", "explanation": null, "linkedTopicIndex": null}
 ${topicListForPrompt}
 
 === JSON ФОРМАТ ===
@@ -606,12 +616,12 @@ ${topicListForPrompt}
     },
     {
       "type": "open",
-      "text": "Дефинирайте...",
+      "text": "Какво представлява X и каква е разликата с Y?",
       "options": null,
-      "correctAnswer": "Кратък модерен отговор (2-4 изречения)",
+      "correctAnswer": "X е ... За разлика от Y, ...",
       "explanation": null,
       "linkedTopicIndex": 3,
-      "bloomLevel": 4
+      "bloomLevel": 2
     }
   ]
 }
@@ -729,7 +739,7 @@ ${topicListForPrompt}
     }));
 
     // Sonnet pricing: $3/1M input, $15/1M output
-    const cost = (inputTokens * 0.003 + outputTokens * 0.015) / 1000000;
+    const cost = (inputTokens * 3 + outputTokens * 15) / 1_000_000;
 
     return new Response(JSON.stringify({
       questions,

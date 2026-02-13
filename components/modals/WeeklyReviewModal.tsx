@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { X, TrendingUp, TrendingDown, Calendar, AlertTriangle, CheckCircle2, Brain, Sparkles, Minus, Plus } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { WeeklyReviewData } from '@/lib/types';
-import { getDaysSince } from '@/lib/algorithms';
+import { getDaysSince, getTodayString, toLocalDateStr } from '@/lib/algorithms';
 import { NEW_MATERIAL_QUOTA } from '@/lib/constants';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 
@@ -67,16 +67,16 @@ export default function WeeklyReviewModal({ onClose }: Props) {
     const today = new Date();
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
-    const weekAgoStr = weekAgo.toISOString().split('T')[0];
+    const weekAgoStr = toLocalDateStr(weekAgo);
 
     // Get sessions from last 7 days
     const weeklySessions = data.timerSessions.filter(s => {
-      const sessionDate = s.startTime.split('T')[0];
+      const sessionDate = toLocalDateStr(s.startTime);
       return sessionDate >= weekAgoStr;
     });
 
     // Days studied
-    const studiedDates = new Set(weeklySessions.map(s => s.startTime.split('T')[0]));
+    const studiedDates = new Set(weeklySessions.map(s => toLocalDateStr(s.startTime)));
     const daysStudied = studiedDates.size;
     const daysNotStudied = 7 - daysStudied;
 
@@ -157,10 +157,10 @@ export default function WeeklyReviewModal({ onClose }: Props) {
     for (let i = 0; i < 7; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(checkDate.getDate() - i);
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(checkDate);
 
       const studiedThisDay = data.timerSessions.some(s =>
-        s.startTime.split('T')[0] === dateStr
+        toLocalDateStr(s.startTime) === dateStr
       );
 
       if (!studiedThisDay) {
@@ -225,14 +225,14 @@ export default function WeeklyReviewModal({ onClose }: Props) {
 
   // Dismiss without saving feedback (but still mark as reviewed)
   const handleDismiss = () => {
-    localStorage.setItem('weekly-review-date', new Date().toISOString().split('T')[0]);
+    localStorage.setItem('weekly-review-date', getTodayString());
     onClose();
   };
 
   // Save and close
   const handleSave = () => {
     const reviewData: WeeklyReviewData = {
-      lastReviewDate: new Date().toISOString().split('T')[0],
+      lastReviewDate: getTodayString(),
       userFeedback: {
         overloaded,
         tooMuchRepetition,

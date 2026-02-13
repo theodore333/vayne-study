@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability } from '@/lib/algorithms';
+import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability, getTodayString, toLocalDateStr } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -19,13 +19,13 @@ export default function TodayPage() {
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayString();
     const stored = localStorage.getItem(`completed-tasks-${todayStr}`);
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
   const [completedTopics, setCompletedTopics] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayString();
     const stored = localStorage.getItem(`completed-topics-${todayStr}`);
     return stored ? new Set(JSON.parse(stored)) : new Set();
   });
@@ -61,7 +61,7 @@ export default function TodayPage() {
 
   // Load custom plan from localStorage
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayString();
     const customPlanKey = `custom-daily-plan-${todayStr}`;
     const storedPlan = localStorage.getItem(customPlanKey);
     if (storedPlan) {
@@ -127,7 +127,7 @@ export default function TodayPage() {
   }, []);
 
   // Check which topics have been reviewed today
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayString();
 
   // Save completed tasks/topics to localStorage
   useEffect(() => {
@@ -207,18 +207,18 @@ export default function TodayPage() {
   // Calculate study streak
   const streak = useMemo(() => {
     const dates = new Set(
-      data.timerSessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0])
+      data.timerSessions.filter(s => s.endTime !== null).map(s => toLocalDateStr(s.startTime))
     );
     let count = 0;
     const checkDate = new Date();
     while (true) {
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(checkDate);
       if (dates.has(dateStr)) {
         count++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else if (count === 0) {
         checkDate.setDate(checkDate.getDate() - 1);
-        if (dates.has(checkDate.toISOString().split('T')[0])) {
+        if (dates.has(toLocalDateStr(checkDate))) {
           count++;
           checkDate.setDate(checkDate.getDate() - 1);
           continue;
@@ -277,7 +277,7 @@ export default function TodayPage() {
 
   // Save custom plan
   const handleSaveCustomPlan = (plan: DailyTask[]) => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayString();
     const customPlanKey = `custom-daily-plan-${todayStr}`;
     localStorage.setItem(customPlanKey, JSON.stringify({
       date: todayStr,
@@ -324,7 +324,7 @@ export default function TodayPage() {
         alert(`Грешка: ${result.error}`);
       } else if (result.tasks) {
         // Save as custom plan (replaces current)
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayString();
         const customPlanKey = `custom-daily-plan-${todayStr}`;
         localStorage.setItem(customPlanKey, JSON.stringify({
           date: todayStr,
@@ -387,7 +387,7 @@ export default function TodayPage() {
         alert(`Грешка: ${result.error}`);
       } else if (result.tasks) {
         // Save as custom plan
-        const todayStr = new Date().toISOString().split('T')[0];
+        const todayStr = getTodayString();
         const customPlanKey = `custom-daily-plan-${todayStr}`;
         localStorage.setItem(customPlanKey, JSON.stringify({
           date: todayStr,

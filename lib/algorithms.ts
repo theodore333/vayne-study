@@ -91,7 +91,7 @@ export function initializeFSRS(quizScore: number): FSRSState {
   return {
     stability: Math.max(1, initialS),
     difficulty: Math.max(FSRS_PARAMS.minD, Math.min(FSRS_PARAMS.maxD, initialD)),
-    lastReview: new Date().toISOString().split('T')[0],
+    lastReview: getTodayString(),
     reps: rating >= 1 ? 1 : 0, // Count as rep only if not "Again"
     lapses: rating === 0 ? 1 : 0
   };
@@ -141,7 +141,7 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
   return {
     stability: Math.round(newS * 10) / 10,
     difficulty: Math.round(newD * 100) / 100,
-    lastReview: new Date().toISOString().split('T')[0],
+    lastReview: getTodayString(),
     reps: newReps,
     lapses: newLapses
   };

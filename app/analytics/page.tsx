@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { BarChart3, Clock, Flame, Brain, BookOpen, Target, CheckCircle2, TrendingUp } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { toLocalDateStr } from '@/lib/algorithms';
 import Link from 'next/link';
 
 export default function AnalyticsPage() {
@@ -23,8 +24,7 @@ export default function AnalyticsPage() {
     const studyDates = new Set<string>();
     data.timerSessions.forEach(s => {
       if (s.startTime) {
-        const date = s.startTime.split('T')[0];
-        if (date) studyDates.add(date);
+        studyDates.add(toLocalDateStr(s.startTime));
       }
     });
 
@@ -33,7 +33,7 @@ export default function AnalyticsPage() {
     for (let i = 0; i < 365; i++) {
       const checkDate = new Date(today);
       checkDate.setDate(checkDate.getDate() - i);
-      const dateStr = checkDate.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(checkDate);
       if (studyDates.has(dateStr)) {
         currentStreak++;
       } else if (i > 0) {
@@ -79,9 +79,9 @@ export default function AnalyticsPage() {
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(date);
       const dayMinutes = data.timerSessions
-        .filter(s => s.startTime?.startsWith(dateStr))
+        .filter(s => s.startTime && toLocalDateStr(s.startTime) === dateStr)
         .reduce((sum, s) => sum + s.duration, 0);
       last7Days.push({
         date: dateStr,

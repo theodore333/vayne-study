@@ -29,6 +29,7 @@ interface RequestSubject {
   subjectType: string;
   examDate: string | null;
   examFormat: string | null;
+  examDifficulty?: 'easy' | 'medium' | 'hard';
   topics: RequestTopic[];
 }
 
@@ -56,7 +57,7 @@ interface GeneratedTask {
 
 export async function POST(request: NextRequest) {
   try {
-    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques, academicEvents, academicPeriod } = await request.json() as {
+    const { subjects, schedule, dailyStatus, apiKey, studyGoals, bonusMode, studyTechniques, academicEvents, academicPeriod, userFeedback } = await request.json() as {
       subjects: RequestSubject[];
       schedule: ScheduleClass[];
       dailyStatus: { sick?: boolean; holiday?: boolean };
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
       studyTechniques?: Array<{ name: string; slug: string; practiceCount: number; lastPracticedAt: string | null; howToApply: string }>;
       academicEvents?: Array<{ id: string; type: string; subjectId: string; date: string; name?: string; topicIds?: string[]; weight: number }>;
       academicPeriod?: { semesterStart: string | null; semesterEnd: string | null; sessionStart: string | null; sessionEnd: string | null; cycleStart: string | null; cycleEnd: string | null };
+      userFeedback?: string;
     };
 
     if (!apiKey) {
@@ -179,6 +181,7 @@ export async function POST(request: NextRequest) {
         subjectType: s.subjectType,
         examDate: s.examDate,
         examFormat: s.examFormat,
+        examDifficulty: s.examDifficulty ?? 'medium',
         daysUntilExam,
         totalTopics,
         greenTopics,
@@ -341,6 +344,11 @@ ${(() => {
 КАПАЦИТЕТ: ${dailyTopicCapacity} теми (${dailyMinutes} минути общо)
 ${isVacationMode ? `РЕЖИМ: 🏖️ ВАКАНЦИЯ - намален workload до ${Math.round(vacationMultiplier * 100)}%! Фокус върху поддръжка и лек преговор.` : ''}
 ${dailyStatus?.sick ? 'СТАТУС: Болен - намален капацитет!' : dailyStatus?.holiday ? 'СТАТУС: Почивка - намален капацитет!' : ''}
+${userFeedback ? `
+⚠️ ВАЖНО - FEEDBACK ОТ ПОТРЕБИТЕЛЯ:
+"${userFeedback}"
+Вземи предвид този feedback при генерирането! Ако казва че предмет е лесен — намали темите за него значително. Ако е труден — увеличи ги. Ако иска друг фокус — адаптирай плана.
+` : ''}
 ${bonusModeInstructions}
 ${hasSetupTasks && !bonusMode ? `⚠️ ВАЖНО: НЯКОИ ПРЕДМЕТИ ИМАТ НЕПЪЛНА ИНФОРМАЦИЯ!
 Предмети нуждаещи се от setup: ${subjectsNeedingSetup.map(s => `${s.name} (${s.setupStatus.missingSetup.join(', ')})`).join('; ')}
@@ -394,6 +402,7 @@ ${!bonusMode ? `- Ако има много жълти теми - те са БЪ�
 - Оранжеви теми имат само основи - нужна е работа
 - Малки теми (size: "small") дават бързи победи` : ''}
 - Не претоварвай - ${bonusMode ? 'това е БОНУС сесия!' : 'студентът трябва реално да свърши плана!'}
+- ТРУДНОСТ НА ИЗПИТА: Всеки предмет има examDifficulty (easy/medium/hard). За "easy" предмети дай 2x ПО-МАЛКО теми. За "hard" предмети дай 1.5x ПОВЕЧЕ теми и по-висок приоритет!
 ${studyTechniques && studyTechniques.length > 0 ? `
 УЧЕБНИ ТЕХНИКИ (IcanStudy):
 Студентът практикува следните техники: ${studyTechniques.map(t => `${t.name} (${t.practiceCount}x практикувана${t.lastPracticedAt ? ', последно: ' + new Date(t.lastPracticedAt).toLocaleDateString('bg-BG') : ''})`).join(', ')}

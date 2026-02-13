@@ -47,6 +47,7 @@ function SubjectsContent() {
   const [editExamDate, setEditExamDate] = useState('');
   const [editExamFormat, setEditExamFormat] = useState('');
   const [editSubjectType, setEditSubjectType] = useState<SubjectType>('preclinical');
+  const [editExamDifficulty, setEditExamDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [editSemester, setEditSemester] = useState('');
 
   // Sidebar toggle
@@ -320,6 +321,7 @@ function SubjectsContent() {
     setEditExamDate(subject.examDate || '');
     setEditExamFormat(subject.examFormat || '');
     setEditSubjectType(subject.subjectType || 'preclinical');
+    setEditExamDifficulty(subject.examDifficulty || 'medium');
     setEditSemester(subject.semester || '');
   };
 
@@ -331,6 +333,7 @@ function SubjectsContent() {
         subjectType: editSubjectType,
         examDate: editExamDate || null,
         examFormat: editExamFormat.trim() || null,
+        examDifficulty: editExamDifficulty,
         semester: editSemester.trim() || undefined
       });
       setEditingSubject(null);
@@ -572,6 +575,31 @@ function SubjectsContent() {
                             rows={2}
                             className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-slate-100 font-mono resize-none"
                           />
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-mono block mb-1">Трудност на изпита</span>
+                            <div className="grid grid-cols-3 gap-1">
+                              {([
+                                { value: 'easy' as const, label: 'Лесен', color: 'green' },
+                                { value: 'medium' as const, label: 'Среден', color: 'blue' },
+                                { value: 'hard' as const, label: 'Труден', color: 'red' },
+                              ]).map(d => (
+                                <button
+                                  key={d.value}
+                                  type="button"
+                                  onClick={() => setEditExamDifficulty(d.value)}
+                                  className={`py-1 rounded border text-center text-[10px] font-mono transition-all ${
+                                    editExamDifficulty === d.value
+                                      ? d.color === 'green' ? 'bg-green-500/20 border-green-500 text-green-400'
+                                        : d.color === 'red' ? 'bg-red-500/20 border-red-500 text-red-400'
+                                        : 'bg-blue-500/20 border-blue-500 text-blue-400'
+                                      : 'bg-slate-800/50 border-slate-700 text-slate-500 hover:border-slate-600'
+                                  }`}
+                                >
+                                  {d.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <div className="flex gap-2">
                             <button onClick={handleSaveEdit} className="flex-1 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-xs font-mono">Запази</button>
                             <button onClick={() => setEditingSubject(null)} className="flex-1 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs font-mono">Отказ</button>
@@ -612,6 +640,13 @@ function SubjectsContent() {
                             <div className={"text-xs font-mono mt-1 flex items-center gap-1 " + (daysUntil <= 7 ? "text-red-400" : "text-slate-500")}>
                               <Calendar size={10} />
                               {daysUntil <= 0 ? "ДНЕС" : daysUntil + " дни"}
+                              {subject.examDifficulty && subject.examDifficulty !== 'medium' && (
+                                <span className={`ml-1 px-1 py-0.5 rounded text-[9px] ${
+                                  subject.examDifficulty === 'easy' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                                }`}>
+                                  {subject.examDifficulty === 'easy' ? 'лесен' : 'труден'}
+                                </span>
+                              )}
                             </div>
                           )}
                         </button>

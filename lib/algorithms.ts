@@ -688,14 +688,27 @@ export function calculateDailyTopics(
     const remainingTopics = grayTopics + Math.ceil(orangeTopics * 0.5); // Orange counts as half
     if (remainingTopics === 0) continue;
 
-    // Calculate exact topics per day needed (no cap - show reality)
-    const topicsPerDay = Math.ceil(remainingTopics / daysLeft);
+    // Apply exam difficulty multiplier: easy exams need less prep, hard need more
+    const difficultyMultiplier = { easy: 0.5, medium: 1, hard: 1.5 }[subject.examDifficulty ?? 'medium'];
+    const topicsPerDay = Math.ceil((remainingTopics * difficultyMultiplier) / daysLeft);
 
-    // Determine urgency
+    // Determine urgency - shifted by difficulty
+    // Hard exams feel urgent sooner, easy exams can wait longer
     let urgency: 'critical' | 'high' | 'medium' | 'low' = 'low';
-    if (daysLeft <= 3) urgency = 'critical';
-    else if (daysLeft <= 7) urgency = 'high';
-    else if (daysLeft <= 14) urgency = 'medium';
+    const diff = subject.examDifficulty ?? 'medium';
+    if (diff === 'hard') {
+      if (daysLeft <= 5) urgency = 'critical';
+      else if (daysLeft <= 10) urgency = 'high';
+      else if (daysLeft <= 18) urgency = 'medium';
+    } else if (diff === 'easy') {
+      if (daysLeft <= 2) urgency = 'critical';
+      else if (daysLeft <= 4) urgency = 'high';
+      else if (daysLeft <= 8) urgency = 'medium';
+    } else {
+      if (daysLeft <= 3) urgency = 'critical';
+      else if (daysLeft <= 7) urgency = 'high';
+      else if (daysLeft <= 14) urgency = 'medium';
+    }
 
     // Warning if workload is unrealistic
     let warning: string | null = null;

@@ -84,6 +84,7 @@ interface LegacySubject {
   subjectType?: SubjectType;
   examDate: string | null;
   examFormat?: string | null;
+  examDifficulty?: 'easy' | 'medium' | 'hard';
   topics: LegacyTopic[];
   createdAt: string;
 }
@@ -458,6 +459,7 @@ export function migrateData(rawData: any): AppData {
     ...subject,
     subjectType: subject.subjectType ?? 'preclinical',
     examFormat: subject.examFormat ?? null,
+    examDifficulty: subject.examDifficulty ?? undefined,
     topics: (subject.topics || []).map((topic): Topic => ({
       ...topic,
       material: topic.material || '',

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat } from 'lucide-react';
+import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat, MessageSquare, X, Send } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability, getTodayString, toLocalDateStr } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -46,6 +46,11 @@ export default function TodayPage() {
   // Bonus plan state (when 100% complete)
   const [bonusPlanMode, setBonusPlanMode] = useState<'tomorrow' | 'review' | 'weak' | null>(null);
   const [loadingBonusPlan, setLoadingBonusPlan] = useState(false);
+
+  // AI feedback state
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [planFeedback, setPlanFeedback] = useState('');
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
 
   // Module detail modal state
   const [selectedModule, setSelectedModule] = useState<{ module: ProjectModule; project: DevelopmentProject } | null>(null);
@@ -410,6 +415,63 @@ export default function TodayPage() {
     }
   };
 
+  const handleFeedbackSubmit = async () => {
+    if (!apiKey || !planFeedback.trim()) return;
+
+    setLoadingFeedback(true);
+    try {
+      // Save feedback to localStorage for persistence
+      const todayStr = getTodayString();
+      localStorage.setItem(`plan-feedback-${todayStr}`, planFeedback.trim());
+
+      const response = await fetchWithTimeout('/api/ai-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjects: activeSubjects,
+          schedule: data.schedule,
+          dailyStatus: data.dailyStatus,
+          studyGoals: data.studyGoals,
+          academicEvents: data.academicEvents,
+          academicPeriod: data.academicPeriod,
+          apiKey,
+          userFeedback: planFeedback.trim(),
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, practiceCount: t.practiceCount,
+            lastPracticedAt: t.lastPracticedAt, howToApply: t.howToApply.substring(0, 150)
+          }))
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.error) {
+        alert(`Грешка: ${result.error}`);
+      } else if (result.tasks) {
+        const customPlanKey = `custom-daily-plan-${todayStr}`;
+        localStorage.setItem(customPlanKey, JSON.stringify({
+          date: todayStr,
+          tasks: result.tasks,
+          isCustomized: true
+        }));
+        setCustomPlan(result.tasks);
+        setPlanIsCustomized(true);
+        setAiPlanReasoning(result.reasoning || null);
+        setShowFeedbackModal(false);
+        setPlanFeedback('');
+
+        if (result.cost) {
+          incrementApiCalls(result.cost);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate AI plan with feedback:', error);
+      alert(getFetchErrorMessage(error));
+    } finally {
+      setLoadingFeedback(false);
+    }
+  };
+
   // Use custom plan if available, otherwise use generated plan
   const activePlan = customPlan || dailyPlan;
   const allPlanTopics = activePlan.flatMap(task => task.topics);
@@ -532,6 +594,44 @@ export default function TodayPage() {
         </div>
       )}
 
+      {/* Anki Due Cards Widget - FIRST, before daily plan */}
+      {ankiStats && (
+        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Layers size={24} className="text-blue-400" />
+              <div>
+                <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki Flashcards</h3>
+                <p className="text-xs text-slate-400 font-mono">Due за днес</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-blue-400">{ankiStats.dueToday}</div>
+                <div className="text-xs text-slate-500 font-mono">Due</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-cyan-400">{ankiStats.newToday}</div>
+                <div className="text-xs text-slate-500 font-mono">New</div>
+              </div>
+              <button
+                onClick={refreshAnkiStats}
+                disabled={ankiLoading}
+                className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
+                title="Обнови"
+              >
+                <RefreshCw size={16} className={ankiLoading ? 'animate-spin' : ''} />
+              </button>
+            </div>
+          </div>
+          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
+            <div className="mt-3 text-xs text-slate-400 font-mono">
+              Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Daily Plan Tasks */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
         <div className="p-6 border-b border-[#1e293b]">
@@ -565,6 +665,20 @@ export default function TodayPage() {
                       AI план
                     </>
                   )}
+                </button>
+                <button
+                  onClick={() => {
+                    // Load saved feedback if any
+                    const saved = localStorage.getItem(`plan-feedback-${getTodayString()}`);
+                    if (saved) setPlanFeedback(saved);
+                    setShowFeedbackModal(true);
+                  }}
+                  disabled={!apiKey}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-amber-400 hover:text-amber-300 border border-amber-500/30 hover:border-amber-500/50 rounded-lg transition-colors disabled:opacity-30"
+                  title="Дай feedback и AI ще пренаправи плана"
+                >
+                  <MessageSquare size={12} />
+                  Feedback
                 </button>
                 <button
                   onClick={() => setShowEditModal(true)}
@@ -982,44 +1096,6 @@ export default function TodayPage() {
         </div>
       )}
 
-      {/* Anki Due Cards Widget */}
-      {ankiStats && (
-        <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 border border-blue-500/30 rounded-xl p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Layers size={24} className="text-blue-400" />
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100 font-mono">Anki Flashcards</h3>
-                <p className="text-xs text-slate-400 font-mono">Due за днес</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold font-mono text-blue-400">{ankiStats.dueToday}</div>
-                <div className="text-xs text-slate-500 font-mono">Due</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold font-mono text-cyan-400">{ankiStats.newToday}</div>
-                <div className="text-xs text-slate-500 font-mono">New</div>
-              </div>
-              <button
-                onClick={refreshAnkiStats}
-                disabled={ankiLoading}
-                className="p-2 rounded-lg bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition-colors"
-                title="Обнови"
-              >
-                <RefreshCw size={16} className={ankiLoading ? 'animate-spin' : ''} />
-              </button>
-            </div>
-          </div>
-          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
-            <div className="mt-3 text-xs text-slate-400 font-mono">
-              Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Syllabus Progress Widget - Collapsible */}
       {syllabusProgress.bySubject.length > 0 && (
         <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
@@ -1186,6 +1262,76 @@ export default function TodayPage() {
           project={selectedModule.project}
           onClose={() => setSelectedModule(null)}
         />
+      )}
+
+      {/* AI Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !loadingFeedback && setShowFeedbackModal(false)} />
+          <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-[#1e293b]">
+              <h3 className="text-base font-semibold text-slate-100 font-mono flex items-center gap-2">
+                <MessageSquare size={18} className="text-amber-400" />
+                Feedback за плана
+              </h3>
+              <button
+                onClick={() => !loadingFeedback && setShowFeedbackModal(false)}
+                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-sm text-slate-400 font-mono">
+                Напиши какво да промени AI в плана. Може да кажеш кои предмети са лесни/трудни, какъв фокус искаш, или друго.
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {activeSubjects.slice(0, 8).map(s => (
+                  <span key={s.id} className="text-[10px] px-2 py-1 rounded-full font-mono" style={{ backgroundColor: s.color + '30', color: s.color, border: `1px solid ${s.color}40` }}>
+                    {s.name}
+                    {s.examDifficulty && s.examDifficulty !== 'medium' && (
+                      <span className="ml-1 opacity-70">
+                        ({s.examDifficulty === 'easy' ? 'лесен' : 'труден'})
+                      </span>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <textarea
+                value={planFeedback}
+                onChange={(e) => setPlanFeedback(e.target.value.slice(0, 500))}
+                placeholder="напр. Хирургия е лесен изпит, не ми трябва много подготовка. Патофизиология е убиец — фокусирай се повече там..."
+                rows={4}
+                maxLength={500}
+                autoFocus
+                className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-mono text-sm resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setShowFeedbackModal(false);
+                }}
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-slate-600 font-mono">{planFeedback.length}/500</span>
+                <button
+                  onClick={handleFeedbackSubmit}
+                  disabled={loadingFeedback || !planFeedback.trim()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-mono bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 disabled:from-slate-700 disabled:to-slate-700 text-white rounded-lg transition-all"
+                >
+                  {loadingFeedback ? (
+                    <>
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Генериране...
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      Пренаправи плана
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

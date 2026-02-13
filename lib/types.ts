@@ -34,6 +34,7 @@ export interface Subject {
   archived?: boolean; // Archived subjects are hidden and excluded from calculations
   deletedAt?: string | null; // Soft delete timestamp - subjects with deletedAt are in trash
   semester?: string; // Optional semester grouping (e.g., "Семестър 1", "2024/2025")
+  examDifficulty?: 'easy' | 'medium' | 'hard'; // Exam difficulty affects study time allocation
 }
 
 // Parsed exam format structure

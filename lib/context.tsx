@@ -214,7 +214,7 @@ interface AppContextType {
   syncNow: () => Promise<void>;
 
   // Subject operations
-  addSubject: (name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null) => void;
+  addSubject: (name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null, examDifficulty?: 'easy' | 'medium' | 'hard') => void;
   updateSubject: (id: string, updates: Partial<Subject>) => void;
   deleteSubject: (id: string) => void;
   archiveSubject: (id: string) => void;
@@ -632,7 +632,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Subject operations
-  const addSubject = useCallback((name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null) => {
+  const addSubject = useCallback((name: string, color: string, subjectType: SubjectType, examDate: string | null, examFormat: string | null, examDifficulty?: 'easy' | 'medium' | 'hard') => {
     updateData(prev => ({
       ...prev,
       subjects: [...prev.subjects, {
@@ -642,6 +642,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         subjectType,
         examDate,
         examFormat,
+        examDifficulty,
         topics: [],
         createdAt: new Date().toISOString()
       }]

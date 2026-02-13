@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, BookOpen, Calendar, FileText, Beaker, Stethoscope, FlaskConical } from 'lucide-react';
+import { X, BookOpen, Calendar, FileText, Beaker, Stethoscope, FlaskConical, Coffee, Flame, GraduationCap } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { PRESET_COLORS } from '@/lib/constants';
 import { SubjectType, SUBJECT_TYPES } from '@/lib/types';
@@ -25,12 +25,13 @@ export default function AddSubjectModal({ onClose }: Props) {
   const [subjectType, setSubjectType] = useState<SubjectType>('preclinical');
   const [examDate, setExamDate] = useState('');
   const [examFormat, setExamFormat] = useState('');
+  const [examDifficulty, setExamDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    addSubject(name.trim(), color, subjectType, examDate || null, examFormat.trim() || null);
+    addSubject(name.trim(), color, subjectType, examDate || null, examFormat.trim() || null, examDifficulty);
     onClose();
   };
 
@@ -169,6 +170,41 @@ export default function AddSubjectModal({ onClose }: Props) {
             <p className="text-xs text-slate-500 mt-1 font-mono">
               AI ще генерира quiz въпроси в този формат
               {examFormat.length >= 450 && <span className="text-amber-400 ml-2">({500 - examFormat.length} символа остават)</span>}
+            </p>
+          </div>
+
+          {/* Exam Difficulty */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              <GraduationCap size={14} className="inline mr-2" />
+              Трудност на изпита
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: 'easy' as const, label: 'Лесен', Icon: Coffee, desc: '0.5x подготовка' },
+                { value: 'medium' as const, label: 'Среден', Icon: BookOpen, desc: 'Стандартно' },
+                { value: 'hard' as const, label: 'Труден', Icon: Flame, desc: '1.5x подготовка' },
+              ]).map(d => (
+                <button
+                  key={d.value}
+                  type="button"
+                  onClick={() => setExamDifficulty(d.value)}
+                  className={`p-3 rounded-lg border text-center transition-all ${
+                    examDifficulty === d.value
+                      ? d.value === 'easy' ? 'bg-green-500/20 border-green-500 text-green-400'
+                        : d.value === 'hard' ? 'bg-red-500/20 border-red-500 text-red-400'
+                        : 'bg-blue-500/20 border-blue-500 text-blue-400'
+                      : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:border-slate-600'
+                  }`}
+                >
+                  <d.Icon size={20} className="mx-auto mb-1" />
+                  <span className="text-xs font-mono block">{d.label}</span>
+                  <span className="text-[10px] font-mono block opacity-60">{d.desc}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-2 font-mono">
+              Лесните изпити получават по-малко теми в дневния план
             </p>
           </div>
 

@@ -494,6 +494,12 @@ export function getTodayString(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+// Convert a UTC ISO string (or Date) to local YYYY-MM-DD string
+export function toLocalDateStr(isoOrDate: string | Date): string {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function getDaysSince(dateString: string | null): number {
   if (!dateString) return Infinity;
   const date = new Date(dateString);

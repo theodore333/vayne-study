@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { Target } from 'lucide-react';
+import { getTodayString, toLocalDateStr } from '@/lib/algorithms';
 
 interface GoalProgressRingsProps {
   timerSessions: Array<{ startTime: string; duration: number }>;
@@ -89,11 +90,11 @@ export default function GoalProgressRings({ timerSessions, studyGoals, compact, 
 
   const progress = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = getTodayString();
 
     // Daily
     const dailyMinutes = safeSessions
-      .filter(s => s.startTime?.startsWith(todayStr))
+      .filter(s => s.startTime && toLocalDateStr(s.startTime) === todayStr)
       .reduce((sum, s) => sum + (s.duration || 0), 0);
 
     // Weekly (Monday start)

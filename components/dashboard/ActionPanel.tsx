@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Timer, Brain, ListTodo, Zap, CheckCircle, Circle, Plus, Trash2, ListChecks } from 'lucide-react';
 import Link from 'next/link';
 import { Subject, DailyGoal } from '@/lib/types';
+import { getTodayString } from '@/lib/algorithms';
 
 interface ActionPanelProps {
   subjects: Subject[];
@@ -28,7 +29,7 @@ export default function ActionPanel({ subjects, goals, onAddGoal, onToggleGoal, 
     return weak.length > 0 ? weak[Math.floor(Math.random() * weak.length)] : null;
   }, [subjects]);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayString();
   const safeGoals = goals || [];
   const todayGoals = safeGoals.filter(g => g.date === today || g.type === 'weekly');
   const completedCount = todayGoals.filter(g => g.completed).length;

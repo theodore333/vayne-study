@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { BarChart3, Layers } from 'lucide-react';
+import { toLocalDateStr } from '@/lib/algorithms';
 
 interface DayData {
   date: string;
@@ -35,10 +36,10 @@ export default function WeeklyBarChart({ timerSessions, dailyGoal, ankiStats }: 
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+      const dateStr = toLocalDateStr(date);
 
       const dayMinutes = safeSessions
-        .filter(s => s.startTime?.startsWith(dateStr))
+        .filter(s => s.startTime && toLocalDateStr(s.startTime) === dateStr)
         .reduce((sum, s) => sum + (s.duration || 0), 0);
 
       result.push({

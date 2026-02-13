@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { BarChart3, BookOpen, Calendar, Clock, List, GraduationCap, FileText } from 'lucide-react';
 import { TimerSession, Subject, StudyGoals, AcademicPeriod } from '@/lib/types';
 import { getStudyTimeByDayAndSubject, getSessionsGroupedByDay } from '@/lib/analytics';
+import { toLocalDateStr } from '@/lib/algorithms';
 
 type StatsPeriod = 'thisWeek' | 'lastWeek' | 'thisMonth' | 'last30';
 type ViewMode = 'summary' | 'detailed';
@@ -59,13 +60,13 @@ export default function StatsTab({ timerSessions, subjects, studyGoals, academic
 
   const periodDates = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
+    const todayStr = toLocalDateStr(now);
 
     switch (period) {
       case 'thisWeek': {
         const start = new Date(now);
         start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-        return { start: start.toISOString().split('T')[0], end: todayStr };
+        return { start: toLocalDateStr(start), end: todayStr };
       }
       case 'lastWeek': {
         const thisMonday = new Date(now);
@@ -74,16 +75,16 @@ export default function StatsTab({ timerSessions, subjects, studyGoals, academic
         end.setDate(end.getDate() - 1);
         const start = new Date(end);
         start.setDate(start.getDate() - 6);
-        return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] };
+        return { start: toLocalDateStr(start), end: toLocalDateStr(end) };
       }
       case 'thisMonth': {
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        return { start: start.toISOString().split('T')[0], end: todayStr };
+        return { start: toLocalDateStr(start), end: todayStr };
       }
       case 'last30': {
         const start = new Date(now);
         start.setDate(now.getDate() - 29);
-        return { start: start.toISOString().split('T')[0], end: todayStr };
+        return { start: toLocalDateStr(start), end: todayStr };
       }
     }
   }, [period]);
@@ -250,7 +251,7 @@ export default function StatsTab({ timerSessions, subjects, studyGoals, academic
         <div className="flex items-end gap-[3px] h-36">
           {dailyData.map((day) => {
             const date = new Date(day.date);
-            const isToday = day.date === new Date().toISOString().split('T')[0];
+            const isToday = day.date === toLocalDateStr(new Date());
             const segments = subjectOrder
               .filter(sid => day.bySubject[sid])
               .map(sid => ({

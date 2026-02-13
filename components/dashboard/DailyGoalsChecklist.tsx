@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { CheckCircle, Circle, Plus, Trash2, ListChecks } from 'lucide-react';
 import { DailyGoal } from '@/lib/types';
+import { getTodayString } from '@/lib/algorithms';
 
 interface DailyGoalsChecklistProps {
   goals: DailyGoal[];
@@ -21,7 +22,7 @@ export default function DailyGoalsChecklist({
   const [isAdding, setIsAdding] = useState(false);
 
   // Filter goals for today (handle undefined/null gracefully)
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayString();
   const safeGoals = goals || [];
   const todayGoals = safeGoals.filter(g => g.date === today || g.type === 'weekly');
   const completedCount = todayGoals.filter(g => g.completed).length;

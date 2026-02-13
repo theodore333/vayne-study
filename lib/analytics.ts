@@ -1,10 +1,10 @@
 import { Subject, TimerSession, UserProgress } from './types';
-import { calculateRetrievability, getDaysUntilReview } from './algorithms';
+import { calculateRetrievability, getDaysUntilReview, toLocalDateStr } from './algorithms';
 
-// Helper to extract date string from TimerSession
+// Helper to extract local date string from TimerSession
 function getSessionDate(session: TimerSession): string {
   if (!session.startTime) return '';
-  return session.startTime.split('T')[0];
+  return toLocalDateStr(session.startTime);
 }
 
 // ============ Study Time Analytics ============
@@ -27,12 +27,11 @@ export function getStudyTimeByDay(
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(date);
 
     const daySessions = sessions.filter(s => {
       if (!s.startTime) return false;
-      const sessionDate = s.startTime.split('T')[0];
-      return sessionDate === dateStr;
+      return getSessionDate(s) === dateStr;
     });
     const minutes = daySessions.reduce((sum, s) => sum + s.duration, 0);
 
@@ -148,7 +147,7 @@ export function getTopicStatusTimeline(
     const date = new Date(now);
     date.setDate(date.getDate() - i);
     result.push({
-      date: date.toISOString().split('T')[0],
+      date: toLocalDateStr(date),
       gray,
       orange,
       yellow,
@@ -259,7 +258,7 @@ export function getFSRSOverview(subjects: Subject[]): FSRSData[] {
           subjectColor: subject.color,
           retrievability,
           stability: topic.fsrs.stability,
-          nextReview: daysUntil > 0 ? nextReviewDate.toISOString().split('T')[0] : null
+          nextReview: daysUntil > 0 ? toLocalDateStr(nextReviewDate) : null
         });
       }
     });
@@ -294,7 +293,7 @@ export function getStudyStreak(sessions: TimerSession[], days: number = 90): Str
   for (let i = days - 1; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(date);
 
     const minutes = minutesByDay.get(dateStr) || 0;
     const studied = minutes > 0;
@@ -323,7 +322,7 @@ export function getCurrentStreak(sessions: TimerSession[]): number {
   for (let i = 0; i < 365; i++) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(date);
 
     if (studyDays.has(dateStr)) {
       streak++;
@@ -439,8 +438,8 @@ export function getWeeklyTrends(
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
 
-    const weekStartStr = weekStart.toISOString().split('T')[0];
-    const weekEndStr = weekEnd.toISOString().split('T')[0];
+    const weekStartStr = toLocalDateStr(weekStart);
+    const weekEndStr = toLocalDateStr(weekEnd);
 
     const weekSessions = sessions.filter(s => {
       const sessionDate = getSessionDate(s);
@@ -489,7 +488,7 @@ export function getStudyTimeByDayAndSubject(
   const end = new Date(endDate);
 
   for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(d);
     const daySessions = sessions.filter(s => getSessionDate(s) === dateStr);
     const bySubject: Record<string, number> = {};
 

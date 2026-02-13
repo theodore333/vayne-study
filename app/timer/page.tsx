@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Play, Pause, Square, Clock, BookOpen, Target, Settings, RotateCcw, Coffee, Brain, TrendingUp, Calendar, Volume2, VolumeX, History, BarChart3, GraduationCap, FileText, Plus, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
+import { getTodayString, toLocalDateStr } from '@/lib/algorithms';
 import StatsTab from '@/components/timer/StatsTab';
 
 type TimerMode = 'normal' | 'pomodoro';
@@ -89,6 +90,19 @@ export default function TimerPage() {
       if (saved) {
         const state = JSON.parse(saved);
         const now = Date.now();
+
+        // If state is from a previous day, clear it and start fresh
+        if (state.savedAt) {
+          const savedDate = new Date(state.savedAt);
+          const today = new Date();
+          if (savedDate.getDate() !== today.getDate() ||
+              savedDate.getMonth() !== today.getMonth() ||
+              savedDate.getFullYear() !== today.getFullYear()) {
+            localStorage.removeItem('pomodoro_state');
+            setInitialized(true);
+            return;
+          }
+        }
 
         // Always restore count
         setPomodoroCount(state.count || 0);
@@ -593,11 +607,11 @@ export default function TimerPage() {
 
   // Statistics calculations
   const stats = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayString();
     const now = new Date();
 
-    // Today
-    const todaySessions = data.timerSessions.filter(s => s.startTime.startsWith(today) && s.endTime !== null);
+    // Today — compare using local dates, not UTC
+    const todaySessions = data.timerSessions.filter(s => toLocalDateStr(s.startTime) === today && s.endTime !== null);
     const todayMinutes = todaySessions.reduce((acc, s) => acc + s.duration, 0);
 
     // This week (Monday start)
@@ -648,20 +662,20 @@ export default function TimerPage() {
       sessionMinutes = sessSessions.reduce((acc, s) => acc + s.duration, 0);
     }
 
-    // Streak - count consecutive days with study sessions
-    const dates = new Set(data.timerSessions.filter(s => s.endTime !== null).map(s => s.startTime.split('T')[0]));
+    // Streak - count consecutive days with study sessions (using local dates)
+    const dates = new Set(data.timerSessions.filter(s => s.endTime !== null).map(s => toLocalDateStr(s.startTime)));
     let streak = 0;
     const checkDate = new Date();
 
     // First check today
-    const todayStr = checkDate.toISOString().split('T')[0];
+    const todayStr = toLocalDateStr(checkDate);
     if (dates.has(todayStr)) {
       streak = 1;
       checkDate.setDate(checkDate.getDate() - 1);
     } else {
       // If no session today, check if yesterday had a session (streak can still continue)
       checkDate.setDate(checkDate.getDate() - 1);
-      const yesterdayStr = checkDate.toISOString().split('T')[0];
+      const yesterdayStr = toLocalDateStr(checkDate);
       if (!dates.has(yesterdayStr)) {
         // No session today or yesterday - streak is 0
         streak = 0;
@@ -674,7 +688,7 @@ export default function TimerPage() {
     // Count backwards from the starting point
     if (streak > 0) {
       while (true) {
-        const dateStr = checkDate.toISOString().split('T')[0];
+        const dateStr = toLocalDateStr(checkDate);
         if (dates.has(dateStr)) {
           streak++;
           checkDate.setDate(checkDate.getDate() - 1);

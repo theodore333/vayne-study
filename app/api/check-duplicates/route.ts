@@ -45,7 +45,7 @@ IMPORTANT: Only flag TRUE semantic duplicates — questions asking the same conc
       }]
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content?.[0]?.type === 'text' ? response.content[0].text : '';
 
     // Parse the response
     let duplicateIndices: number[] = [];

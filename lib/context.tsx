@@ -1180,9 +1180,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       if (newStatus !== 'gray' && oldStatus === 'gray') {
         newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
+      } else if (newStatus === 'gray' && oldStatus !== 'gray') {
+        newStats.topicsCompleted = Math.max(0, (newStats.topicsCompleted || 0) - 1);
       }
       if (newStatus === 'green' && oldStatus !== 'green') {
         newStats.greenTopics = (newStats.greenTopics || 0) + 1;
+      } else if (oldStatus === 'green' && newStatus !== 'green') {
+        newStats.greenTopics = Math.max(0, (newStats.greenTopics || 0) - 1);
       }
 
       const newProgress: UserProgress = {

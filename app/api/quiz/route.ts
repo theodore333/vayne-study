@@ -452,7 +452,7 @@ Mix Bloom levels but focus on levels ${Math.max(1, currentBloomLevel - 1)} to ${
     return NextResponse.json({ error: 'Failed to parse gap analysis', raw: responseText.substring(0, 500) }, { status: 500 });
   }
 
-  const cost = (response.usage.input_tokens * 0.015 + response.usage.output_tokens * 0.075) / 1000000;
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
 
   return NextResponse.json({
     analysis,

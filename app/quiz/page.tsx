@@ -2,13 +2,14 @@
 
 import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText } from 'lucide-react';
+import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText, Copy } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 import { QuizMode, Question, FreeRecallEvaluation, OpenAnswerEvaluation, MistakeAnalysis, QuizState, buildMasteryContext, calculateScore, getGradeFromScore } from '@/lib/quiz-types';
 import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@/lib/fetch-utils';
+import { checkAnkiConnect, addClozeNotes } from '@/lib/anki';
 import { showToast } from '@/components/Toast';
 import { useQuizTimer } from '@/hooks/useQuizTimer';
 import { useQuizGeneration } from '@/hooks/useQuizGeneration';
@@ -125,10 +126,17 @@ function QuizContent() {
   const [mistakeAnalysis, setMistakeAnalysis] = useState<MistakeAnalysis | null>(null);
   const [isAnalyzingMistakes, setIsAnalyzingMistakes] = useState(false);
 
-  // Cloze card generation state
+  // Cloze card generation state (from wrong answers in results)
   const [clozeCards, setClozeCards] = useState<string[] | null>(null);
   const [isGeneratingCloze, setIsGeneratingCloze] = useState(false);
   const [clozeError, setClozeError] = useState<string | null>(null);
+
+  // Anki cards from material (quiz mode)
+  const [ankiMaterialCards, setAnkiMaterialCards] = useState<string[] | null>(null);
+  const [isGeneratingAnkiMaterial, setIsGeneratingAnkiMaterial] = useState(false);
+  const [ankiMaterialError, setAnkiMaterialError] = useState<string | null>(null);
+  const [ankiConnectAvailable, setAnkiConnectAvailable] = useState<boolean | null>(null);
+  const [ankiSendResult, setAnkiSendResult] = useState<string | null>(null);
 
   // Grade save state - prevents duplicate saves and shows feedback
   const [gradeSaved, setGradeSaved] = useState(false);
@@ -358,6 +366,10 @@ function QuizContent() {
   // formatTime is now in useQuizTimer hook
   // Open preview screen and set initial question count
   const openPreview = () => {
+    if (mode === 'anki_cards') {
+      generateAnkiFromMaterial();
+      return;
+    }
     const initialCount = mode === 'custom'
       ? customQuestionCount
       : QUIZ_LENGTH_PRESETS[quizLength].questions;
@@ -928,6 +940,85 @@ function QuizContent() {
     setIsGeneratingCloze(false);
   };
 
+  // Generate Anki cloze cards from topic material (Bloom L1)
+  const generateAnkiFromMaterial = async (forceRegenerate = false) => {
+    if (isGeneratingAnkiMaterial) return;
+
+    // If topic already has saved cards and not forcing regeneration, show them
+    if (!forceRegenerate && topic?.ankiCards && topic.ankiCards.length > 0) {
+      setAnkiMaterialCards(topic.ankiCards);
+      // Check AnkiConnect in background
+      checkAnkiConnect().then(setAnkiConnectAvailable).catch(() => setAnkiConnectAvailable(false));
+      return;
+    }
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      setAnkiMaterialError('API_KEY_MISSING');
+      return;
+    }
+
+    if (!topic?.material?.trim()) {
+      setAnkiMaterialError('Тази тема няма добавен материал.');
+      return;
+    }
+
+    setIsGeneratingAnkiMaterial(true);
+    setAnkiMaterialError(null);
+    setAnkiMaterialCards(null);
+    setAnkiSendResult(null);
+
+    try {
+      const response = await fetchWithTimeout('/api/anki-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          material: topic.material,
+          topicName: topic.name,
+          mode: 'from_material'
+        }),
+        timeout: 120000
+      });
+
+      const result = await response.json();
+      if (result.error) {
+        setAnkiMaterialError(result.error);
+      } else if (result.cards && result.cards.length > 0) {
+        setAnkiMaterialCards(result.cards);
+        if (result.cost) incrementApiCalls(result.cost);
+        // Save to topic
+        if (subjectId && topicId) {
+          updateTopic(subjectId, topicId, { ankiCards: result.cards });
+        }
+        // Check AnkiConnect in background
+        checkAnkiConnect().then(setAnkiConnectAvailable).catch(() => setAnkiConnectAvailable(false));
+      } else {
+        setAnkiMaterialError('Не бяха генерирани карти.');
+      }
+    } catch (err) {
+      if (!isAbortOrTimeoutError(err)) {
+        setAnkiMaterialError(getFetchErrorMessage(err));
+      }
+    }
+    setIsGeneratingAnkiMaterial(false);
+  };
+
+  // Send generated Anki cards to AnkiConnect
+  const sendCardsToAnki = async () => {
+    if (!ankiMaterialCards || ankiMaterialCards.length === 0) return;
+    if (!subject || !topic) return;
+
+    try {
+      const paddedNumber = String(topic.number).padStart(2, '0');
+      const deckName = `${subject.name}::${paddedNumber}. ${topic.name}`;
+      const result = await addClozeNotes(deckName, ankiMaterialCards, ['vayne-study', 'bloom-l1']);
+      setAnkiSendResult(`Добавени ${result.added} карти в Anki (${result.duplicates} дубликати)`);
+    } catch (err) {
+      setAnkiSendResult(`Грешка: ${err instanceof Error ? err.message : 'Неизвестна грешка'}`);
+    }
+  };
+
   const handleSaveGrade = () => {
     // Prevent duplicate saves
     // Support both topic quizzes and module quizzes
@@ -1209,6 +1300,10 @@ function QuizContent() {
     setClozeCards(null);
     setIsGeneratingCloze(false);
     setClozeError(null);
+    setAnkiMaterialCards(null);
+    setIsGeneratingAnkiMaterial(false);
+    setAnkiMaterialError(null);
+    setAnkiSendResult(null);
     setCountWarning(null);
     setShowEarlyStopConfirm(false);
     setShowBackConfirm(false);
@@ -1453,6 +1548,120 @@ function QuizContent() {
         onBack={() => { setShowBackConfirm(false); router.push('/quiz'); }}
       />
       </>
+    );
+  }
+
+  // Anki Cards from Material view
+  if (ankiMaterialCards || isGeneratingAnkiMaterial) {
+    return (
+      <div className="min-h-screen p-6 space-y-6">
+        <button
+          onClick={() => { setAnkiMaterialCards(null); setAnkiMaterialError(null); setAnkiSendResult(null); }}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> Назад към режими
+        </button>
+
+        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-3xl mx-auto">
+          {isGeneratingAnkiMaterial ? (
+            <div className="text-center py-12">
+              <RefreshCw size={32} className="animate-spin text-emerald-400 mx-auto" />
+              <p className="text-slate-400 mt-4 font-mono">Генериране на Anki карти от материала...</p>
+              <p className="text-xs text-slate-600 font-mono mt-1">Bloom L1 (Запомняне): дефиниции, термини, факти</p>
+            </div>
+          ) : ankiMaterialCards ? (
+            <>
+              <div className="flex items-center gap-3 mb-6">
+                <Sparkles size={24} className="text-emerald-400" />
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-100 font-mono">Anki Карти: {topic?.name}</h2>
+                  <p className="text-sm text-slate-400 font-mono">Bloom L1 (Запомняне) · {ankiMaterialCards.length} карти</p>
+                </div>
+              </div>
+
+              {/* Cards list */}
+              <div className="space-y-2 mb-6 max-h-[500px] overflow-y-auto pr-1">
+                {ankiMaterialCards.map((card, i) => (
+                  <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3 group relative">
+                    <span className="text-[10px] text-slate-600 font-mono absolute top-1.5 left-2">{i + 1}</span>
+                    <p
+                      className="text-slate-200 font-mono text-sm leading-relaxed pl-5 pr-8"
+                      dangerouslySetInnerHTML={{
+                        __html: card.replace(
+                          /\{\{c\d+::(.*?)\}\}/g,
+                          '<span class="text-emerald-400 font-semibold bg-emerald-400/10 px-1 rounded">$1</span>'
+                        )
+                      }}
+                    />
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(card); showToast('Копирано!', 'success'); }}
+                      className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 bg-slate-700/80 hover:bg-emerald-600/80 text-slate-400 hover:text-white rounded transition-all"
+                      title="Копирай"
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(ankiMaterialCards.join('\n\n'));
+                    showToast(`${ankiMaterialCards.length} карти копирани!`, 'success');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 hover:bg-emerald-600/30 rounded-lg font-mono text-sm transition-colors"
+                >
+                  <Copy size={16} /> Копирай всички
+                </button>
+
+                {ankiConnectAvailable && (
+                  <button
+                    onClick={sendCardsToAnki}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-mono text-sm transition-colors"
+                  >
+                    <Sparkles size={16} /> Изпрати в Anki
+                  </button>
+                )}
+
+                <button
+                  onClick={() => generateAnkiFromMaterial(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-mono text-sm transition-colors"
+                >
+                  <RefreshCw size={16} /> Генерирай отново
+                </button>
+              </div>
+
+              {ankiSendResult && (
+                <p className={`mt-3 text-sm font-mono ${ankiSendResult.startsWith('Грешка') ? 'text-red-400' : 'text-emerald-400'}`}>
+                  {ankiSendResult}
+                </p>
+              )}
+            </>
+          ) : null}
+
+          {ankiMaterialError && (
+            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              {ankiMaterialError === 'API_KEY_MISSING' ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={18} className="text-amber-400" />
+                    <span className="text-amber-400 font-mono text-sm">Нужен е API ключ</span>
+                  </div>
+                  <Link href="/settings" className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg font-mono text-sm">
+                    <Settings size={14} /> Настройки
+                  </Link>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-red-400 font-mono text-sm">
+                  <AlertCircle size={18} /> {ankiMaterialError}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 

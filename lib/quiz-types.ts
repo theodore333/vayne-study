@@ -1,6 +1,6 @@
 import { BloomLevel } from './types';
 
-export type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness';
+export type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards';
 
 export interface Question {
   type: 'multiple_choice' | 'open' | 'case_study';

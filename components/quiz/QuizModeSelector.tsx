@@ -1,6 +1,6 @@
 'use client';
 
-import { TrendingUp, Lightbulb, Zap, Brain, Target, FileText, Repeat, Settings } from 'lucide-react';
+import { TrendingUp, Lightbulb, Zap, Brain, Target, FileText, Repeat, Settings, Sparkles } from 'lucide-react';
 import { QuizMode } from '@/lib/quiz-types';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 
@@ -152,6 +152,22 @@ export function QuizModeSelector({
               </span>
             </button>
           )}
+
+          {/* Anki Cards - only for single topic with material */}
+          {!isMultiMode && hasMaterial && (
+            <button
+              onClick={() => { setMode('anki_cards'); setShowCustomOptions(false); }}
+              className={`p-4 rounded-xl border text-left transition-all ${
+                mode === 'anki_cards' ? 'bg-emerald-500/20 border-emerald-500 ring-2 ring-emerald-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+              }`}
+            >
+              <Sparkles size={20} className={mode === 'anki_cards' ? 'text-emerald-400' : 'text-slate-400'} />
+              <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'anki_cards' ? 'text-emerald-400' : 'text-slate-300'}`}>
+                Anki Карти
+              </span>
+              <span className="text-xs text-slate-500 font-mono">Bloom L1: дефиниции, факти</span>
+            </button>
+          )}
         </div>
 
         {/* Cross-topic drill toggle + stats */}
@@ -198,7 +214,7 @@ export function QuizModeSelector({
         )}
 
         {/* Quiz Length Dropdown */}
-        {mode && mode !== 'free_recall' && mode !== 'custom' && mode !== 'drill_weakness' && (
+        {mode && mode !== 'free_recall' && mode !== 'custom' && mode !== 'drill_weakness' && mode !== 'anki_cards' && (
           <div className="mt-4">
             <label className="block text-xs text-slate-500 mb-2 font-mono uppercase tracking-wider">
               Дължина на теста
@@ -303,7 +319,7 @@ export function QuizModeSelector({
       </div>
 
       {/* Material mode indicator */}
-      {mode && mode !== 'free_recall' && !hasMaterial && (
+      {mode && mode !== 'free_recall' && mode !== 'anki_cards' && !hasMaterial && (
         <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
           <p className="text-xs text-amber-300 font-mono">
             <span className="font-bold">Общи знания</span> — няма добавен материал. Въпросите ще са от стандартния медицински курс, не от конкретния ти конспект.
@@ -316,18 +332,22 @@ export function QuizModeSelector({
         onClick={mode === 'free_recall' ? () => {} : onOpenPreview}
         disabled={isGenerating || !mode || (mode === 'free_recall' && !hasMaterial)}
         className={`w-full py-4 font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center justify-center gap-2 ${
-          mode === 'free_recall'
+          mode === 'anki_cards'
             ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'
-            : mode === 'gap_analysis'
-              ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white'
-              : mode === 'mid_order'
-                ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
-                : mode === 'higher_order'
-                  ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white'
-                  : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white'
+            : mode === 'free_recall'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'
+              : mode === 'gap_analysis'
+                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white'
+                : mode === 'mid_order'
+                  ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
+                  : mode === 'higher_order'
+                    ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white'
+                    : 'bg-gradient-to-r from-amber-600 to-orange-600 text-white'
         }`}
       >
-        {mode === 'free_recall' ? (
+        {mode === 'anki_cards' ? (
+          <><Sparkles size={20} /> Генерирай Anki карти</>
+        ) : mode === 'free_recall' ? (
           <><FileText size={20} /> Започни Free Recall</>
         ) : (
           <><Settings size={20} /> Преглед и редакция</>

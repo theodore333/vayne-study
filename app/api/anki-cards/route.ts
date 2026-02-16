@@ -75,22 +75,23 @@ FRAMEWORK 2: PETER WOZNIAK'S 20 RULES OF FORMULATING KNOWLEDGE
 OUTPUT FORMAT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Output ONLY a valid JSON array of strings
-- Each string = one cloze card using {{c1::...}} syntax
-- Use {{c1::...}} for the primary hidden fact. Use {{c2::...}} ONLY when testing 2 related facts in the same sentence.
+- Each string = one cloze card in QUESTION FORMAT: "Question? {{c1::answer}}"
+- The card MUST be phrased as a QUESTION. The cloze {{c1::...}} contains the ANSWER.
+- Use {{c1::...}} for the primary hidden answer. Use {{c2::...}} ONLY when a single question tests 2 related answers.
 - Write in the SAME LANGUAGE as the input material
 - NO markdown, NO extra text, NO commentary — JUST the JSON array
-- Generate 10-30 cards depending on material length
+- Generate as many cards as the material warrants — cover ALL key facts, definitions, and terminology
 - Prioritize: definitions → key terms → facts → associations → values/numbers
 
 EXAMPLES:
 Material: "Ацетилхолинът (ACh) е невротрансмитер в парасимпатиковата нервна система. Той се разгражда от ацетилхолинестераза (AChE). Рецепторите за ACh са два типа: мускаринови и никотинови."
 → [
-  "Главният невротрансмитер в парасимпатиковата нервна система е {{c1::ацетилхолин (ACh)}}.",
-  "{{c1::Ацетилхолинестераза (AChE)}} е ензимът, който разгражда ацетилхолин.",
-  "Ацетилхолинът се разгражда от {{c1::ацетилхолинестераза (AChE)}}.",
-  "Двата типа рецептори за ацетилхолин са {{c1::мускаринови}} и {{c2::никотинови}}.",
-  "{{c1::Мускариновите}} рецептори са един от двата типа ацетилхолинови рецептори.",
-  "{{c1::Никотиновите}} рецептори са един от двата типа ацетилхолинови рецептори."
+  "Кой е главният невротрансмитер в парасимпатиковата нервна система? {{c1::Ацетилхолин (ACh)}}",
+  "Кой ензим разгражда ацетилхолин? {{c1::Ацетилхолинестераза (AChE)}}",
+  "Какво разгражда ацетилхолинестераза (AChE)? {{c1::Ацетилхолин (ACh)}}",
+  "Кои са двата типа рецептори за ацетилхолин? {{c1::Мускаринови}} и {{c2::никотинови}}",
+  "Мускариновите рецептори са тип рецептори за кой невротрансмитер? {{c1::Ацетилхолин (ACh)}}",
+  "Никотиновите рецептори са тип рецептори за кой невротрансмитер? {{c1::Ацетилхолин (ACh)}}"
 ]`;
 
 // ── Wrong-answers prompt (existing) ──────────────────────────────────────
@@ -148,7 +149,7 @@ export async function POST(request: Request) {
 
     systemPrompt = materialSystemPrompt;
     userPrompt = `Тема: ${topicName || 'General'}\n\nМатериал:\n\n${stripped}\n\nГенерирай Bloom Level 1 (Запомняне) cloze карти. САМО JSON array.`;
-    maxTokens = 4000;
+    maxTokens = 8000;
   } else {
     // ── Generate cards from wrong answers (existing behavior) ──
     const { wrongAnswers } = body;

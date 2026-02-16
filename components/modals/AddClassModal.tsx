@@ -5,12 +5,24 @@ import { X, Calendar, Clock, MapPin, CheckSquare, Square } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { CLASS_TYPES, DAYS } from '@/lib/constants';
 
+interface EditClassData {
+  id: string;
+  subjectId: string;
+  day: number;
+  time: string;
+  room: string;
+  description?: string;
+  topicIds?: string[];
+  startDate?: string;
+}
+
 interface Props {
   onClose: () => void;
   defaultDay?: number;
+  editClass?: EditClassData;
 }
 
-export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
+export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Props) {
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -19,16 +31,16 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
-  const { data, addClass } = useApp();
+  const { data, addClass, updateClass } = useApp();
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
-  const [subjectId, setSubjectId] = useState(activeSubjects[0]?.id || '');
-  const [day, setDay] = useState(defaultDay);
-  const [time, setTime] = useState('09:00');
-  const [room, setRoom] = useState('');
-  const [description, setDescription] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set());
-  const [showTopics, setShowTopics] = useState(false);
+  const [subjectId, setSubjectId] = useState(editClass?.subjectId || activeSubjects[0]?.id || '');
+  const [day, setDay] = useState(editClass?.day ?? defaultDay);
+  const [time, setTime] = useState(editClass?.time || '09:00');
+  const [room, setRoom] = useState(editClass?.room || '');
+  const [description, setDescription] = useState(editClass?.description || '');
+  const [startDate, setStartDate] = useState(editClass?.startDate || '');
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set(editClass?.topicIds || []));
+  const [showTopics, setShowTopics] = useState(!!(editClass?.topicIds && editClass.topicIds.length > 0));
 
   const selectedSubject = data.subjects.find(s => s.id === subjectId);
   const exerciseConfig = CLASS_TYPES.exercise;
@@ -57,16 +69,22 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
     e.preventDefault();
     if (!subjectId) return;
 
-    addClass({
+    const classData = {
       subjectId,
       day,
       time,
-      type: 'exercise',
+      type: 'exercise' as const,
       room,
       description: description.trim() || undefined,
       topicIds: selectedTopicIds.size > 0 ? Array.from(selectedTopicIds) : undefined,
       startDate: startDate || undefined
-    });
+    };
+
+    if (editClass) {
+      updateClass(editClass.id, classData);
+    } else {
+      addClass(classData);
+    }
     onClose();
   };
 
@@ -81,7 +99,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b]">
           <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2">
             <Calendar size={20} className="text-orange-400" />
-            Добави упражнение
+            {editClass ? 'Редактирай упражнение' : 'Добави упражнение'}
           </h2>
           <button
             onClick={onClose}
@@ -255,7 +273,7 @@ export default function AddClassModal({ onClose, defaultDay = 0 }: Props) {
             disabled={!subjectId}
             className="w-full py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-amber-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Добави упражнение
+            {editClass ? 'Запази промените' : 'Добави упражнение'}
           </button>
         </form>
       </div>

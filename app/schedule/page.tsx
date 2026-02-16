@@ -13,6 +13,7 @@ export default function SchedulePage() {
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
+  const [editingClass, setEditingClass] = useState<typeof data.schedule[0] | null>(null);
 
   // Get upcoming events sorted by date
   const upcomingEvents = useMemo(() => {
@@ -254,12 +255,20 @@ export default function SchedulePage() {
                           borderColor: typeConfig.color + "40"
                         }}
                       >
-                        <button
-                          onClick={() => deleteClass(cls.id)}
-                          className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all"
-                        >
-                          <Trash2 size={12} className="text-red-400" />
-                        </button>
+                        <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                          <button
+                            onClick={() => setEditingClass(cls)}
+                            className="p-1 rounded hover:bg-blue-500/20"
+                          >
+                            <Edit2 size={12} className="text-blue-400" />
+                          </button>
+                          <button
+                            onClick={() => deleteClass(cls.id)}
+                            className="p-1 rounded hover:bg-red-500/20"
+                          >
+                            <Trash2 size={12} className="text-red-400" />
+                          </button>
+                        </div>
                         <div className="text-lg mb-1">{typeConfig.icon}</div>
                         <div className="text-xs font-mono mb-1" style={{ color: typeConfig.color }}>
                           {cls.time}
@@ -614,6 +623,7 @@ export default function SchedulePage() {
       )}
 
       {showAddClass && <AddClassModal onClose={() => setShowAddClass(false)} defaultDay={selectedDay} />}
+      {editingClass && <AddClassModal onClose={() => setEditingClass(null)} editClass={editingClass} />}
       {showAddEvent && <AddAcademicEventModal onClose={() => setShowAddEvent(false)} />}
     </div>
   );

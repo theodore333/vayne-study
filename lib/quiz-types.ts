@@ -2,7 +2,7 @@ import { BloomLevel } from './types';
 
 export type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards';
 
-export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'true_false' | 'fill_blank' | 'short_answer' | 'matching' | 'ordering';
+export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'fill_blank' | 'short_answer' | 'matching' | 'ordering';
 
 export interface Question {
   type: QuestionType;
@@ -111,7 +111,6 @@ export function isAnswerCorrect(q: Question, answer: string | null, openEval?: O
   switch (q.type) {
     case 'multiple_choice':
     case 'case_study':
-    case 'true_false':
       return answer === q.correctAnswer;
     case 'fill_blank': {
       const userAns = answer.toLowerCase().trim();

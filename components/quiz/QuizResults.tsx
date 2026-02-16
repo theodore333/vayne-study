@@ -131,9 +131,8 @@ export function QuizResults({
                         </span>
                         <span className="text-xs text-slate-500 font-mono">
                           {q.type === 'case_study' ? 'Казус' : q.type === 'open' ? 'Отворен' :
-                           q.type === 'true_false' ? 'Вярно/Невярно' : q.type === 'fill_blank' ? 'Попълни' :
-                           q.type === 'short_answer' ? 'Кратък' : q.type === 'matching' ? 'Свържи' :
-                           q.type === 'ordering' ? 'Подреди' : 'Избор'}
+                           q.type === 'fill_blank' ? 'Попълни' : q.type === 'short_answer' ? 'Кратък' :
+                           q.type === 'matching' ? 'Свържи' : q.type === 'ordering' ? 'Подреди' : 'Избор'}
                         </span>
                         {q.concept && (
                           <span className="text-xs text-purple-400 font-mono ml-auto">
@@ -161,7 +160,6 @@ export function QuizResults({
                                  return items.map((it, idx) => `${idx + 1}. ${it}`).join('; ');
                                } catch { return userAnswer; }
                              })() :
-                             q.type === 'true_false' ? (userAnswer === 'true' ? 'Вярно' : 'Невярно') :
                              userAnswer}
                           </span>
                         </div>
@@ -170,7 +168,6 @@ export function QuizResults({
                           <span className="text-green-300">
                             {q.type === 'matching' && q.pairs ? q.pairs.map(p => `${p.left} → ${p.right}`).join('; ') :
                              q.type === 'ordering' && q.items ? q.items.map((it, idx) => `${idx + 1}. ${it}`).join('; ') :
-                             q.type === 'true_false' ? (q.correctAnswer === 'true' ? 'Вярно' : 'Невярно') :
                              q.correctAnswer}
                           </span>
                         </div>

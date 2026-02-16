@@ -973,15 +973,14 @@ Intelligently select:
 - The most important concepts to test
 - Questions that efficiently assess deep understanding
 
-QUESTION TYPE DISTRIBUTION (ВАЖНО — 8 ТИПА!):
+QUESTION TYPE DISTRIBUTION (ВАЖНО — 7 ТИПА!):
 Use a DIVERSE mix of question types. The student benefits from varied testing formats:
 - "open" (25-35%) — free text, tests deep understanding (Bloom 3-6)
-- "short_answer" (10-15%) — кратък отговор, 1-3 sentences (Bloom 2-4)
+- "short_answer" (10-20%) — кратък отговор, 1-3 sentences (Bloom 2-4)
 - "fill_blank" (10-15%) — попълни липсващия термин/факт (Bloom 1-3)
-- "true_false" (10-15%) — вярно/невярно твърдение (Bloom 1-3)
 - "matching" (5-10%) — свържи 3-5 двойки термин↔определение (Bloom 2-4)
 - "ordering" (5-10%) — подреди 3-6 стъпки в правилен ред (Bloom 3-5)
-- "multiple_choice" (10-15%) — 4 опции, фактологични въпроси (Bloom 1-3)
+- "multiple_choice" (15-20%) — 4 опции, фактологични въпроси (Bloom 1-3)
 - "case_study" (10-15%) — клинични сценарии с опции (Bloom 4-6)
 
 Return ONLY a valid JSON array. Each question object MUST match one of these schemas:
@@ -991,9 +990,6 @@ FOR "multiple_choice" and "case_study":
 
 FOR "open":
 { "type": "open", "question": "...", "correctAnswer": "примерен пълен отговор", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
-
-FOR "true_false":
-{ "type": "true_false", "question": "Твърдение за оценка", "correctAnswer": "true" OR "false", "explanation": "защо е вярно/невярно", "bloomLevel": 1-6, "concept": "..." }
 
 FOR "short_answer":
 { "type": "short_answer", "question": "Кратък въпрос?", "correctAnswer": "кратък отговор (1-3 изречения)", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }

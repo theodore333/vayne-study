@@ -669,7 +669,6 @@ function QuizContent() {
     switch (currentQuestion.type) {
       case 'multiple_choice':
       case 'case_study':
-      case 'true_false':
         answer = selectedAnswer;
         break;
       case 'fill_blank':
@@ -788,7 +787,7 @@ function QuizContent() {
     const currentQuestion = quizState.questions[quizState.currentIndex];
     let answer: string | null = null;
     switch (currentQuestion.type) {
-      case 'multiple_choice': case 'case_study': case 'true_false':
+      case 'multiple_choice': case 'case_study':
         answer = selectedAnswer; break;
       case 'fill_blank':
         answer = fillBlankAnswer.trim() || null; break;

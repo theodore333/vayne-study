@@ -25,7 +25,6 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   multiple_choice: { label: 'Избор', color: 'bg-blue-500/20 text-blue-400' },
   case_study: { label: 'Казус', color: 'bg-amber-500/20 text-amber-400' },
   open: { label: 'Отворен', color: 'bg-purple-500/20 text-purple-400' },
-  true_false: { label: 'Вярно/Невярно', color: 'bg-teal-500/20 text-teal-400' },
   fill_blank: { label: 'Попълни', color: 'bg-cyan-500/20 text-cyan-400' },
   short_answer: { label: 'Кратък', color: 'bg-indigo-500/20 text-indigo-400' },
   matching: { label: 'Свържи', color: 'bg-emerald-500/20 text-emerald-400' },
@@ -268,36 +267,6 @@ export function QuizQuestion({
                 Натисни A-D или 1-4 за избор, Enter за проверка
               </p>
             )}
-          </div>
-        )}
-
-        {/* ── True/False ── */}
-        {currentQuestion.type === 'true_false' && (
-          <div className="flex gap-4">
-            {[{ value: 'true', label: 'Вярно', color: 'green' }, { value: 'false', label: 'Невярно', color: 'red' }].map(opt => {
-              const isSelected = selectedAnswer === opt.value;
-              const isCorrectOpt = currentQuestion.correctAnswer === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() => !showExplanation && setSelectedAnswer(opt.value)}
-                  disabled={showExplanation}
-                  className={`flex-1 p-5 rounded-xl border-2 font-mono text-lg font-semibold transition-all ${
-                    showExplanation
-                      ? isCorrectOpt
-                        ? 'bg-green-500/20 border-green-500 text-green-300'
-                        : isSelected
-                          ? 'bg-red-500/20 border-red-500 text-red-300'
-                          : 'bg-slate-800/30 border-slate-700 text-slate-500'
-                      : isSelected
-                        ? 'bg-purple-500/20 border-purple-500 text-purple-200'
-                        : 'bg-slate-800/50 border-slate-600 text-slate-100 hover:border-slate-500 hover:bg-slate-700/50'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
           </div>
         )}
 
@@ -578,7 +547,7 @@ export function QuizQuestion({
             )}
 
             {/* Standard result for MCQ, true_false, fill_blank, matching, ordering */}
-            {(['multiple_choice', 'case_study', 'true_false', 'fill_blank', 'matching', 'ordering'].includes(currentQuestion.type)) && (
+            {(['multiple_choice', 'case_study', 'fill_blank', 'matching', 'ordering'].includes(currentQuestion.type)) && (
               <div className={`p-4 rounded-lg border ${
                 isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
               }`}>
@@ -613,7 +582,7 @@ export function QuizQuestion({
               onClick={onAnswer}
               disabled={
                 isEvaluatingOpen ||
-                (['multiple_choice', 'case_study', 'true_false'].includes(currentQuestion.type) ? !selectedAnswer :
+                (['multiple_choice', 'case_study'].includes(currentQuestion.type) ? !selectedAnswer :
                  currentQuestion.type === 'fill_blank' ? !fillBlankAnswer.trim() :
                  currentQuestion.type === 'matching' ? Object.keys(matchingAnswers).length < (currentQuestion.pairs?.length || 0) :
                  currentQuestion.type === 'ordering' ? false :

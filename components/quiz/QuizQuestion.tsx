@@ -4,6 +4,21 @@ import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, 
 import { Question, OpenAnswerEvaluation } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
+// Format matching/numbered question text with line breaks
+function formatQuestionText(text: string): React.ReactNode {
+  const formatted = text
+    .replace(/\s+(\d+)\.\s/g, '\n$1. ')
+    .replace(/\s+([а-дa-e])\.\s/gi, '\n$1. ')
+    .trim();
+  if (formatted === text) return text;
+  return formatted.split('\n').map((line, i) => (
+    <span key={i}>
+      {i > 0 && <br />}
+      {line}
+    </span>
+  ));
+}
+
 interface QuizQuestionProps {
   questions: Question[];
   currentIndex: number;
@@ -181,7 +196,7 @@ export function QuizQuestion({
         </div>
 
         <h2 className="text-xl md:text-2xl text-slate-100 mb-6 font-mono leading-relaxed tracking-wide">
-          {currentQuestion.question}
+          {formatQuestionText(currentQuestion.question)}
         </h2>
 
         {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') ? (

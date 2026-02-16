@@ -12,6 +12,23 @@ import Link from 'next/link';
 // Practice modes
 type PracticeMode = 'all' | 'weak' | 'spaced' | 'custom';
 
+// Format matching/numbered question text with line breaks
+function formatQuestionText(text: string): React.ReactNode {
+  // Detect matching format: numbered items + lettered items on one line
+  // Split before: numbered items (1., 2., etc.) and Cyrillic/Latin lettered items (а., б., a., b.)
+  const formatted = text
+    .replace(/\s+(\d+)\.\s/g, '\n$1. ')
+    .replace(/\s+([а-дa-e])\.\s/gi, '\n$1. ')
+    .trim();
+  if (formatted === text) return text;
+  return formatted.split('\n').map((line, i) => (
+    <span key={i}>
+      {i > 0 && <br />}
+      {line}
+    </span>
+  ));
+}
+
 // Shuffle helper - defined outside component to avoid impure function warning
 function shuffleArray<T>(arr: T[]): T[] {
   const shuffled = [...arr];
@@ -731,7 +748,7 @@ function PracticeContent() {
           </div>
 
           <h2 className="text-lg text-slate-100 mb-6 leading-relaxed">
-            {currentQuestion.text}
+            {formatQuestionText(currentQuestion.text)}
           </h2>
 
           {/* MCQ Options */}

@@ -1508,10 +1508,8 @@ export default function ReaderMode({
         if (!html || html === '<p></p>') return;
 
         // Safety: don't save content that is drastically shorter than what was loaded
-        const originalLen = topic.material?.length || 0;
-        const newLen = html.length;
-        if (originalLen > 100 && newLen < originalLen * 0.2) {
-          console.error('[ReaderMode] Refusing to save: content shrank from', originalLen, 'to', newLen);
+        if (originalMaterialLengthRef.current > 100 && html.length < originalMaterialLengthRef.current * 0.2) {
+          console.error('[ReaderMode] Refusing to save: content shrank from', originalMaterialLengthRef.current, 'to', html.length);
           return;
         }
 
@@ -1580,7 +1578,14 @@ export default function ReaderMode({
     return () => container.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Save on unmount - with safety guards against saving empty content
+  // Validate content before saving (shared by all save paths)
+  const isContentValid = useCallback((html: string) => {
+    if (!html || html === '<p></p>' || html.trim().length < 10) return false;
+    if (originalMaterialLengthRef.current > 100 && html.length < originalMaterialLengthRef.current * 0.1) return false;
+    return true;
+  }, []);
+
+  // Save on unmount - uses same validation as forceSave
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
@@ -1588,21 +1593,11 @@ export default function ReaderMode({
       }
       if (editor && hasUnsavedChangesRef.current) {
         const html = editor.getHTML();
-        // Guard: never save empty/blank content over existing material
-        if (!html || html === '<p></p>' || html.trim().length < 10) {
-          console.warn('[ReaderMode] Blocked unmount save: content too short/empty');
-          return;
-        }
-        // Guard: if original material was substantial, don't save drastically shorter content
-        // (protects against editor failing to load content properly)
-        if (originalMaterialLengthRef.current > 100 && html.length < originalMaterialLengthRef.current * 0.1) {
-          console.warn('[ReaderMode] Blocked unmount save: content drastically shorter than original');
-          return;
-        }
+        if (!isContentValid(html)) return;
         onSaveMaterialRef.current(html);
       }
     };
-  }, [editor]);
+  }, [editor, isContentValid]);
 
   // BACKUP: Auto-save every 3 seconds if there are unsaved changes
   useEffect(() => {
@@ -1635,7 +1630,7 @@ export default function ReaderMode({
     setSaveToast({ show: true, message, type });
   }, []);
 
-  // Force save - ALWAYS saves to prevent data loss on navigation
+  // Force save on navigation - with content validation
   const forceSave = useCallback(() => {
     if (!editor) return;
 
@@ -1645,9 +1640,11 @@ export default function ReaderMode({
       saveTimeoutRef.current = null;
     }
 
-    // ALWAYS save - ignore isSaving state to prevent data loss
+    const html = editor.getHTML();
+    if (!isContentValid(html)) return;
+
     try {
-      onSaveMaterialRef.current(editor.getHTML());
+      onSaveMaterialRef.current(html);
       setLastSaved(new Date());
       hasUnsavedChangesRef.current = false;
       setHasUnsavedChanges(false);
@@ -2031,6 +2028,9 @@ export default function ReaderMode({
 
       // Update editor with formatted text
       const formattedHtml = markdownToHtml(data.formattedText);
+      if (!formattedHtml || formattedHtml === '<p></p>' || formattedHtml.trim().length < 10) {
+        throw new Error('AI върна празен резултат');
+      }
       editor.commands.setContent(formattedHtml);
 
       // Save IMMEDIATELY - save the HTML, not the markdown!

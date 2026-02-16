@@ -6,7 +6,8 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle,
   Clock, GraduationCap, Settings, FileQuestion, PanelLeftClose, PanelLeft,
-  Stethoscope, Rocket, ChevronDown, ChevronRight, BarChart3, Scissors, Sparkles
+  Stethoscope, Rocket, ChevronDown, ChevronRight, BarChart3, Scissors, Sparkles,
+  Search
 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
@@ -210,6 +211,17 @@ export default function Sidebar() {
           </button>
         </div>
 
+        {/* Search button */}
+        <div className="p-2 border-b border-[#1e293b]">
+          <button
+            onClick={() => window.dispatchEvent(new Event('open-search'))}
+            className="w-full flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:bg-purple-500/10 hover:text-purple-400 transition-colors"
+            title="Търсене (Ctrl+K)"
+          >
+            <Search size={18} />
+          </button>
+        </div>
+
         {/* Navigation Icons - show group icons */}
         <nav className="p-2 border-b border-[#1e293b]">
           <ul className="space-y-1">
@@ -290,6 +302,18 @@ export default function Sidebar() {
             <PanelLeftClose size={18} />
           </button>
         </div>
+      </div>
+
+      {/* Search button */}
+      <div className="px-3 pt-3 pb-1">
+        <button
+          onClick={() => window.dispatchEvent(new Event('open-search'))}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:bg-purple-500/10 hover:text-purple-400 transition-colors font-mono text-sm border border-slate-800 hover:border-purple-500/30"
+        >
+          <Search size={16} />
+          <span className="flex-1 text-left">Търсене...</span>
+          <kbd className="text-[10px] text-slate-600 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Ctrl+K</kbd>
+        </button>
       </div>
 
       {/* Grouped Navigation */}

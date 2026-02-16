@@ -7,6 +7,7 @@ import MainContent from "@/components/MainContent";
 import FloatingTimer from "@/components/FloatingTimer";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import ToastContainer from "@/components/Toast";
+import SearchModalWrapper from "@/components/SearchModalWrapper";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -34,6 +35,7 @@ export default function RootLayout({
             </div>
             <FloatingTimer />
             <ToastContainer />
+            <SearchModalWrapper />
           </ErrorBoundary>
         </AppProvider>
       </body>

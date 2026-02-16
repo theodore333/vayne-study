@@ -641,9 +641,14 @@ export default function TodayPage() {
               </button>
             </div>
           </div>
-          {(ankiStats.dueToday + ankiStats.newToday) > 0 && (
+          {(ankiStats.dueToday + ankiStats.newToday) > 0 ? (
             <div className="mt-3 text-xs text-slate-400 font-mono">
               Препоръка: Направи Anki преди да започнеш нови теми (~{Math.round((ankiStats.dueToday + ankiStats.newToday) * 0.5)} мин)
+            </div>
+          ) : (
+            <div className="mt-3 flex items-center gap-2 text-xs text-green-400 font-mono">
+              <CheckCircle2 size={14} />
+              Всички карти за днес са готови!
             </div>
           )}
         </div>

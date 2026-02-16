@@ -1831,8 +1831,8 @@ export function generateDailyPlan(
   }
 
   // ================ INTERLEAVE SUBJECTS ================
-  // Avoid consecutive tasks from the same subject — interleaving improves retention
-  // Greedy: for each position, pick the nearest different-subject task within ±1 priority level
+  // Round-robin by subject within priority tiers, then merge tiers in order.
+  // This ensures subjects alternate instead of clustering.
   if (tasks.length > 2) {
     const priorityValue = (type: string): number => {
       switch (type) {
@@ -1841,36 +1841,61 @@ export function generateDailyPlan(
         case 'medium': return 2;
         case 'normal': return 3;
         case 'project': return 4;
-        default: return 5;
+        case 'technique': return 5;
+        default: return 6;
       }
     };
 
-    // Sort by priority first
-    const sorted = [...tasks].sort((a, b) => priorityValue(a.type) - priorityValue(b.type));
+    // Group tasks into priority tiers
+    const tiers = new Map<number, DailyTask[]>();
+    for (const task of tasks) {
+      const p = priorityValue(task.type);
+      if (!tiers.has(p)) tiers.set(p, []);
+      tiers.get(p)!.push(task);
+    }
 
-    const result: DailyTask[] = [sorted[0]];
-    const remaining = sorted.slice(1);
+    // Within each tier, round-robin by subject
+    const interleaved: DailyTask[] = [];
+    const sortedTierKeys = [...tiers.keys()].sort((a, b) => a - b);
 
-    while (remaining.length > 0) {
-      const lastSubject = result[result.length - 1].subjectId;
-      const nextPriority = priorityValue(remaining[0].type);
-      let picked = -1;
+    for (const tierKey of sortedTierKeys) {
+      const tierTasks = tiers.get(tierKey)!;
+      if (tierTasks.length <= 1) {
+        interleaved.push(...tierTasks);
+        continue;
+      }
 
-      // Find nearest task from a different subject, within 1 priority level
-      for (let i = 0; i < remaining.length; i++) {
-        if (remaining[i].subjectId !== lastSubject) {
-          if (priorityValue(remaining[i].type) <= nextPriority + 1) {
-            picked = i;
+      // Group by subject within this tier
+      const bySubject = new Map<string, DailyTask[]>();
+      for (const t of tierTasks) {
+        const key = t.subjectId || t.projectId || t.id; // unique key for non-subject tasks
+        if (!bySubject.has(key)) bySubject.set(key, []);
+        bySubject.get(key)!.push(t);
+      }
+
+      // Round-robin across subjects
+      const queues = [...bySubject.values()];
+      while (queues.some(q => q.length > 0)) {
+        for (const q of queues) {
+          if (q.length > 0) interleaved.push(q.shift()!);
+        }
+      }
+    }
+
+    // Final pass: if two consecutive tasks share a subject, try swapping with the next different one
+    for (let i = 1; i < interleaved.length - 1; i++) {
+      if (interleaved[i].subjectId && interleaved[i].subjectId === interleaved[i - 1].subjectId) {
+        // Look ahead for a different subject to swap with (within 3 positions)
+        for (let j = i + 1; j < Math.min(i + 4, interleaved.length); j++) {
+          if (interleaved[j].subjectId !== interleaved[i].subjectId) {
+            [interleaved[i], interleaved[j]] = [interleaved[j], interleaved[i]];
             break;
           }
         }
       }
-
-      if (picked === -1) picked = 0; // No swap possible, take next in order
-      result.push(remaining.splice(picked, 1)[0]);
     }
 
-    return result;
+    return interleaved;
   }
 
   return tasks;

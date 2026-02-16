@@ -20,6 +20,7 @@ interface RequestTopic {
   size: 'small' | 'medium' | 'large' | null;
   material?: string;
   materialImages?: string[];
+  hasMaterial?: boolean;
 }
 
 interface RequestSubject {
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
       const hasTopics = totalTopics > 0;
       const hasExamDate = s.examDate !== null;
       const topicsWithMaterial = s.topics.filter(t =>
+        t.hasMaterial ||
         (t.material && t.material.trim().length > 0) ||
         (t.materialImages && t.materialImages.length > 0)
       ).length;
@@ -212,7 +214,7 @@ export async function POST(request: NextRequest) {
           avgGrade: t.avgGrade,
           lastReview: t.lastReview,
           size: t.size,
-          hasMaterial: (t.material && t.material.trim().length > 0) || (t.materialImages && t.materialImages.length > 0),
+          hasMaterial: t.hasMaterial || !!(t.material && t.material.trim().length > 0) || !!(t.materialImages && t.materialImages.length > 0),
           hasQuiz: t.quizCount > 0,
           needsReview: topicsNeedingReview.some(r => r.id === t.id)
         }))

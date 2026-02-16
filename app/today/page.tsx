@@ -313,7 +313,7 @@ export default function TodayPage() {
       quizCount: t.quizCount,
       lastReview: t.lastReview,
       size: t.size,
-      hasMaterial: !!(t.material && t.material.trim().length > 0) || (t.materialImages && t.materialImages.length > 0),
+      hasMaterial: !!(t.material && t.material.trim().length > 0) || !!(t.materialImages && t.materialImages.length > 0),
     }))
   })), [activeSubjects]);
 

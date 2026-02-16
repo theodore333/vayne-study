@@ -292,6 +292,11 @@ export default function TopicDetailPage() {
   };
 
   const handleSaveMaterial = () => {
+    // Save to localStorage FIRST so the loading useEffect doesn't revert
+    try {
+      localStorage.setItem(`material-${topic.id}`, material);
+    } catch {}
+    saveMaterialToStorage(topic.id, material);
     updateTopicMaterial(subjectId, topic.id, material);
     setMaterialSaved(true);
   };

@@ -3,13 +3,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
   ssr: false,
   loading: () => <div className="h-64 bg-slate-800/30 rounded-lg animate-pulse flex items-center justify-center text-slate-500 font-mono text-sm">Зареждане на редактора...</div>
 });
-import { TextHighlight } from '@/lib/types';
+import { TextHighlight, BLOOM_LEVELS } from '@/lib/types';
 import { TopicStatus, TopicSize } from '@/lib/types';
 import { STATUS_CONFIG, TOPIC_SIZE_CONFIG } from '@/lib/constants';
 import { getDaysSince, calculateRetrievability, getDaysUntilReview } from '@/lib/algorithms';
@@ -59,6 +59,9 @@ export default function TopicDetailPage() {
   const [quickQuestion, setQuickQuestion] = useState('');
   const [quickAnswer, setQuickAnswer] = useState('');
   const [quickSaved, setQuickSaved] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [enrichError, setEnrichError] = useState<string | null>(null);
+  const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
 
   // Inline topic name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -223,6 +226,79 @@ export default function TopicDetailPage() {
   const contextSyncNeededRef = useRef(false);
   const materialRef = useRef(material);
   materialRef.current = material;
+
+  // Local Bloom classification based on Bulgarian question keywords
+  const classifyBloomLocal = useCallback((question: string): number => {
+    const q = question.toLowerCase().trim();
+    // Level 6 - Create
+    if (/^(създай|предложи|проектирай|състави|планирай|разработи|формулирай)/i.test(q)) return 6;
+    // Level 5 - Evaluate
+    if (/^(оцени|обоснов|критикувай|защити|кое е по-добр|преценете|аргументирай)/i.test(q) || /кое е по-добр/i.test(q)) return 5;
+    // Level 4 - Analyze
+    if (/^(анализирай|разграничи|разделе|свърж|сравни.*и.*анализ)/i.test(q) || /каква е разликата|каква е връзката|по какво се различава/i.test(q)) return 4;
+    // Level 3 - Apply
+    if (/^(приложи|реши|използвай|изчисли|демонстрирай|как бихте|покажи как)/i.test(q) || /как се прилага|как бихте/i.test(q)) return 3;
+    // Level 2 - Understand
+    if (/^(обясни|защо|опиши|сравни|разграничи|интерпретирай)/i.test(q) || /какво означава|обясне|каква е ролята|защо е важн/i.test(q)) return 2;
+    // Level 1 - Remember
+    if (/^(какво е|кои са|назов|изброй|дефинирай|кога|къде|кой)/i.test(q) || /избройте|назовете|дефинирайте/i.test(q)) return 1;
+    // Default: Understand (most common for study questions)
+    return 2;
+  }, []);
+
+  // Enrich all unenriched questions with AI
+  const handleEnrichQuestions = useCallback(async () => {
+    if (!topic || !apiKey) return;
+    const questions = topic.customQuestions || [];
+    const unenriched = questions.filter(q => !q.enrichedAnswer);
+    if (unenriched.length === 0) return;
+
+    setIsEnriching(true);
+    setEnrichError(null);
+
+    try {
+      const res = await fetchWithTimeout('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 'enrich_custom_questions',
+          questions: unenriched.map(q => ({ question: q.question, answer: q.answer })),
+          topicName: topic.name,
+          subjectName: subject?.name || '',
+          material: material || '',
+        }),
+        timeout: 30000,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Грешка при обогатяване');
+
+      // Map enrichments back to questions by matching unenriched indices
+      const updated = [...questions];
+      let unenrichedIdx = 0;
+      for (let i = 0; i < updated.length; i++) {
+        if (!updated[i].enrichedAnswer) {
+          const enrichment = data.enrichments?.find((e: { index: number }) => e.index === unenrichedIdx);
+          if (enrichment) {
+            updated[i] = {
+              ...updated[i],
+              bloomLevel: enrichment.bloomLevel || updated[i].bloomLevel,
+              enrichedAnswer: enrichment.enrichedAnswer || undefined,
+              explanation: enrichment.explanation || undefined,
+            };
+          }
+          unenrichedIdx++;
+        }
+      }
+
+      updateTopic(subjectId, topicId, { customQuestions: updated });
+    } catch (err) {
+      setEnrichError(getFetchErrorMessage(err));
+    } finally {
+      setIsEnriching(false);
+    }
+  }, [topic, apiKey, material, subject, subjectId, topicId, updateTopic]);
 
   const handleSaveMaterialFromReader = useCallback((newMaterial: string) => {
     setMaterial(newMaterial);
@@ -986,96 +1062,178 @@ export default function TopicDetailPage() {
             );
           })()}
 
-          {/* Quick Add Question (for quiz AI) */}
-          <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border border-cyan-700/30 rounded-xl p-5">
-            <button
-              onClick={() => setShowQuickAdd(!showQuickAdd)}
-              className="w-full flex items-center justify-between"
-            >
-              <div className="flex items-center gap-2">
-                <MessageSquarePlus size={16} className="text-cyan-400" />
-                <span className="text-sm font-medium text-cyan-400 font-mono">
-                  Мои въпроси ({topic.customQuestions?.length || 0})
-                </span>
-              </div>
-              {showQuickAdd ? (
-                <ChevronUp size={16} className="text-cyan-400" />
-              ) : (
-                <ChevronDown size={16} className="text-cyan-400" />
-              )}
-            </button>
-
-            {showQuickAdd && (
-              <div className="mt-4 space-y-3">
-                {/* Existing questions */}
-                {topic.customQuestions && topic.customQuestions.length > 0 && (
-                  <div className="space-y-2 mb-3">
-                    {topic.customQuestions.map((q, i) => (
-                      <div key={i} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 group">
-                        <div className="flex justify-between items-start gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-slate-200 font-mono">{q.question}</p>
-                            {q.answer && (
-                              <p className="text-xs text-slate-400 font-mono mt-1">→ {q.answer}</p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => {
-                              const updated = topic.customQuestions!.filter((_, idx) => idx !== i);
-                              updateTopic(subjectId, topicId, { customQuestions: updated });
-                            }}
-                            className="p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                          >
-                            <Trash size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add new */}
-                <textarea
-                  value={quickQuestion}
-                  onChange={(e) => { setQuickQuestion(e.target.value); setQuickSaved(false); }}
-                  placeholder="Напиши въпрос..."
-                  rows={2}
-                  className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
-                />
-                <textarea
-                  value={quickAnswer}
-                  onChange={(e) => { setQuickAnswer(e.target.value); setQuickSaved(false); }}
-                  placeholder="Отговор (ако го знаеш)..."
-                  rows={2}
-                  className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
-                />
+          {/* Custom Questions (Мои въпроси) */}
+          {(() => {
+            const questions = topic.customQuestions || [];
+            const enrichedCount = questions.filter(q => q.enrichedAnswer).length;
+            const bloomColors: Record<number, string> = {
+              1: 'bg-blue-500', 2: 'bg-green-500', 3: 'bg-yellow-500',
+              4: 'bg-orange-500', 5: 'bg-red-500', 6: 'bg-purple-500'
+            };
+            return (
+              <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border border-cyan-700/30 rounded-xl p-5">
                 <button
-                  onClick={() => {
-                    if (!quickQuestion.trim()) return;
-                    const existing = topic.customQuestions || [];
-                    updateTopic(subjectId, topicId, {
-                      customQuestions: [...existing, { question: quickQuestion.trim(), answer: quickAnswer.trim() }]
-                    });
-                    setQuickQuestion('');
-                    setQuickAnswer('');
-                    setQuickSaved(true);
-                    setTimeout(() => setQuickSaved(false), 2000);
-                  }}
-                  disabled={!quickQuestion.trim()}
-                  className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-mono text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                  onClick={() => setShowQuickAdd(!showQuickAdd)}
+                  className="w-full flex items-center justify-between"
                 >
-                  {quickSaved ? (
-                    <><Check size={16} /> Записан!</>
+                  <div className="flex items-center gap-2">
+                    <MessageSquarePlus size={16} className="text-cyan-400" />
+                    <span className="text-sm font-medium text-cyan-400 font-mono">
+                      Мои въпроси ({questions.length})
+                    </span>
+                    {enrichedCount > 0 && (
+                      <span className="text-xs text-emerald-400 font-mono">
+                        {enrichedCount}/{questions.length} обогатени
+                      </span>
+                    )}
+                  </div>
+                  {showQuickAdd ? (
+                    <ChevronUp size={16} className="text-cyan-400" />
                   ) : (
-                    <><MessageSquarePlus size={16} /> Запиши</>
+                    <ChevronDown size={16} className="text-cyan-400" />
                   )}
                 </button>
-                <p className="text-xs text-slate-600 font-mono">
-                  Ще се включват в AI quiz-овете за тази тема.
-                </p>
+
+                {showQuickAdd && (
+                  <div className="mt-4 space-y-3">
+                    {/* Existing questions - compact cards with Bloom badges */}
+                    {questions.length > 0 && (
+                      <div className="space-y-1.5 mb-3 max-h-[400px] overflow-y-auto">
+                        {questions.map((q, i) => {
+                          const bloom = q.bloomLevel || classifyBloomLocal(q.question);
+                          const bloomInfo = BLOOM_LEVELS.find(b => b.level === bloom);
+                          const isExpanded = expandedQuestion === i;
+                          return (
+                            <div key={i} className="bg-slate-800/50 rounded-lg border border-slate-700/50 group">
+                              {/* Question header - always visible */}
+                              <div
+                                className="flex items-start gap-2 p-2.5 cursor-pointer"
+                                onClick={() => setExpandedQuestion(isExpanded ? null : i)}
+                              >
+                                {/* Bloom badge */}
+                                <span className={`shrink-0 mt-0.5 w-5 h-5 rounded text-[10px] font-bold flex items-center justify-center text-white ${bloomColors[bloom] || 'bg-slate-500'}`}>
+                                  {bloom}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-slate-200 font-mono leading-snug line-clamp-2">{q.question}</p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {q.enrichedAnswer && (
+                                    <span className="text-emerald-500"><Check size={12} /></span>
+                                  )}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const updated = topic.customQuestions!.filter((_, idx) => idx !== i);
+                                      updateTopic(subjectId, topicId, { customQuestions: updated });
+                                      if (expandedQuestion === i) setExpandedQuestion(null);
+                                    }}
+                                    className="p-0.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                  >
+                                    <Trash size={12} />
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Expanded: show answer + explanation */}
+                              {isExpanded && (
+                                <div className="px-2.5 pb-2.5 border-t border-slate-700/30 pt-2 space-y-1.5">
+                                  <div className="text-xs text-slate-500 font-mono">
+                                    Bloom: {bloomInfo?.name || '?'} (L{bloom})
+                                  </div>
+                                  {q.answer && (
+                                    <div>
+                                      <span className="text-xs text-slate-500 font-mono">Твой отговор: </span>
+                                      <span className="text-xs text-slate-300 font-mono">{q.answer}</span>
+                                    </div>
+                                  )}
+                                  {q.enrichedAnswer && (
+                                    <div className="p-2 bg-emerald-900/20 border border-emerald-800/30 rounded">
+                                      <span className="text-xs text-emerald-400 font-mono font-semibold">AI отговор: </span>
+                                      <span className="text-xs text-slate-300 font-mono">{q.enrichedAnswer}</span>
+                                    </div>
+                                  )}
+                                  {q.explanation && (
+                                    <div className="text-xs text-slate-400 font-mono italic">{q.explanation}</div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Enrich with AI button */}
+                    {questions.length > 0 && enrichedCount < questions.length && (
+                      <button
+                        onClick={handleEnrichQuestions}
+                        disabled={isEnriching || !apiKey}
+                        className="w-full py-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-mono text-xs font-semibold transition-all flex items-center justify-center gap-2"
+                      >
+                        {isEnriching ? (
+                          <><Loader2 size={14} className="animate-spin" /> Обогатяване...</>
+                        ) : (
+                          <><Sparkles size={14} /> Обогати с AI ({questions.length - enrichedCount} въпроса)</>
+                        )}
+                      </button>
+                    )}
+                    {enrichError && (
+                      <p className="text-xs text-red-400 font-mono">{enrichError}</p>
+                    )}
+
+                    {/* Add new question */}
+                    <div className="border-t border-slate-700/30 pt-3">
+                      <textarea
+                        value={quickQuestion}
+                        onChange={(e) => { setQuickQuestion(e.target.value); setQuickSaved(false); }}
+                        placeholder="Напиши въпрос..."
+                        rows={2}
+                        className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
+                      />
+                      <textarea
+                        value={quickAnswer}
+                        onChange={(e) => { setQuickAnswer(e.target.value); setQuickSaved(false); }}
+                        placeholder="Отговор (по избор)..."
+                        rows={2}
+                        className="w-full mt-2 p-3 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-200 font-mono text-sm placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 resize-none"
+                      />
+                      <button
+                        onClick={() => {
+                          if (!quickQuestion.trim()) return;
+                          const existing = topic.customQuestions || [];
+                          const bloom = classifyBloomLocal(quickQuestion.trim());
+                          updateTopic(subjectId, topicId, {
+                            customQuestions: [...existing, {
+                              question: quickQuestion.trim(),
+                              answer: quickAnswer.trim(),
+                              bloomLevel: bloom,
+                            }]
+                          });
+                          setQuickQuestion('');
+                          setQuickAnswer('');
+                          setQuickSaved(true);
+                          setTimeout(() => setQuickSaved(false), 2000);
+                        }}
+                        disabled={!quickQuestion.trim()}
+                        className="w-full mt-2 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-mono text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                      >
+                        {quickSaved ? (
+                          <><Check size={16} /> Записан!</>
+                        ) : (
+                          <><MessageSquarePlus size={16} /> Запиши</>
+                        )}
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-600 font-mono">
+                      Включват се автоматично в quiz-овете. Натисни &ldquo;Обогати с AI&rdquo; за отговори и Bloom нива.
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            );
+          })()}
 
           {/* Quick Quiz Prompt */}
           <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border border-purple-700/30 rounded-xl p-5">

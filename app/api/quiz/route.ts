@@ -161,6 +161,11 @@ export async function POST(request: Request) {
       return handleExamPrepFollowUpEval(anthropic, followUps);
     }
 
+    if (mode === 'enrich_custom_questions') {
+      const { questions, topicName: tName, subjectName: sName, material: mat } = body;
+      return handleEnrichCustomQuestions(anthropic, questions, tName || topicName, sName || subjectName, mat || material || '');
+    }
+
     // Standard quiz generation (assessment, mid_order, higher_order, custom)
     // material can be empty — generates from general medical knowledge
     return handleStandardQuiz(anthropic, {
@@ -691,6 +696,83 @@ ${isShortExpected
   return NextResponse.json({
     evaluation,
     model: 'opus',
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
+}
+
+// Enrich custom questions — classify Bloom level + generate answers using Haiku (cost-efficient)
+async function handleEnrichCustomQuestions(
+  anthropic: Anthropic,
+  questions: Array<{ question: string; answer: string }>,
+  topicName: string,
+  subjectName: string,
+  material: string
+) {
+  if (!questions || questions.length === 0) {
+    return NextResponse.json({ error: 'Няма въпроси за обогатяване' }, { status: 400 });
+  }
+
+  const materialContext = material
+    ? `\nМатериал на студента (използвай за контекст при отговорите):\n${material.substring(0, 8000)}`
+    : '';
+
+  const response = await anthropic.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 4096,
+    messages: [{
+      role: 'user',
+      content: `Ти си медицински преподавател. Трябва да обогатиш тези въпроси на студент по "${topicName}" (предмет: ${subjectName}).
+
+За ВСЕКИ въпрос:
+1. Определи Bloom ниво (1-6): 1=Запомняне, 2=Разбиране, 3=Прилагане, 4=Анализ, 5=Оценка, 6=Създаване
+2. Напиши подробен отговор (2-4 изречения, на български)
+3. Напиши кратко обяснение защо е важно (1-2 изречения)
+${materialContext}
+
+Въпроси:
+${questions.map((q, i) => `${i + 1}. ${q.question}${q.answer ? `\n   Отговор на студента: ${q.answer}` : ''}`).join('\n')}
+
+Върни САМО валиден JSON масив:
+[
+  {
+    "index": 0,
+    "bloomLevel": 1-6,
+    "enrichedAnswer": "подробен отговор на български",
+    "explanation": "защо е важно / клинична значимост"
+  }
+]
+
+ВАЖНО: index започва от 0, трябва да има запис за ВСЕКИ въпрос.`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let enrichments;
+  try {
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    enrichments = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+    if (!Array.isArray(enrichments)) throw new Error('Not an array');
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse enrichment response', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  // Haiku pricing: $1/$5 per MTok
+  const cost = (response.usage.input_tokens * 1 + response.usage.output_tokens * 5) / 1000000;
+
+  return NextResponse.json({
+    enrichments,
+    model: 'haiku',
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

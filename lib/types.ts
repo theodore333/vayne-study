@@ -204,7 +204,13 @@ export interface Topic {
   // Section: theoretical or practical
   section?: TopicSection;
   // Custom questions added manually by the student
-  customQuestions?: Array<{ question: string; answer: string }>;
+  customQuestions?: Array<{
+    question: string;
+    answer: string; // user-provided answer/hint
+    bloomLevel?: number; // 1-6 Bloom taxonomy level
+    enrichedAnswer?: string; // AI-generated detailed answer
+    explanation?: string; // AI-generated explanation
+  }>;
   ankiCards?: string[];  // Cloze cards generated from material (Bloom L1 - Remember)
   ankiCardsSourceLength?: number; // Length of material when cards were generated
 }

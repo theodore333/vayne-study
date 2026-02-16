@@ -293,6 +293,23 @@ export default function TodayPage() {
     setPlanIsCustomized(true);
   };
 
+  // Strip materials from subjects to reduce payload size for AI plan
+  const subjectsForPlan = useMemo(() => activeSubjects.map(s => ({
+    ...s,
+    topics: s.topics.map(t => ({
+      id: t.id,
+      number: t.number,
+      name: t.name,
+      status: t.status,
+      avgGrade: t.avgGrade,
+      quizHistory: t.quizHistory,
+      quizCount: t.quizCount,
+      lastReview: t.lastReview,
+      size: t.size,
+      hasMaterial: !!(t.material && t.material.trim().length > 0) || (t.materialImages && t.materialImages.length > 0),
+    }))
+  })), [activeSubjects]);
+
   // Generate bonus AI plan (when 100% complete)
   const handleGenerateBonusPlan = async (mode: 'tomorrow' | 'review' | 'weak') => {
     if (!apiKey) {
@@ -308,7 +325,7 @@ export default function TodayPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjects: activeSubjects,
+          subjects: subjectsForPlan,
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
@@ -372,7 +389,7 @@ export default function TodayPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjects: activeSubjects,
+          subjects: subjectsForPlan,
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,
@@ -428,7 +445,7 @@ export default function TodayPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subjects: activeSubjects,
+          subjects: subjectsForPlan,
           schedule: data.schedule,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,

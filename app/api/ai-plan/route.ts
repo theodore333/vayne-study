@@ -498,6 +498,9 @@ ${(() => { const stale = studyTechniques.filter(t => { if (!t.lastPracticedAt) r
 
       totalTopicsUsed += topics.length;
 
+      // Strip heavy fields from topics before returning (prevents localStorage quota issues)
+      const lightTopics = topics.map(({ material, materialImages, ...rest }) => rest);
+
       dailyTasks.push({
         id: `ai-task-${Date.now()}-${index}`,
         subjectId: task.subjectId,
@@ -506,7 +509,7 @@ ${(() => { const stale = studyTechniques.filter(t => { if (!t.lastPracticedAt) r
         type: task.type,
         typeLabel: task.typeLabel + ' (AI)',
         description: task.description,
-        topics: topics,
+        topics: lightTopics,
         estimatedMinutes: task.estimatedMinutes || topics.length * 20,
         completed: false
       });

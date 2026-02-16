@@ -404,8 +404,8 @@ export default function TopicDetailPage() {
 
   return (
     <>
-      {/* Reader Mode Overlay */}
-      {readerFromUrl && (
+      {/* Reader Mode Overlay — only render after material is loaded to prevent TipTap initializing empty */}
+      {readerFromUrl && material && (
         <ReaderMode
           topic={topicForReader}
           subjectName={subject.name}

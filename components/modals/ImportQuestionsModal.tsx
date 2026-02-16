@@ -881,7 +881,10 @@ export default function ImportQuestionsModal({
             <div className="space-y-2">
               <textarea
                 value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.length <= 200000) setPastedText(val);
+                }}
                 placeholder="Копирай и постави въпросите тук...&#10;&#10;1. Какво е фармакопея?&#10;Отговор: Фармакопеята е сборник от стандарти...&#10;&#10;2. Кой от следните е...&#10;А. ...&#10;Б. ..."
                 className="w-full h-48 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-purple-500 font-mono text-sm resize-y"
               />

@@ -174,6 +174,7 @@ function sanitizeLoadedData(data: AppData): AppData {
         highlights: a(t.highlights),
         customQuestions: Array.isArray(t.customQuestions) ? t.customQuestions : [],
         ankiCards: Array.isArray(t.ankiCards) ? t.ankiCards.filter((c: unknown) => typeof c === 'string') : undefined,
+        ankiCardsSourceLength: typeof t.ankiCardsSourceLength === 'number' ? t.ankiCardsSourceLength : undefined,
         fsrs: (t.fsrs && typeof t.fsrs === 'object' && typeof t.fsrs.stability === 'number' && typeof t.fsrs.difficulty === 'number') ? t.fsrs : undefined,
       })),
     }));

@@ -355,6 +355,7 @@ function ORRoomContent() {
           const cleanResponse = result.response
             .replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1')
             .replace(/_{1,3}([^_]+)_{1,3}/g, '$1')
+            .replace(/^#{1,4}\s+/gm, '')
             .replace(/^(?:Хирург|Surgeon)\s*:\s*/i, '');
           const surgeonMsg: ORMessage = {
             id: generateId(),

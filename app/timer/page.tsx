@@ -63,6 +63,7 @@ export default function TimerPage() {
 
   // Audio context
   const audioContextRef = useRef<AudioContext | null>(null);
+  const isCompletingPomodoroRef = useRef(false);
 
   const settings = data.pomodoroSettings;
   const goals = data.studyGoals;
@@ -407,8 +408,9 @@ export default function TimerPage() {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && pomodoroEndTime && timerMode === 'pomodoro' && isRunning) {
         const now = Date.now();
-        if (pomodoroEndTime <= now) {
+        if (pomodoroEndTime <= now && !isCompletingPomodoroRef.current) {
           // Timer expired while tab was hidden - trigger completion
+          isCompletingPomodoroRef.current = true;
           handlePomodoroComplete();
         }
       }
@@ -428,7 +430,8 @@ export default function TimerPage() {
       const remaining = Math.max(0, Math.ceil((pomodoroEndTime - now) / 1000));
       setPomodoroTimeLeft(remaining);
 
-      if (remaining <= 0) {
+      if (remaining <= 0 && !isCompletingPomodoroRef.current) {
+        isCompletingPomodoroRef.current = true;
         handlePomodoroComplete();
       }
     };
@@ -461,6 +464,7 @@ export default function TimerPage() {
         pomodoroPhase === 'shortBreak' ? settings.shortBreakDuration * 60 :
         settings.longBreakDuration * 60
       );
+      isCompletingPomodoroRef.current = false; // Reset guard for new session
       setPomodoroEndTime(Date.now() + duration * 1000);
       setIsPaused(false); // Clear paused state when starting
     }

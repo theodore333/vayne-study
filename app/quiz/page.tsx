@@ -947,6 +947,13 @@ function QuizContent() {
     // If topic already has saved cards and not forcing regeneration, show them
     if (!forceRegenerate && topic?.ankiCards && topic.ankiCards.length > 0) {
       setAnkiMaterialCards(topic.ankiCards);
+      // Warn if material changed since cards were generated
+      if (topic.ankiCardsSourceLength && topic.material) {
+        const diff = Math.abs(topic.material.length - topic.ankiCardsSourceLength);
+        if (diff > 100) {
+          setAnkiMaterialError('MATERIAL_CHANGED');
+        }
+      }
       // Check AnkiConnect in background
       checkAnkiConnect().then(setAnkiConnectAvailable).catch(() => setAnkiConnectAvailable(false));
       return;
@@ -987,9 +994,9 @@ function QuizContent() {
       } else if (result.cards && result.cards.length > 0) {
         setAnkiMaterialCards(result.cards);
         if (result.cost) incrementApiCalls(result.cost);
-        // Save to topic
+        // Save to topic with source length for staleness detection
         if (subjectId && topicId) {
-          updateTopic(subjectId, topicId, { ankiCards: result.cards });
+          updateTopic(subjectId, topicId, { ankiCards: result.cards, ankiCardsSourceLength: topic.material?.length });
         }
         // Check AnkiConnect in background
         checkAnkiConnect().then(setAnkiConnectAvailable).catch(() => setAnkiConnectAvailable(false));
@@ -1304,6 +1311,7 @@ function QuizContent() {
     setIsGeneratingAnkiMaterial(false);
     setAnkiMaterialError(null);
     setAnkiSendResult(null);
+    setAnkiConnectAvailable(null);
     setCountWarning(null);
     setShowEarlyStopConfirm(false);
     setShowBackConfirm(false);
@@ -1642,7 +1650,7 @@ function QuizContent() {
           ) : null}
 
           {ankiMaterialError && (
-            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <div className={`mt-4 p-4 rounded-lg ${ankiMaterialError === 'MATERIAL_CHANGED' ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
               {ankiMaterialError === 'API_KEY_MISSING' ? (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1652,6 +1660,18 @@ function QuizContent() {
                   <Link href="/settings" className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white rounded-lg font-mono text-sm">
                     <Settings size={14} /> Настройки
                   </Link>
+                </div>
+              ) : ankiMaterialError === 'MATERIAL_CHANGED' ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-amber-400 font-mono text-sm">
+                    <AlertCircle size={18} /> Материалът е променен от последното генериране
+                  </div>
+                  <button
+                    onClick={() => { setAnkiMaterialError(null); generateAnkiFromMaterial(true); }}
+                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-mono text-sm hover:bg-emerald-500"
+                  >
+                    Генерирай отново
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-red-400 font-mono text-sm">

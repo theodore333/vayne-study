@@ -206,6 +206,7 @@ export interface Topic {
   // Custom questions added manually by the student
   customQuestions?: Array<{ question: string; answer: string }>;
   ankiCards?: string[];  // Cloze cards generated from material (Bloom L1 - Remember)
+  ankiCardsSourceLength?: number; // Length of material when cards were generated
 }
 
 // Text highlight for reader mode

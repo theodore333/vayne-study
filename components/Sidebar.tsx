@@ -175,7 +175,7 @@ export default function Sidebar() {
   // Wrap in try-catch to prevent sidebar crash if algorithm fails
   let alerts: ReturnType<typeof getAlerts> = [];
   try {
-    alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals).slice(0, 2);
+    alerts = getAlerts(activeSubjects, data.schedule, data.studyGoals, data.academicPeriod).slice(0, 2);
   } catch (e) {
     console.error('Failed to get alerts:', e);
   }

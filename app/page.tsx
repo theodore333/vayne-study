@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, BookOpen, Calendar, Flame, Download, X, GraduationCap } from 'lucide-react';
+import { Plus, BookOpen, Calendar, Flame, GraduationCap, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, getAlerts, getTopicsNeedingFSRSReview, getSubjectHealth, getNextExamReadiness } from '@/lib/algorithms';
+import { getSubjectProgress, getDaysUntil, getNextExamReadiness, getOverallOnTrackStatus } from '@/lib/algorithms';
 import { getCurrentStreak } from '@/lib/analytics';
 import { Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
-import { checkAnkiConnect, getCollectionStats, type CollectionStats, getSelectedDecks } from '@/lib/anki';
 import GoalProgressRings from '@/components/dashboard/GoalProgressRings';
 
 // Dashboard Widgets
@@ -17,62 +16,21 @@ const WeeklyBarChart = dynamic(() => import('@/components/dashboard/WeeklyBarCha
   ssr: false,
   loading: () => <div className="h-40 bg-slate-800/30 rounded-lg animate-pulse" />
 });
-import ContinueStudyWidget from '@/components/dashboard/ContinueStudyWidget';
-import FSRSReviewWidget from '@/components/dashboard/FSRSReviewWidget';
-import ActionPanel from '@/components/dashboard/ActionPanel';
-import AttentionPanel from '@/components/dashboard/AttentionPanel';
 
 export default function Dashboard() {
-  const { data, isLoading, addDailyGoal, toggleDailyGoal, deleteDailyGoal } = useApp();
+  const { data, isLoading } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
-  const [ankiStats, setAnkiStats] = useState<CollectionStats | null>(null);
-  const [showBackupReminder, setShowBackupReminder] = useState(false);
-
-  useEffect(() => {
-    if (data.subjects.length === 0) return;
-    const lastBackup = localStorage.getItem('vayne-last-backup');
-    if (!lastBackup) { setShowBackupReminder(true); return; }
-    const daysSince = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince > 3) setShowBackupReminder(true);
-  }, [data.subjects.length]);
-
-  useEffect(() => {
-    const ankiEnabled = localStorage.getItem('anki-enabled');
-    if (ankiEnabled === 'true') refreshAnkiStats();
-  }, []);
-
-  const refreshAnkiStats = async () => {
-    try {
-      const connected = await checkAnkiConnect();
-      if (connected) {
-        const selectedDecks = getSelectedDecks();
-        const stats = await getCollectionStats(selectedDecks.length > 0 ? selectedDecks : undefined);
-        setAnkiStats(stats);
-      } else {
-        setAnkiStats(null);
-      }
-    } catch {
-      setAnkiStats(null);
-    }
-  };
 
   const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
-  const alerts = useMemo(() => getAlerts(activeSubjects, data.schedule, data.studyGoals), [activeSubjects, data.schedule, data.studyGoals]);
   const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
-  const fsrsReviews = useMemo(() => getTopicsNeedingFSRSReview(activeSubjects, data.studyGoals.fsrsMaxReviewsPerDay || 8, data.studyGoals), [activeSubjects, data.studyGoals]);
-  const subjectHealthStatuses = useMemo(() => {
-    try { return getSubjectHealth(activeSubjects); }
-    catch (e) { console.error('getSubjectHealth error:', e); return []; }
-  }, [activeSubjects]);
   const nextExamReadiness = useMemo(() => {
     try { return getNextExamReadiness(activeSubjects, data.questionBanks || []); }
     catch (e) { console.error('getNextExamReadiness error:', e); return null; }
   }, [activeSubjects, data.questionBanks]);
-
-  const hasAttention = (subjectHealthStatuses?.length > 0) ||
-    activeSubjects.some(s => s.topics.some(t => t.wrongAnswers?.length)) ||
-    (data.academicEvents?.length > 0) ||
-    alerts.length > 0;
+  const overallStatus = useMemo(() => {
+    try { return getOverallOnTrackStatus(activeSubjects, data.questionBanks || []); }
+    catch (e) { console.error('getOverallOnTrackStatus error:', e); return null; }
+  }, [activeSubjects, data.questionBanks]);
 
   if (isLoading) {
     return (
@@ -96,12 +54,25 @@ export default function Dashboard() {
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-xl font-bold text-slate-100 font-mono">{greeting}!</h1>
               {currentStreak > 0 && (
                 <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-500/15 text-orange-400 text-xs font-mono font-medium">
                   <Flame size={13} fill={currentStreak >= 3 ? 'currentColor' : 'none'} />
                   {currentStreak}д
+                </span>
+              )}
+              {overallStatus && (
+                <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium ${
+                  overallStatus.status === 'ready' ? 'bg-green-500/15 text-green-400' :
+                  overallStatus.status === 'on_track' ? 'bg-blue-500/15 text-blue-400' :
+                  overallStatus.status === 'at_risk' ? 'bg-orange-500/15 text-orange-400' :
+                  'bg-red-500/15 text-red-400'
+                }`}>
+                  {overallStatus.status === 'ready' ? <CheckCircle2 size={13} /> :
+                   overallStatus.status === 'on_track' ? <TrendingUp size={13} /> :
+                   <AlertTriangle size={13} />}
+                  {overallStatus.label}
                 </span>
               )}
               {nextExamReadiness && (
@@ -132,45 +103,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Backup reminder */}
-      {showBackupReminder && (
-        <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-          <Download size={16} className="text-amber-400 shrink-0" />
-          <span className="flex-1 text-xs text-amber-300 font-mono">
-            Не си свалял backup повече от 3 дни.
-          </span>
-          <button
-            onClick={async () => {
-              try {
-                const { getMaterialsCache } = await import('@/lib/storage');
-                const materials = getMaterialsCache();
-                const backup = { version: 2, exportedAt: new Date().toISOString(), appData: data, materials };
-                const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `vayne-backup-${new Date().toISOString().split('T')[0]}.json`;
-                a.click();
-                URL.revokeObjectURL(url);
-                localStorage.setItem('vayne-last-backup', new Date().toISOString());
-                setShowBackupReminder(false);
-              } catch (e) { console.error('Backup failed:', e); }
-            }}
-            className="px-3 py-1 bg-amber-600 hover:bg-amber-500 text-white rounded text-xs font-mono transition-colors"
-          >
-            Свали
-          </button>
-          <button onClick={() => setShowBackupReminder(false)} className="p-0.5 hover:bg-slate-700 rounded transition-colors">
-            <X size={14} className="text-slate-500" />
-          </button>
-        </div>
-      )}
-
       {/* ROW 0.5: Today's Schedule Strip */}
       {(() => {
         const todayDayIndex = (new Date().getDay() + 6) % 7;
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        const semStart = data.academicPeriod?.semesterStart ? new Date(data.academicPeriod.semesterStart) : null;
+        const semesterStarted = !semStart || semStart <= todayDate;
         const todayClasses = data.schedule
-          .filter(c => c.day === todayDayIndex)
+          .filter(c => {
+            if (c.day !== todayDayIndex) return false;
+            if (!semesterStarted && !c.startDate) return false;
+            if (c.startDate && new Date(c.startDate) > todayDate) return false;
+            return true;
+          })
           .sort((a, b) => a.time.localeCompare(b.time));
         if (todayClasses.length === 0) return null;
         return (
@@ -197,40 +143,15 @@ export default function Dashboard() {
         );
       })()}
 
-      {/* ROW 1: Continue Study (conditional) */}
-      <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
-
-      {/* ROW 2: Compact Subjects */}
+      {/* ROW 1: Compact Subjects */}
       <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
 
-      {/* ROW 3: Weekly Chart (full width) */}
+      {/* ROW 2: Weekly Chart (full width) */}
       <WeeklyBarChart
         timerSessions={data.timerSessions}
         dailyGoal={data.studyGoals.dailyMinutes}
-        ankiStats={ankiStats}
+        ankiStats={null}
       />
-
-      {/* ROW 4: Actions + FSRS Reviews (2 cols) */}
-      <div className={`grid gap-4 ${fsrsReviews.length > 0 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-        <ActionPanel
-          subjects={activeSubjects}
-          goals={data.dailyGoals || []}
-          onAddGoal={addDailyGoal}
-          onToggleGoal={toggleDailyGoal}
-          onDeleteGoal={deleteDailyGoal}
-        />
-        <FSRSReviewWidget reviews={fsrsReviews} />
-      </div>
-
-      {/* ROW 5: Attention (conditional) */}
-      {hasAttention && (
-        <AttentionPanel
-          healthStatuses={subjectHealthStatuses || []}
-          subjects={activeSubjects}
-          events={data.academicEvents || []}
-          alerts={alerts}
-        />
-      )}
 
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}
     </div>

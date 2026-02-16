@@ -371,6 +371,24 @@ ${academicEventsSection}
 ПРЕДМЕТИ И ТЕМИ:
 ${JSON.stringify(subjectData, null, 2)}
 
+${(() => {
+  // Build concise summary of gray and weak topics by name for easy AI reference
+  const summaryLines: string[] = [];
+  subjectData.forEach(s => {
+    const grayList = s.topics.filter(t => t.status === 'gray').map(t => `Тема ${t.number} (${t.name})`);
+    const weakList = s.topics.filter(t => t.status === 'orange').map(t => `Тема ${t.number} (${t.name})${t.avgGrade ? ' — ' + ((t.avgGrade - 2) / 4 * 100).toFixed(0) + '%' : ''}`);
+    const needsReviewList = s.topics.filter(t => t.needsReview && t.status !== 'gray').map(t => `Тема ${t.number} (${t.name})`);
+    const noMaterialList = s.topics.filter(t => !t.hasMaterial && t.status === 'gray').map(t => `Тема ${t.number} (${t.name})`);
+    const parts: string[] = [];
+    if (grayList.length > 0) parts.push(`  Сиви (нови): ${grayList.slice(0, 8).join(', ')}${grayList.length > 8 ? ` (+${grayList.length - 8} още)` : ''}`);
+    if (weakList.length > 0) parts.push(`  Оранжеви (слаби): ${weakList.slice(0, 6).join(', ')}${weakList.length > 6 ? ` (+${weakList.length - 6} още)` : ''}`);
+    if (needsReviewList.length > 0) parts.push(`  Нуждаят се от преговор: ${needsReviewList.slice(0, 6).join(', ')}${needsReviewList.length > 6 ? ` (+${needsReviewList.length - 6} още)` : ''}`);
+    if (noMaterialList.length > 0) parts.push(`  Без материал: ${noMaterialList.slice(0, 5).join(', ')}${noMaterialList.length > 5 ? ` (+${noMaterialList.length - 5} още)` : ''}`);
+    if (parts.length > 0) summaryLines.push(`📚 ${s.name} (${s.daysUntilExam !== null ? s.daysUntilExam + 'д до изпит' : 'без дата'}):\n${parts.join('\n')}`);
+  });
+  return summaryLines.length > 0 ? '📋 БЪРЗ СПРАВОЧНИК ПО ТЕМИ:\n' + summaryLines.join('\n\n') : '';
+})()}
+
 ПРАВИЛА ЗА ПРИОРИТИЗАЦИЯ (спазвай стриктно!):
 
 ${hasSetupTasks && !bonusMode ? `0. SETUP TASKS (НАЙ-ВИСОК ПРИОРИТЕТ! type: "setup"):
@@ -421,6 +439,14 @@ ${studyTechniques && studyTechniques.length > 0 ? `
 ${(() => { const stale = studyTechniques.filter(t => { if (!t.lastPracticedAt) return true; return Math.floor((today.getTime() - new Date(t.lastPracticedAt).getTime()) / 86400000) >= 3; }); return stale.length > 0 ? `Непрактикувани >3 дни: ${stale.map(t => t.name).join(', ')}` : ''; })()}
 В описанието на задачите, ПРЕДЛОЖИ конкретна техника за прилагане (напр. "Приложи Chunking - групирай концепциите" или "Interleaving - смесвай с вчерашния материал").
 ` : ''}
+⚠️ ВАЖНО: БЪДИ КОНКРЕТЕН В ОПИСАНИЯТА!
+- Вместо "вкарай нови теми по Анатомия" → казвай "Вкарай 3 нови теми: Тема 5 (Мускули на ръката), Тема 8 (Нерви на горния крайник), Тема 12 (Ставни връзки)"
+- Вместо "направи първия тест" → казвай "Quick Quiz по Тема 3 (Кости на черепа) — Bloom ниво 1"
+- Вместо "преговори слаби теми" → казвай "Преговори Тема 2 (Гръбначен стълб) — последен quiz 45%, и Тема 7 (Торакс) — забравена"
+- ВИНАГИ казвай: КОЛКО теми, КОИ теми (по номер и име), КАКЪВ тип дейност (нов материал / преговор / тест / материал)
+- Използвай БЪРЗИЯ СПРАВОЧНИК по-горе за точни имена и номера на теми!
+- В description на всяка задача ИЗБРОЙ темите по номер и име, не само общо "3 теми"
+
 ФОРМАТ НА ОТГОВОР (САМО валиден JSON, без markdown):
 {
   "tasks": [
@@ -430,7 +456,7 @@ ${(() => { const stale = studyTechniques.filter(t => { if (!t.lastPracticedAt) r
       "subjectColor": "цвят",
       "type": "setup|critical|high|medium|normal",
       "typeLabel": "кратък етикет с emoji (напр. '📝 Изпит след 3 дни' или '📋 Setup')",
-      "description": "кратко описание какво да се направи",
+      "description": "КОНКРЕТНО описание с имена на теми! Напр: 'Учи Тема 5 (Мускули) и Тема 8 (Нерви) — нов материал. Приложи Chunking.'",
       "topicIds": ["id1", "id2", "..."],
       "estimatedMinutes": число
     }

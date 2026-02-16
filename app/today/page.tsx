@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat, MessageSquare, X, Send } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability, getTodayString, toLocalDateStr } from '@/lib/algorithms';
+import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -192,9 +192,10 @@ export default function TodayPage() {
       data.developmentProjects,
       data.academicEvents,
       data.studyTechniques,
-      data.techniquePractices
+      data.techniquePractices,
+      data.academicPeriod
     ),
-    [activeSubjects, activeSchedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices]
+    [activeSubjects, activeSchedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices, data.academicPeriod]
   );
 
   // Calculate syllabus progress/workload
@@ -202,6 +203,12 @@ export default function TodayPage() {
     () => calculateDailyTopics(activeSubjects, data.dailyStatus, data.studyGoals),
     [activeSubjects, data.dailyStatus, data.studyGoals]
   );
+
+  // Overall on-track status
+  const overallStatus = useMemo(() => {
+    try { return getOverallOnTrackStatus(activeSubjects, data.questionBanks || []); }
+    catch { return null; }
+  }, [activeSubjects, data.questionBanks]);
 
   // FSRS scheduled reviews - topics that need review based on retrievability
   const fsrsReviews = useMemo(
@@ -567,6 +574,42 @@ export default function TodayPage() {
           </button>
         </div>
       </div>
+
+      {/* On-Track Status Banner */}
+      {overallStatus && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+          overallStatus.status === 'ready' ? 'bg-green-500/10 border-green-500/20' :
+          overallStatus.status === 'on_track' ? 'bg-blue-500/10 border-blue-500/20' :
+          overallStatus.status === 'at_risk' ? 'bg-orange-500/10 border-orange-500/20' :
+          'bg-red-500/10 border-red-500/20'
+        }`}>
+          <span className={`text-lg ${
+            overallStatus.status === 'ready' ? 'text-green-400' :
+            overallStatus.status === 'on_track' ? 'text-blue-400' :
+            overallStatus.status === 'at_risk' ? 'text-orange-400' :
+            'text-red-400'
+          }`}>
+            {overallStatus.status === 'ready' ? <CheckCircle2 size={20} /> :
+             overallStatus.status === 'on_track' ? <TrendingUp size={20} /> :
+             <AlertTriangle size={20} />}
+          </span>
+          <div className="flex-1">
+            <span className={`text-sm font-bold font-mono ${
+              overallStatus.status === 'ready' ? 'text-green-400' :
+              overallStatus.status === 'on_track' ? 'text-blue-400' :
+              overallStatus.status === 'at_risk' ? 'text-orange-400' :
+              'text-red-400'
+            }`}>
+              {overallStatus.label}
+            </span>
+            <span className="text-xs text-slate-500 font-mono ml-2">
+              {overallStatus.avgReadiness}% готовност
+              {overallStatus.subjectsBehind > 0 && ` · ${overallStatus.subjectsBehind} предмет${overallStatus.subjectsBehind > 1 ? 'а' : ''} изостава${overallStatus.subjectsBehind > 1 ? 'т' : ''}`}
+              {overallStatus.subjectsAtRisk > 0 && overallStatus.subjectsBehind === 0 && ` · ${overallStatus.subjectsAtRisk} предмет${overallStatus.subjectsAtRisk > 1 ? 'а' : ''} под внимание`}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Crunch Mode Indicator */}
       {crunchStatus.isActive && (

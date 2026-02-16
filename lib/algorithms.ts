@@ -1,4 +1,4 @@
-import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, StudyTechnique, TechniquePractice } from './types';
+import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, AcademicPeriod, StudyTechnique, TechniquePractice } from './types';
 import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
 
 // ============================================================================
@@ -761,6 +761,22 @@ export function calculateDailyTopics(
     });
   }
 
+  // Cap total topics by available study time (~25 min per topic)
+  if (studyGoals) {
+    const isWeekend = [0, 6].includes(new Date().getDay());
+    const minutes = (isWeekend && studyGoals.useWeekendHours)
+      ? studyGoals.weekendDailyMinutes
+      : studyGoals.dailyMinutes;
+    const maxTopics = Math.floor(minutes / 25);
+    if (total > maxTopics && maxTopics > 0) {
+      const scale = maxTopics / total;
+      bySubject.forEach(s => {
+        s.topics = Math.max(1, Math.round(s.topics * scale));
+      });
+      total = Math.min(maxTopics, bySubject.reduce((sum, s) => sum + s.topics, 0));
+    }
+  }
+
   return { total, bySubject };
 }
 
@@ -1098,7 +1114,8 @@ export function generateDailyPlan(
   developmentProjects?: DevelopmentProject[],
   academicEvents?: AcademicEvent[],
   studyTechniques?: StudyTechnique[],
-  techniquePractices?: TechniquePractice[]
+  techniquePractices?: TechniquePractice[],
+  academicPeriod?: AcademicPeriod
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
 
@@ -1168,9 +1185,14 @@ export function generateDailyPlan(
   // Create a map of subject workload for reference
   const subjectWorkload = new Map(workload.bySubject.map(s => [s.subjectId, s]));
 
+  // Check if semester has started (for filtering exercises)
+  const semStart = academicPeriod?.semesterStart ? new Date(academicPeriod.semesterStart) : null;
+  const semesterStarted = !semStart || semStart <= tomorrow;
+
   // 1. CRITICAL: Exercises tomorrow - take topics from that subject's workload
   const tomorrowExercises = schedule.filter(c => {
     if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (!semesterStarted && !c.startDate) return false; // semester not started, no individual override
     if (c.startDate && new Date(c.startDate) > tomorrow) return false;
     return true;
   });
@@ -1965,7 +1987,8 @@ export function getSubjectProgress(subject: Subject): {
 export function getAlerts(
   subjects: Subject[],
   schedule: ScheduleClass[],
-  studyGoals?: StudyGoals
+  studyGoals?: StudyGoals,
+  academicPeriod?: AcademicPeriod
 ): {
   type: 'critical' | 'warning' | 'info';
   message: string;
@@ -1981,9 +2004,14 @@ export function getAlerts(
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDay = (tomorrow.getDay() + 6) % 7;
 
+  // Check if semester has started
+  const semStart = academicPeriod?.semesterStart ? new Date(academicPeriod.semesterStart) : null;
+  const semesterStarted = !semStart || semStart <= tomorrow;
+
   // Check for exercises tomorrow
   const tomorrowExercises = schedule.filter(c => {
     if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (!semesterStarted && !c.startDate) return false; // semester not started
     if (c.startDate && new Date(c.startDate) > tomorrow) return false;
     return true;
   });
@@ -2322,4 +2350,66 @@ export function getNextExamReadiness(
     predictedGrade,
     status
   };
+}
+
+// Overall on-track status across ALL subjects with exams
+export interface OverallOnTrackStatus {
+  status: 'on_track' | 'at_risk' | 'behind' | 'ready';
+  label: string;
+  avgReadiness: number;
+  subjectsAtRisk: number;
+  subjectsBehind: number;
+  totalWithExam: number;
+}
+
+export function getOverallOnTrackStatus(
+  subjects: Subject[],
+  questionBanks: QuestionBank[] = []
+): OverallOnTrackStatus | null {
+  const active = subjects.filter(s => !s.archived && !s.deletedAt && s.examDate);
+  if (active.length === 0) return null;
+
+  let totalReadiness = 0;
+  let atRisk = 0;
+  let behind = 0;
+  let counted = 0;
+
+  for (const subject of active) {
+    const days = getDaysUntil(subject.examDate);
+    if (days < 0 || subject.topics.length === 0) continue;
+
+    const totalTopics = subject.topics.length;
+    const greenCount = subject.topics.filter(t => t.status === 'green').length;
+    const yellowCount = subject.topics.filter(t => t.status === 'yellow').length;
+    const orangeCount = subject.topics.filter(t => t.status === 'orange').length;
+    const coverage = ((greenCount + yellowCount * 0.7 + orangeCount * 0.3) / totalTopics) * 100;
+
+    const prediction = calculatePredictedGrade(subject, false, questionBanks);
+    const gradeNormalized = ((prediction.current - 2) / 4) * 100;
+    const readiness = coverage * 0.4 + gradeNormalized * 0.6;
+
+    totalReadiness += readiness;
+    counted++;
+
+    if (days <= 30) {
+      if (readiness < 40) behind++;
+      else if (readiness < 60) atRisk++;
+    } else if (days <= 90) {
+      if (readiness < 15) behind++;
+      else if (readiness < 30) atRisk++;
+    }
+  }
+
+  if (counted === 0) return null;
+
+  const avgReadiness = totalReadiness / counted;
+
+  let status: OverallOnTrackStatus['status'];
+  let label: string;
+  if (behind > 0) { status = 'behind'; label = 'Изоставаш'; }
+  else if (atRisk > 0) { status = 'at_risk'; label = 'Внимание'; }
+  else if (avgReadiness >= 70) { status = 'ready'; label = 'Готов'; }
+  else { status = 'on_track'; label = 'По график'; }
+
+  return { status, label, avgReadiness: Math.round(avgReadiness), subjectsAtRisk: atRisk, subjectsBehind: behind, totalWithExam: counted };
 }

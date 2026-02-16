@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles, Copy } from 'lucide-react';
 import ReaderMode from '@/components/ReaderMode';
 const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
   ssr: false,
@@ -22,7 +22,7 @@ export default function TopicDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic, trackTopicRead, setLastOpenedTopic } = useApp();
+  const { data, isLoading, setTopicStatus, addGrade, deleteTopic, updateTopicMaterial, updateTopicSize, updateTopic, trackTopicRead, setLastOpenedTopic, incrementApiCalls } = useApp();
 
   const subjectId = params.subjectId as string;
   const topicId = params.topicId as string;
@@ -59,6 +59,11 @@ export default function TopicDetailPage() {
   const [quickQuestion, setQuickQuestion] = useState('');
   const [quickAnswer, setQuickAnswer] = useState('');
   const [quickSaved, setQuickSaved] = useState(false);
+
+  // Anki cards state
+  const [showAnkiCards, setShowAnkiCards] = useState(false);
+  const [isGeneratingAnki, setIsGeneratingAnki] = useState(false);
+  const [ankiError, setAnkiError] = useState<string | null>(null);
 
   // Inline topic name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -977,6 +982,124 @@ export default function TopicDetailPage() {
               </div>
             );
           })()}
+
+          {/* Anki Cloze Cards from Material */}
+          {hasMaterial && (
+            <div className="bg-gradient-to-br from-emerald-900/20 to-teal-900/20 border border-emerald-700/30 rounded-xl p-5">
+              <button
+                onClick={() => setShowAnkiCards(!showAnkiCards)}
+                className="w-full flex items-center justify-between"
+              >
+                <div className="flex items-center gap-2">
+                  <Sparkles size={16} className="text-emerald-400" />
+                  <span className="text-sm font-medium text-emerald-400 font-mono">
+                    Anki карти {topic.ankiCards && topic.ankiCards.length > 0 ? `(${topic.ankiCards.length})` : ''}
+                  </span>
+                </div>
+                {showAnkiCards ? (
+                  <ChevronUp size={16} className="text-emerald-400" />
+                ) : (
+                  <ChevronDown size={16} className="text-emerald-400" />
+                )}
+              </button>
+
+              {showAnkiCards && (
+                <div className="mt-4 space-y-3">
+                  {/* Existing cards */}
+                  {topic.ankiCards && topic.ankiCards.length > 0 && (
+                    <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                      {topic.ankiCards.map((card, i) => (
+                        <div key={i} className="bg-slate-800/60 border border-slate-700/50 rounded-lg p-3 group relative">
+                          <p
+                            className="text-slate-200 font-mono text-sm leading-relaxed pr-8"
+                            dangerouslySetInnerHTML={{
+                              __html: card.replace(
+                                /\{\{c\d+::(.*?)\}\}/g,
+                                '<span class="text-emerald-400 font-semibold bg-emerald-400/10 px-1 rounded">$1</span>'
+                              )
+                            }}
+                          />
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(card); }}
+                            className="absolute top-2 right-2 p-1.5 opacity-0 group-hover:opacity-100 bg-slate-700/80 hover:bg-emerald-600/80 text-slate-400 hover:text-white rounded transition-all"
+                            title="Копирай"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={async () => {
+                        if (isGeneratingAnki || !material.trim()) return;
+                        if (!apiKey) {
+                          setAnkiError('Добави API ключ в Настройки.');
+                          return;
+                        }
+                        setIsGeneratingAnki(true);
+                        setAnkiError(null);
+                        try {
+                          const response = await fetchWithTimeout('/api/anki-cards', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              apiKey,
+                              material,
+                              topicName: topic.name,
+                              mode: 'from_material'
+                            }),
+                            timeout: 60000
+                          });
+                          const result = await response.json();
+                          if (result.error) {
+                            setAnkiError(result.error);
+                          } else if (result.cards && result.cards.length > 0) {
+                            updateTopic(subjectId, topicId, { ankiCards: result.cards });
+                            if (result.cost) incrementApiCalls(result.cost);
+                          } else {
+                            setAnkiError('Не бяха генерирани карти.');
+                          }
+                        } catch (err) {
+                          setAnkiError(getFetchErrorMessage(err));
+                        } finally {
+                          setIsGeneratingAnki(false);
+                        }
+                      }}
+                      disabled={isGeneratingAnki}
+                      className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-mono text-sm rounded-lg transition-colors"
+                    >
+                      {isGeneratingAnki ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                      {topic.ankiCards?.length ? 'Генерирай отново' : 'Генерирай карти'}
+                    </button>
+                    {topic.ankiCards && topic.ankiCards.length > 0 && (
+                      <button
+                        onClick={() => {
+                          const allCards = topic.ankiCards!.join('\n\n');
+                          navigator.clipboard.writeText(allCards);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-2.5 bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 hover:bg-emerald-600/30 font-mono text-sm rounded-lg transition-colors"
+                        title="Копирай всички"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {ankiError && (
+                    <p className="text-xs text-red-400 font-mono">{ankiError}</p>
+                  )}
+
+                  <p className="text-xs text-slate-600 font-mono">
+                    Bloom ниво 1 (Запомняне): дефиниции, термини, факти
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Quick Add Question (for quiz AI) */}
           <div className="bg-gradient-to-br from-cyan-900/20 to-blue-900/20 border border-cyan-700/30 rounded-xl p-5">

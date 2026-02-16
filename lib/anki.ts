@@ -215,6 +215,34 @@ export async function createDeck(deckName: string): Promise<number> {
   return invoke<number>('createDeck', { deck: deckName });
 }
 
+// Add cloze notes to a deck via AnkiConnect
+export async function addClozeNotes(
+  deckName: string,
+  cards: string[],
+  tags: string[] = []
+): Promise<{ added: number; duplicates: number }> {
+  await createDeck(deckName);
+
+  const notes = cards.map(card => ({
+    deckName,
+    modelName: 'Cloze',
+    fields: { Text: card, Extra: '' },
+    tags,
+    options: { allowDuplicate: false, duplicateScope: 'deck' as const },
+  }));
+
+  const result = await invoke<(number | null)[]>('addNotes', { notes });
+
+  let added = 0;
+  let duplicates = 0;
+  for (const id of result) {
+    if (id !== null) added++;
+    else duplicates++;
+  }
+
+  return { added, duplicates };
+}
+
 // Export subject with all topics as Anki subdecks
 export interface ExportResult {
   success: boolean;

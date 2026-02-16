@@ -43,10 +43,14 @@ ${text}
       ? message.content[0].text
       : '';
 
+    // Sonnet pricing: $3/M input, $15/M output
+    const cost = (message.usage.input_tokens * 3 + message.usage.output_tokens * 15) / 1000000;
+
     return NextResponse.json({
       formattedText,
       inputTokens: message.usage.input_tokens,
-      outputTokens: message.usage.output_tokens
+      outputTokens: message.usage.output_tokens,
+      cost
     });
 
   } catch (error) {

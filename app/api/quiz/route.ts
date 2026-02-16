@@ -337,7 +337,7 @@ Be encouraging but honest. Focus on medical accuracy.`
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -460,7 +460,7 @@ Mix Bloom levels but focus on levels ${Math.max(1, currentBloomLevel - 1)} to ${
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -570,7 +570,7 @@ Questions must be in Bulgarian.`
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -694,7 +694,7 @@ ${isShortExpected
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -970,7 +970,7 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -1316,7 +1316,7 @@ ${topicList}
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -1410,7 +1410,7 @@ ${answerList}
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }
@@ -1480,7 +1480,7 @@ ${qaPairs}
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 10000) / 10000
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }

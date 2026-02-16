@@ -740,13 +740,19 @@ function QuizContent() {
 
     // Trim questions and answers to only answered ones
     const answeredCount = newAnswers.filter(a => a !== null).length;
-    const trimmedQuestions = quizState.questions.slice(0, answeredCount || quizState.currentIndex);
-    const trimmedAnswers = newAnswers.slice(0, answeredCount || quizState.currentIndex);
+    if (answeredCount === 0) {
+      // No answers given — just show results with empty state
+      setQuizState(prev => ({ ...prev, showResult: true }));
+      setShowEarlyStopConfirm(false);
+      return;
+    }
+    const trimmedQuestions = quizState.questions.slice(0, answeredCount);
+    const trimmedAnswers = newAnswers.slice(0, answeredCount);
 
     setQuizState(prev => ({
       ...prev,
-      questions: trimmedQuestions.length > 0 ? trimmedQuestions : prev.questions.slice(0, 1),
-      answers: trimmedAnswers.length > 0 ? trimmedAnswers : [null],
+      questions: trimmedQuestions,
+      answers: trimmedAnswers,
       showResult: true
     }));
     setShowEarlyStopConfirm(false);

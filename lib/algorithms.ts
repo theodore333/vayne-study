@@ -47,6 +47,7 @@ const FSRS_PARAMS = FSRS_DEFAULTS;
 export function calculateRetrievability(fsrs: FSRSState): number {
   const daysSinceReview = getDaysSince(fsrs.lastReview);
   if (daysSinceReview === 0) return 1.0;
+  if (!fsrs.stability || fsrs.stability <= 0 || !isFinite(fsrs.stability)) return 0;
 
   const R = Math.exp(-daysSinceReview / fsrs.stability);
   return Math.max(0, Math.min(1, R));
@@ -57,6 +58,7 @@ export function calculateRetrievability(fsrs: FSRSState): number {
  * Solving: targetR = e^(-t/S) → t = -S * ln(targetR)
  */
 export function getDaysUntilReview(fsrs: FSRSState, studyGoals?: StudyGoals): number {
+  if (!fsrs.stability || fsrs.stability <= 0 || !isFinite(fsrs.stability)) return 0;
   const targetR = studyGoals?.fsrsTargetRetention || FSRS_PARAMS.targetR;
   const daysUntil = -fsrs.stability * Math.log(targetR);
   const daysSinceReview = getDaysSince(fsrs.lastReview);

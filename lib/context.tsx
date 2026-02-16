@@ -147,6 +147,7 @@ function sanitizeLoadedData(data: AppData): AppData {
       examDate: sn(subj.examDate),
       examFormat: sn(subj.examFormat),
       semester: typeof subj.semester === 'string' ? subj.semester : undefined,
+      examDifficulty: (subj.examDifficulty === 'easy' || subj.examDifficulty === 'medium' || subj.examDifficulty === 'hard') ? subj.examDifficulty : undefined,
       archived: b(subj.archived),
       deletedAt: sn(subj.deletedAt),
       createdAt: s(subj.createdAt, new Date().toISOString(), `subject[${subj.id}].createdAt`),
@@ -171,6 +172,8 @@ function sanitizeLoadedData(data: AppData): AppData {
         section: (t.section === 'theoretical' || t.section === 'practical') ? t.section : undefined,
         wrongAnswers: a(t.wrongAnswers),
         highlights: a(t.highlights),
+        customQuestions: Array.isArray(t.customQuestions) ? t.customQuestions : [],
+        fsrs: (t.fsrs && typeof t.fsrs === 'object' && typeof t.fsrs.stability === 'number' && typeof t.fsrs.difficulty === 'number') ? t.fsrs : undefined,
       })),
     }));
 
@@ -199,6 +202,8 @@ function sanitizeLoadedData(data: AppData): AppData {
       academicEvents: a(d.academicEvents, 'academicEvents'),
       lastOpenedTopic: d.lastOpenedTopic === null || (typeof d.lastOpenedTopic === 'object' && d.lastOpenedTopic !== null) ? d.lastOpenedTopic : null,
       dailyGoals: a(d.dailyGoals, 'dailyGoals'),
+      studyTechniques: a(d.studyTechniques, 'studyTechniques'),
+      techniquePractices: a(d.techniquePractices, 'techniquePractices'),
     } as AppData;
   } catch (e) {
     console.error('[SANITIZE] Failed:', e);
@@ -2042,13 +2047,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const newXp = progress.xp + amount;
       const newLevel = calculateLevel(newXp);
 
-      // Update user progress
+      // Update user progress (always copy stats to avoid shared reference mutation)
       const newProgress: UserProgress = {
         ...progress,
         xp: newXp,
         level: newLevel,
         totalXpEarned: progress.totalXpEarned + amount,
-        combo: newCombo
+        combo: newCombo,
+        stats: { ...progress.stats }
       };
 
       // Check for new achievements
@@ -2056,9 +2062,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const unlocked = checkAchievements(newProgress, prev.subjects, streak);
       if (unlocked.length > 0) {
         newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        // Update longest streak stat if needed (create new stats object to avoid mutating previous state)
         if (streak > newProgress.stats.longestStreak) {
-          newProgress.stats = { ...newProgress.stats, longestStreak: streak };
+          newProgress.stats.longestStreak = streak;
         }
       }
 

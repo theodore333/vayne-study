@@ -220,9 +220,12 @@ export function QuizQuestion({
           </span>
         </div>
 
-        <h2 className="text-xl md:text-2xl text-slate-100 mb-6 font-mono leading-relaxed tracking-wide">
-          {formatQuestionText(currentQuestion.question)}
-        </h2>
+        {/* Hide heading for fill_blank — the question is rendered inline with the input */}
+        {currentQuestion.type !== 'fill_blank' && (
+          <h2 className="text-xl md:text-2xl text-slate-100 mb-6 font-mono leading-relaxed tracking-wide">
+            {formatQuestionText(currentQuestion.question)}
+          </h2>
+        )}
 
         {/* ── MCQ / Case Study ── */}
         {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') && (

@@ -1,10 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target } from 'lucide-react';
+import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target, MapPin } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DAYS, DAYS_SHORT, CLASS_TYPES, ACADEMIC_EVENT_CONFIG } from '@/lib/constants';
-import { AcademicEvent } from '@/lib/types';
 import AddClassModal from '@/components/modals/AddClassModal';
 import AddAcademicEventModal from '@/components/modals/AddAcademicEventModal';
 
@@ -14,6 +13,13 @@ export default function SchedulePage() {
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
   const [editingClass, setEditingClass] = useState<typeof data.schedule[0] | null>(null);
+
+  // Determine which days to show (Mon-Fri, or include weekends if they have classes)
+  const visibleDays = useMemo(() => {
+    const hasWeekendClasses = data.schedule.some(c => c.day >= 5); // 5=Sat, 6=Sun
+    if (hasWeekendClasses) return [0, 1, 2, 3, 4, 5, 6];
+    return [0, 1, 2, 3, 4]; // Mon-Fri only
+  }, [data.schedule]);
 
   // Get upcoming events sorted by date
   const upcomingEvents = useMemo(() => {
@@ -25,10 +31,10 @@ export default function SchedulePage() {
         const eventDate = new Date(event.date);
         eventDate.setHours(0, 0, 0, 0);
         const daysUntil = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-        const subject = data.subjects.find(s => s.id === event.subjectId);
+        const subject = event.subjectId ? data.subjects.find(s => s.id === event.subjectId) : null;
         return { event, daysUntil, subject };
       })
-      .filter(e => e.daysUntil >= 0 && e.subject) // Only future or today events
+      .filter(e => e.daysUntil >= 0 && (e.subject || !e.event.subjectId)) // Include general events too
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [data.academicEvents, data.subjects]);
 
@@ -39,7 +45,6 @@ export default function SchedulePage() {
 
     const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
-    // Get all exams sorted by date
     const exams = activeSubjects
       .filter(s => s.examDate)
       .map(s => {
@@ -76,7 +81,6 @@ export default function SchedulePage() {
         }
       }
       if (clusterExams.length >= 2) {
-        // Check if this cluster isn't already part of a previous cluster
         const alreadyClustered = clusters.some(c =>
           c.exams.some(e => clusterExams.some(ce => ce.subject.id === e.subject.id))
         );
@@ -109,22 +113,32 @@ export default function SchedulePage() {
       .sort((a, b) => a.time.localeCompare(b.time));
   };
 
-  const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const getSubjectById = (id: string) => data.subjects.find(s => s.id === id);
+  const colsClass = visibleDays.length === 7 ? 'grid-cols-7' : 'grid-cols-5';
 
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-100 font-mono">Седмичен график</h1>
-          <p className="text-sm text-slate-500 font-mono mt-1">Управлявай занятията си</p>
+          <p className="text-sm text-slate-500 font-mono mt-1">
+            {data.schedule.length} занятия • {data.academicEvents.length} събития
+          </p>
         </div>
-        <button
-          onClick={() => setShowAddClass(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors font-mono text-sm"
-        >
-          <Plus size={18} /> Добави занятие
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowAddEvent(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-mono text-sm"
+          >
+            <Calendar size={16} /> Събитие
+          </button>
+          <button
+            onClick={() => setShowAddClass(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors font-mono text-sm"
+          >
+            <Plus size={16} /> Занятие
+          </button>
+        </div>
       </div>
 
       {/* Academic Period */}
@@ -133,7 +147,6 @@ export default function SchedulePage() {
         const todayDate = new Date();
         todayDate.setHours(0, 0, 0, 0);
 
-        // Determine current period
         let currentPeriod = '';
         if (ap.sessionStart && ap.sessionEnd && todayDate >= new Date(ap.sessionStart) && todayDate <= new Date(ap.sessionEnd)) {
           currentPeriod = 'Сесия';
@@ -209,37 +222,55 @@ export default function SchedulePage() {
       {/* Week Grid */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl overflow-hidden">
         {/* Day Headers */}
-        <div className="grid grid-cols-7 border-b border-[#1e293b]">
-          {DAYS.map((day, i) => (
-            <div
-              key={day}
-              className={"p-4 text-center border-r last:border-r-0 border-[#1e293b] " + (i === today ? "bg-blue-500/10" : "")}
-            >
-              <div className={"text-sm font-semibold font-mono " + (i === today ? "text-blue-400" : "text-slate-400")}>
-                {DAYS_SHORT[i]}
+        <div className={`grid ${colsClass} border-b border-[#1e293b]`}>
+          {visibleDays.map(i => {
+            const classCount = getClassesForDay(i).length;
+            return (
+              <div
+                key={i}
+                className={"p-3 border-r last:border-r-0 border-[#1e293b] " + (i === today ? "bg-blue-500/10" : "")}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className={"text-sm font-semibold font-mono " + (i === today ? "text-blue-400" : "text-slate-400")}>
+                      {DAYS_SHORT[i]}
+                      {i === today && <span className="ml-1.5 text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded">ДНЕС</span>}
+                    </div>
+                    {classCount > 0 && (
+                      <div className="text-[10px] text-slate-600 font-mono mt-0.5">{classCount} зан.</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => { setSelectedDay(i); setShowAddClass(true); }}
+                    className="p-1 rounded hover:bg-green-500/20 text-slate-600 hover:text-green-400 transition-all"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
-              <div className={"text-xs font-mono mt-1 " + (i === today ? "text-blue-400" : "text-slate-500")}>
-                {i === today && "ДНЕС"}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Schedule Grid */}
-        <div className="grid grid-cols-7 min-h-[500px]">
-          {DAYS.map((_, dayIndex) => {
+        <div className={`grid ${colsClass} min-h-[400px]`}>
+          {visibleDays.map(dayIndex => {
             const classes = getClassesForDay(dayIndex);
             const isToday = dayIndex === today;
 
             return (
               <div
                 key={dayIndex}
-                className={"p-3 border-r last:border-r-0 border-[#1e293b] space-y-2 " + (isToday ? "bg-blue-500/5" : "")}
+                className={"p-2.5 border-r last:border-r-0 border-[#1e293b] space-y-2 " + (isToday ? "bg-blue-500/5" : "")}
               >
                 {classes.length === 0 ? (
-                  <div className="text-xs text-slate-600 font-mono text-center py-4">
-                    Няма занятия
-                  </div>
+                  <button
+                    onClick={() => { setSelectedDay(dayIndex); setShowAddClass(true); }}
+                    className="w-full h-full min-h-[60px] flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-800 hover:border-slate-600 text-slate-700 hover:text-slate-400 transition-all group"
+                  >
+                    <Plus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity">Добави</span>
+                  </button>
                 ) : (
                   classes.map(cls => {
                     const subject = getSubjectById(cls.subjectId);
@@ -249,7 +280,7 @@ export default function SchedulePage() {
                     return (
                       <div
                         key={cls.id}
-                        className="p-3 rounded-lg border group relative"
+                        className="p-2.5 rounded-lg border group relative"
                         style={{
                           backgroundColor: typeConfig.color + "15",
                           borderColor: typeConfig.color + "40"
@@ -260,28 +291,43 @@ export default function SchedulePage() {
                             onClick={() => setEditingClass(cls)}
                             className="p-1 rounded hover:bg-blue-500/20"
                           >
-                            <Edit2 size={12} className="text-blue-400" />
+                            <Edit2 size={11} className="text-blue-400" />
                           </button>
                           <button
                             onClick={() => deleteClass(cls.id)}
                             className="p-1 rounded hover:bg-red-500/20"
                           >
-                            <Trash2 size={12} className="text-red-400" />
+                            <Trash2 size={11} className="text-red-400" />
                           </button>
                         </div>
-                        <div className="text-lg mb-1">{typeConfig.icon}</div>
-                        <div className="text-xs font-mono mb-1" style={{ color: typeConfig.color }}>
-                          {cls.time}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm">{typeConfig.icon}</span>
+                          <span className="text-xs font-mono font-semibold" style={{ color: typeConfig.color }}>
+                            {cls.time}
+                          </span>
                         </div>
-                        <div className="text-sm font-medium text-slate-200 truncate" style={{ color: subject.color }}>
+                        <div className="text-sm font-medium truncate" style={{ color: subject.color }}>
                           {subject.name}
                         </div>
-                        <div className="text-xs text-slate-500 font-mono mt-1">
-                          {typeConfig.label}
-                        </div>
                         {cls.room && (
-                          <div className="text-xs text-slate-500 font-mono">
-                            Зала {cls.room}
+                          <div className="flex items-center gap-1 mt-1 text-slate-500">
+                            <MapPin size={10} />
+                            <span className="text-[10px] font-mono">{cls.room}</span>
+                          </div>
+                        )}
+                        {cls.description && (
+                          <div className="text-[10px] text-slate-400 font-mono mt-1 truncate">
+                            {cls.description}
+                          </div>
+                        )}
+                        {cls.topicIds && cls.topicIds.length > 0 && (
+                          <div className="text-[10px] text-purple-400/60 font-mono mt-0.5">
+                            {cls.topicIds.length} теми
+                          </div>
+                        )}
+                        {cls.startDate && (
+                          <div className="text-[10px] text-slate-600 font-mono mt-0.5">
+                            от {new Date(cls.startDate).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
                           </div>
                         )}
                       </div>
@@ -291,24 +337,6 @@ export default function SchedulePage() {
               </div>
             );
           })}
-        </div>
-      </div>
-
-      {/* Legend */}
-      <div className="mt-6 p-4 bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
-        <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase mb-3">Легенда</h3>
-        <div className="flex flex-wrap gap-4">
-          {Object.entries(CLASS_TYPES).map(([key, config]) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="text-lg">{config.icon}</span>
-              <span className="text-sm font-mono" style={{ color: config.color }}>{config.label}</span>
-              {config.prepRequired && (
-                <span className="text-xs bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded font-mono">
-                  Подготовка
-                </span>
-              )}
-            </div>
-          ))}
         </div>
       </div>
 
@@ -334,7 +362,7 @@ export default function SchedulePage() {
             <Calendar className="mx-auto text-slate-600 mb-3" size={40} />
             <p className="text-slate-500 font-mono text-sm">Няма предстоящи събития</p>
             <p className="text-slate-600 font-mono text-xs mt-1">
-              Добави колоквиуми, контролни и други важни дати
+              Добави колоквиуми, контролни, Erasmus срещи и др.
             </p>
           </div>
         ) : (
@@ -343,6 +371,7 @@ export default function SchedulePage() {
               const config = ACADEMIC_EVENT_CONFIG[event.type];
               const isUrgent = daysUntil <= config.urgencyDays.high;
               const isSoon = daysUntil <= config.urgencyDays.medium;
+              const isGeneral = !event.subjectId;
 
               return (
                 <div
@@ -363,13 +392,21 @@ export default function SchedulePage() {
                           <span className="text-sm font-semibold text-slate-200 font-mono">
                             {event.name || config.label}
                           </span>
-                          <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: subject?.color }}
-                          />
-                          <span className="text-xs text-slate-400 font-mono">
-                            {subject?.name}
-                          </span>
+                          {isGeneral ? (
+                            <span className="px-1.5 py-0.5 bg-slate-700 text-slate-400 rounded text-[10px] font-mono">
+                              Лично
+                            </span>
+                          ) : subject && (
+                            <>
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: subject.color }}
+                              />
+                              <span className="text-xs text-slate-400 font-mono">
+                                {subject.name}
+                              </span>
+                            </>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-1">
                           <span className="text-xs text-slate-500 font-mono">
@@ -480,7 +517,7 @@ export default function SchedulePage() {
                           style={{ backgroundColor: `${e.subject.color}30`, color: e.subject.color }}
                           title={e.subject.name}
                         >
-                          {e.subject.name.length > 15 ? e.subject.name.slice(0, 15) + '…' : e.subject.name}
+                          {e.subject.name.length > 15 ? e.subject.name.slice(0, 15) + '...' : e.subject.name}
                         </span>
                       ))}
                     </div>

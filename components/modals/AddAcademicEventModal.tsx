@@ -65,11 +65,11 @@ export default function AddAcademicEventModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!subjectId || !date) return;
+    if ((!subjectId && eventType !== 'other') || !date) return;
 
     addAcademicEvent({
       type: eventType,
-      subjectId,
+      subjectId: subjectId || '',
       date,
       name: name.trim() || undefined,
       description: description.trim() || undefined,
@@ -136,7 +136,7 @@ export default function AddAcademicEventModal({
           {/* Subject */}
           <div>
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 font-mono">
-              Предмет
+              Предмет {eventType === 'other' && <span className="text-slate-600 normal-case">(незадължително)</span>}
             </label>
             <div className="relative">
               <BookOpen size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
@@ -144,9 +144,10 @@ export default function AddAcademicEventModal({
                 value={subjectId}
                 onChange={e => handleSubjectChange(e.target.value)}
                 className="w-full bg-slate-800 border border-slate-700 rounded-lg px-10 py-2.5 text-slate-200 font-mono text-sm focus:outline-none focus:border-purple-500"
-                required
+                required={eventType !== 'other'}
               >
-                <option value="">Избери предмет...</option>
+                {eventType === 'other' && <option value="">Общо (без предмет)</option>}
+                {eventType !== 'other' && <option value="">Избери предмет...</option>}
                 {activeSubjects.map(subject => (
                   <option key={subject.id} value={subject.id}>
                     {subject.name}
@@ -289,7 +290,7 @@ export default function AddAcademicEventModal({
             </button>
             <button
               type="submit"
-              disabled={!subjectId || !date}
+              disabled={(!subjectId && eventType !== 'other') || !date}
               className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-mono text-sm hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {config.icon} Добави

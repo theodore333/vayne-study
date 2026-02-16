@@ -166,6 +166,37 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ROW 0.5: Today's Schedule Strip */}
+      {(() => {
+        const todayDayIndex = (new Date().getDay() + 6) % 7;
+        const todayClasses = data.schedule
+          .filter(c => c.day === todayDayIndex)
+          .sort((a, b) => a.time.localeCompare(b.time));
+        if (todayClasses.length === 0) return null;
+        return (
+          <Link
+            href="/schedule"
+            className="flex items-center gap-3 px-4 py-2.5 bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl hover:border-[#2e3b4e] transition-all"
+          >
+            <Calendar size={15} className="text-orange-400 shrink-0" />
+            <div className="flex items-center gap-3 overflow-x-auto text-xs font-mono">
+              {todayClasses.map((cls, i) => {
+                const subject = data.subjects.find(s => s.id === cls.subjectId);
+                if (!subject) return null;
+                return (
+                  <span key={cls.id} className="flex items-center gap-1.5 shrink-0">
+                    {i > 0 && <span className="text-slate-700">|</span>}
+                    <span className="font-semibold" style={{ color: subject.color }}>{cls.time}</span>
+                    <span className="text-slate-300">{subject.name}</span>
+                    {cls.room && <span className="text-slate-600">({cls.room})</span>}
+                  </span>
+                );
+              })}
+            </div>
+          </Link>
+        );
+      })()}
+
       {/* ROW 1: Continue Study (conditional) */}
       <ContinueStudyWidget lastOpenedTopic={data.lastOpenedTopic} subjects={activeSubjects} />
 

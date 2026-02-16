@@ -649,6 +649,43 @@ export default function TodayPage() {
         </div>
       )}
 
+      {/* Today's Schedule */}
+      {(() => {
+        const todayDayIndex = (new Date().getDay() + 6) % 7;
+        const todayClasses = activeSchedule
+          .filter(c => c.day === todayDayIndex)
+          .sort((a, b) => a.time.localeCompare(b.time));
+        if (todayClasses.length === 0) return null;
+        return (
+          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={16} className="text-orange-400" />
+              <span className="text-sm font-semibold text-slate-300 font-mono">Днешни занятия</span>
+              <span className="text-xs text-slate-600 font-mono">{todayClasses.length}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {todayClasses.map(cls => {
+                const subject = data.subjects.find(s => s.id === cls.subjectId);
+                if (!subject) return null;
+                return (
+                  <Link
+                    key={cls.id}
+                    href={`/subjects?id=${subject.id}`}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border transition-all hover:brightness-125"
+                    style={{ backgroundColor: subject.color + '15', borderColor: subject.color + '40' }}
+                  >
+                    <span className="text-xs font-mono font-semibold" style={{ color: subject.color }}>{cls.time}</span>
+                    <span className="text-xs text-slate-200 font-medium">{subject.name}</span>
+                    {cls.room && <span className="text-[10px] text-slate-500 font-mono">({cls.room})</span>}
+                    {cls.description && <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">- {cls.description}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Daily Plan Tasks */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
         <div className="p-6 border-b border-[#1e293b]">

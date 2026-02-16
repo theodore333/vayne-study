@@ -279,26 +279,38 @@ export async function POST(request: NextRequest) {
         .sort((a, b) => a.daysUntil - b.daysUntil);
 
       if (upcomingEvents.length > 0) {
-        const eventLines = upcomingEvents.map(event => {
-          const subject = subjects.find(s => s.id === event.subjectId);
-          const subjectName = subject?.name || '?';
+        const academicEventLines: string[] = [];
+        const generalEventLines: string[] = [];
+
+        upcomingEvents.forEach(event => {
           const eventName = event.name || event.type;
-          let topicInfo = 'всички теми от предмета';
-          if (event.topicIds && event.topicIds.length > 0 && subject) {
-            const topicNames = event.topicIds
-              .map(id => subject.topics.find(t => t.id === id)?.name)
-              .filter(Boolean)
-              .map(n => (n as string).substring(0, 40));
-            topicInfo = `КОНКРЕТНИ теми: ${topicNames.join(', ')}`;
+          if (!event.subjectId) {
+            // General/personal event (Erasmus, career fair, etc.)
+            generalEventLines.push(`- ${eventName} след ${event.daysUntil}д`);
+          } else {
+            const subject = subjects.find(s => s.id === event.subjectId);
+            const subjectName = subject?.name || '?';
+            let topicInfo = 'всички теми от предмета';
+            if (event.topicIds && event.topicIds.length > 0 && subject) {
+              const topicNames = event.topicIds
+                .map(id => subject.topics.find(t => t.id === id)?.name)
+                .filter(Boolean)
+                .map(n => (n as string).substring(0, 40));
+              topicInfo = `КОНКРЕТНИ теми: ${topicNames.join(', ')}`;
+            }
+            academicEventLines.push(`- ${eventName} (${subjectName}) след ${event.daysUntil}д | тежест: ${event.weight}x | ${topicInfo}`);
           }
-          return `- ${eventName} (${subjectName}) след ${event.daysUntil}д | тежест: ${event.weight}x | ${topicInfo}`;
         });
 
-        academicEventsSection = `
-📋 ПРЕДСТОЯЩИ АКАДЕМИЧНИ СЪБИТИЯ:
-${eventLines.join('\n')}
-⚠️ ПРИОРИТИЗИРАЙ темите от предстоящи събития! Ако събитието е до 7 дни, включи подготовка с HIGH приоритет. Ако има КОНКРЕТНИ теми - фокусирай се САМО върху тях, не върху целия предмет!
-`;
+        const parts: string[] = [];
+        if (academicEventLines.length > 0) {
+          parts.push(`📋 ПРЕДСТОЯЩИ АКАДЕМИЧНИ СЪБИТИЯ:\n${academicEventLines.join('\n')}\n⚠️ ПРИОРИТИЗИРАЙ темите от предстоящи събития! Ако събитието е до 7 дни, включи подготовка с HIGH приоритет. Ако има КОНКРЕТНИ теми - фокусирай се САМО върху тях, не върху целия предмет!`);
+        }
+        if (generalEventLines.length > 0) {
+          parts.push(`📌 ЛИЧНИ СЪБИТИЯ:\n${generalEventLines.join('\n')}\nНамали натовареността в дните на тези събития — студентът ще е зает.`);
+        }
+
+        academicEventsSection = '\n' + parts.join('\n\n') + '\n';
       }
     }
 

@@ -255,6 +255,10 @@ export default function FloatingTimer() {
   const handleStopPomodoro = () => {
     localStorage.removeItem('pomodoro_state');
     setPomodoroState(null);
+    // Also stop any active normal timer session (safety net)
+    if (activeSession) {
+      setShowRating(true);
+    }
   };
 
   const handleRatingSubmit = (rating: number | null) => {
@@ -343,8 +347,9 @@ export default function FloatingTimer() {
     );
   }
 
-  // Determine which timer to show (pomodoro takes priority)
-  const isPomodoro = hasPomodoro;
+  // Determine which timer to show
+  // If both exist, normal timer takes priority (user actively started it, pomodoro is likely stale)
+  const isPomodoro = hasPomodoro && !hasNormalTimer;
   const phaseInfo = isPomodoro ? getPhaseInfo(pomodoroState!.phase) : null;
   const displayTime = isPomodoro ? pomodoroTimeLeft : elapsed;
   const timerColor = isPomodoro ? phaseInfo!.color : 'cyan';

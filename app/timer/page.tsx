@@ -165,6 +165,10 @@ export default function TimerPage() {
         savedAt: Date.now()
       };
       localStorage.setItem('pomodoro_state', JSON.stringify(state));
+    } else {
+      // Clear pomodoro state when switching to normal mode
+      // Prevents stale pomodoro overlay in FloatingTimer
+      localStorage.removeItem('pomodoro_state');
     }
   }, [isRunning, timerMode, pomodoroPhase, pomodoroCount, pomodoroEndTime, pomodoroTimeLeft, isPaused, initialized, settings, showPomodoroRating]);
 

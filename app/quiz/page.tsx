@@ -978,7 +978,7 @@ function QuizContent() {
           topicName: topic.name,
           mode: 'from_material'
         }),
-        timeout: 120000
+        timeout: 300000
       });
 
       const result = await response.json();

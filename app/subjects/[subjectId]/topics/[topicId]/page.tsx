@@ -207,7 +207,10 @@ export default function TopicDetailPage() {
       setMaterial(loadedMaterial);
       setMaterialSaved(true);
     }
-  }, [topic?.id, topic?.material]);
+    // Only reload when navigating to a DIFFERENT topic, not when topic.material
+    // changes from our own save (which was causing the revert bug)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic?.id]);
 
   // Track last opened topic for "Continue where you left off" dashboard feature
   useEffect(() => {

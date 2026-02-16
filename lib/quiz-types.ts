@@ -2,14 +2,20 @@ import { BloomLevel } from './types';
 
 export type QuizMode = 'assessment' | 'free_recall' | 'gap_analysis' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards';
 
+export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'true_false' | 'fill_blank' | 'short_answer' | 'matching' | 'ordering';
+
 export interface Question {
-  type: 'multiple_choice' | 'open' | 'case_study';
+  type: QuestionType;
   question: string;
   options?: string[];
   correctAnswer: string;
   explanation: string;
   bloomLevel?: number;
   concept?: string;
+  // New type-specific fields
+  acceptableAnswers?: string[]; // fill_blank: alternative correct answers
+  pairs?: Array<{ left: string; right: string }>; // matching: correct pairs
+  items?: string[]; // ordering: items in CORRECT order (UI shuffles)
 }
 
 export interface FreeRecallEvaluation {
@@ -99,6 +105,60 @@ export function buildMasteryContext(topic: {
   };
 }
 
+// Check if answer is correct for a question (shared logic)
+export function isAnswerCorrect(q: Question, answer: string | null, openEval?: OpenAnswerEvaluation): boolean {
+  if (!answer) return false;
+  switch (q.type) {
+    case 'multiple_choice':
+    case 'case_study':
+    case 'true_false':
+      return answer === q.correctAnswer;
+    case 'fill_blank': {
+      const userAns = answer.toLowerCase().trim();
+      if (userAns === q.correctAnswer.toLowerCase().trim()) return true;
+      return (q.acceptableAnswers || []).some(a => a.toLowerCase().trim() === userAns);
+    }
+    case 'short_answer':
+    case 'open':
+      return !!openEval && openEval.score >= 0.7;
+    case 'matching': {
+      try {
+        const userPairs = JSON.parse(answer) as Record<string, string>;
+        return (q.pairs || []).every(p => userPairs[p.left] === p.right);
+      } catch { return false; }
+    }
+    case 'ordering': {
+      try {
+        const userOrder = JSON.parse(answer) as string[];
+        return JSON.stringify(userOrder) === JSON.stringify(q.items);
+      } catch { return false; }
+    }
+    default:
+      return answer === q.correctAnswer;
+  }
+}
+
+// Get partial score for a question (0-1)
+export function getQuestionScore(q: Question, answer: string | null, openEval?: OpenAnswerEvaluation): number {
+  if (!answer) return 0;
+  switch (q.type) {
+    case 'open':
+    case 'short_answer':
+      return openEval ? openEval.score : 0;
+    case 'matching': {
+      try {
+        const userPairs = JSON.parse(answer) as Record<string, string>;
+        const pairs = q.pairs || [];
+        if (pairs.length === 0) return 0;
+        const correctCount = pairs.filter(p => userPairs[p.left] === p.right).length;
+        return correctCount / pairs.length;
+      } catch { return 0; }
+    }
+    default:
+      return isAnswerCorrect(q, answer, openEval) ? 1 : 0;
+  }
+}
+
 // Pure score calculation
 export function calculateScore(
   questions: Question[],
@@ -107,14 +167,7 @@ export function calculateScore(
 ): number {
   let correct = 0;
   questions.forEach((q, i) => {
-    if ((q.type === 'multiple_choice' || q.type === 'case_study') && answers[i] === q.correctAnswer) {
-      correct++;
-    } else if (q.type === 'open' && answers[i]) {
-      const evaluation = openEvaluations[i];
-      if (evaluation) {
-        correct += evaluation.score;
-      }
-    }
+    correct += getQuestionScore(q, answers[i], openEvaluations[i]);
   });
   return correct;
 }

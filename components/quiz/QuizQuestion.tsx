@@ -1,7 +1,8 @@
 'use client';
 
-import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle } from 'lucide-react';
-import { Question, OpenAnswerEvaluation } from '@/lib/quiz-types';
+import { useMemo } from 'react';
+import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { Question, OpenAnswerEvaluation, isAnswerCorrect } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
 // Format matching/numbered question text with line breaks
@@ -18,6 +19,18 @@ function formatQuestionText(text: string): React.ReactNode {
     </span>
   ));
 }
+
+// Type label mapping
+const TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  multiple_choice: { label: 'Избор', color: 'bg-blue-500/20 text-blue-400' },
+  case_study: { label: 'Казус', color: 'bg-amber-500/20 text-amber-400' },
+  open: { label: 'Отворен', color: 'bg-purple-500/20 text-purple-400' },
+  true_false: { label: 'Вярно/Невярно', color: 'bg-teal-500/20 text-teal-400' },
+  fill_blank: { label: 'Попълни', color: 'bg-cyan-500/20 text-cyan-400' },
+  short_answer: { label: 'Кратък', color: 'bg-indigo-500/20 text-indigo-400' },
+  matching: { label: 'Свържи', color: 'bg-emerald-500/20 text-emerald-400' },
+  ordering: { label: 'Подреди', color: 'bg-orange-500/20 text-orange-400' },
+};
 
 interface QuizQuestionProps {
   questions: Question[];
@@ -45,6 +58,13 @@ interface QuizQuestionProps {
   onNext: () => void;
   onEarlyStop: () => void;
   onBack: () => void;
+  // New type props
+  matchingAnswers: Record<string, string>;
+  setMatchingAnswers: (answers: Record<string, string>) => void;
+  orderingItems: string[];
+  setOrderingItems: (items: string[]) => void;
+  fillBlankAnswer: string;
+  setFillBlankAnswer: (answer: string) => void;
 }
 
 export function QuizQuestion({
@@ -58,13 +78,23 @@ export function QuizQuestion({
   showBackConfirm, setShowBackConfirm,
   countWarning, setCountWarning,
   elapsedTime, formatTime,
-  onAnswer, onNext, onEarlyStop, onBack
+  onAnswer, onNext, onEarlyStop, onBack,
+  matchingAnswers, setMatchingAnswers,
+  orderingItems, setOrderingItems,
+  fillBlankAnswer, setFillBlankAnswer
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
   const openEval = openEvaluations[currentIndex];
-  const isCorrect = (currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study')
-    ? selectedAnswer === currentQuestion.correctAnswer
-    : openEval?.isCorrect ?? false;
+  const currentAnswer = answers[currentIndex];
+  const isCorrect = isAnswerCorrect(currentQuestion, currentAnswer, openEval);
+  const typeInfo = TYPE_LABELS[currentQuestion.type] || TYPE_LABELS.open;
+
+  // Memoize shuffled right-side options for matching (avoid re-shuffle on every render)
+  const shuffledMatchingOptions = useMemo(() => {
+    if (currentQuestion.type !== 'matching' || !currentQuestion.pairs) return [];
+    return [...currentQuestion.pairs.map(p => p.right)].sort(() => Math.random() - 0.5);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, currentQuestion.type]);
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -185,13 +215,8 @@ export function QuizQuestion({
 
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-3xl mx-auto">
         <div className="mb-6">
-          <span className={`px-3 py-1 rounded-full text-xs font-mono ${
-            currentQuestion.type === 'case_study' ? 'bg-amber-500/20 text-amber-400' :
-            currentQuestion.type === 'multiple_choice' ? 'bg-blue-500/20 text-blue-400' :
-            'bg-purple-500/20 text-purple-400'
-          }`}>
-            {currentQuestion.type === 'case_study' ? 'Казус' :
-             currentQuestion.type === 'multiple_choice' ? 'Избор' : 'Отворен'}
+          <span className={`px-3 py-1 rounded-full text-xs font-mono ${typeInfo.color}`}>
+            {typeInfo.label}
           </span>
         </div>
 
@@ -199,7 +224,8 @@ export function QuizQuestion({
           {formatQuestionText(currentQuestion.question)}
         </h2>
 
-        {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') ? (
+        {/* ── MCQ / Case Study ── */}
+        {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') && (
           <div className="space-y-3">
             {currentQuestion.options?.map((option, i) => (
               <button
@@ -236,19 +262,210 @@ export function QuizQuestion({
             ))}
             {!showExplanation && (
               <p className="text-xs text-slate-500 font-mono mt-2">
-                ⌨️ Натисни A-D или 1-4 за избор, Enter за проверка
+                Натисни A-D или 1-4 за избор, Enter за проверка
               </p>
             )}
           </div>
-        ) : (
+        )}
+
+        {/* ── True/False ── */}
+        {currentQuestion.type === 'true_false' && (
+          <div className="flex gap-4">
+            {[{ value: 'true', label: 'Вярно', color: 'green' }, { value: 'false', label: 'Невярно', color: 'red' }].map(opt => {
+              const isSelected = selectedAnswer === opt.value;
+              const isCorrectOpt = currentQuestion.correctAnswer === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => !showExplanation && setSelectedAnswer(opt.value)}
+                  disabled={showExplanation}
+                  className={`flex-1 p-5 rounded-xl border-2 font-mono text-lg font-semibold transition-all ${
+                    showExplanation
+                      ? isCorrectOpt
+                        ? 'bg-green-500/20 border-green-500 text-green-300'
+                        : isSelected
+                          ? 'bg-red-500/20 border-red-500 text-red-300'
+                          : 'bg-slate-800/30 border-slate-700 text-slate-500'
+                      : isSelected
+                        ? 'bg-purple-500/20 border-purple-500 text-purple-200'
+                        : 'bg-slate-800/50 border-slate-600 text-slate-100 hover:border-slate-500 hover:bg-slate-700/50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Fill in the Blank ── */}
+        {currentQuestion.type === 'fill_blank' && (
+          <div>
+            <div className="text-lg text-slate-100 font-mono leading-relaxed mb-4">
+              {currentQuestion.question.split('____').map((part, i, arr) => (
+                <span key={i}>
+                  {part}
+                  {i < arr.length - 1 && (
+                    showExplanation ? (
+                      <span className={`inline-block px-3 py-1 mx-1 rounded border-b-2 font-semibold ${
+                        fillBlankAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toLowerCase().trim() ||
+                        (currentQuestion.acceptableAnswers || []).some(a => a.toLowerCase().trim() === fillBlankAnswer.toLowerCase().trim())
+                          ? 'text-green-400 border-green-500 bg-green-500/10'
+                          : 'text-red-400 border-red-500 bg-red-500/10'
+                      }`}>
+                        {fillBlankAnswer || '(празно)'}
+                      </span>
+                    ) : (
+                      <input
+                        type="text"
+                        value={fillBlankAnswer}
+                        onChange={(e) => setFillBlankAnswer(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && fillBlankAnswer.trim()) onAnswer(); }}
+                        placeholder="..."
+                        className="inline-block w-48 px-3 py-1 mx-1 bg-slate-800/50 border-b-2 border-purple-500 text-purple-200 font-mono text-lg focus:outline-none focus:border-purple-400 placeholder:text-slate-600"
+                        autoFocus
+                      />
+                    )
+                  )}
+                </span>
+              ))}
+            </div>
+            {showExplanation && (
+              <p className="text-sm text-slate-400 font-mono">
+                Верен отговор: <span className="text-green-400">{currentQuestion.correctAnswer}</span>
+                {currentQuestion.acceptableAnswers?.length ? (
+                  <span className="text-slate-500"> (също: {currentQuestion.acceptableAnswers.join(', ')})</span>
+                ) : null}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Short Answer ── */}
+        {currentQuestion.type === 'short_answer' && (
           <div>
             <textarea
               value={openAnswer}
               onChange={(e) => setOpenAnswer(e.target.value)}
               onKeyDown={(e) => {
-                if (e.ctrlKey && e.key === 'Enter' && !showExplanation && openAnswer.trim()) {
-                  onAnswer();
-                }
+                if (e.ctrlKey && e.key === 'Enter' && !showExplanation && openAnswer.trim()) onAnswer();
+              }}
+              disabled={showExplanation}
+              placeholder="Кратък отговор (1-3 изречения)... Ctrl+Enter за проверка"
+              className="w-full px-4 py-4 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 text-base font-mono resize-y focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/30 transition-all placeholder:text-slate-500 min-h-[120px]"
+            />
+            <p className="text-xs text-slate-500 font-mono mt-2">Кратък отговор: 1-3 изречения</p>
+          </div>
+        )}
+
+        {/* ── Matching ── */}
+        {currentQuestion.type === 'matching' && currentQuestion.pairs && (
+          <div className="space-y-3">
+            {currentQuestion.pairs.map((pair, i) => {
+              const userChoice = matchingAnswers[pair.left] || '';
+              const isCorrectPair = showExplanation && userChoice === pair.right;
+              const isWrongPair = showExplanation && userChoice !== pair.right;
+              return (
+                <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                  showExplanation
+                    ? isCorrectPair ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
+                    : 'bg-slate-800/30 border-slate-700/50'
+                }`}>
+                  <div className="flex-1 text-sm text-slate-200 font-mono">{pair.left}</div>
+                  <ArrowUpDown size={16} className="text-slate-500 shrink-0" />
+                  {showExplanation ? (
+                    <div className="flex-1 text-right">
+                      <span className={`text-sm font-mono ${isCorrectPair ? 'text-green-400' : 'text-red-400'}`}>
+                        {userChoice || '(не е избран)'}
+                      </span>
+                      {isWrongPair && (
+                        <span className="text-xs text-green-400 font-mono block">→ {pair.right}</span>
+                      )}
+                    </div>
+                  ) : (
+                    <select
+                      value={userChoice}
+                      onChange={(e) => setMatchingAnswers({ ...matchingAnswers, [pair.left]: e.target.value })}
+                      className="flex-1 px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-slate-200 font-mono text-sm focus:border-purple-500 focus:outline-none"
+                    >
+                      <option value="">— избери —</option>
+                      {shuffledMatchingOptions.map((right, j) => (
+                        <option key={j} value={right}>{right}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Ordering ── */}
+        {currentQuestion.type === 'ordering' && orderingItems.length > 0 && (
+          <div className="space-y-2">
+            {orderingItems.map((item, i) => {
+              const correctPos = currentQuestion.items?.indexOf(item) ?? -1;
+              const isCorrectPos = showExplanation && correctPos === i;
+              const isWrongPos = showExplanation && correctPos !== i;
+              return (
+                <div key={item} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                  showExplanation
+                    ? isCorrectPos ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
+                    : 'bg-slate-800/30 border-slate-700/50'
+                }`}>
+                  <span className={`w-7 h-7 rounded flex items-center justify-center text-sm font-bold font-mono ${
+                    showExplanation
+                      ? isCorrectPos ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                      : 'bg-slate-700 text-slate-300'
+                  }`}>
+                    {i + 1}
+                  </span>
+                  <span className="flex-1 text-sm text-slate-200 font-mono">{item}</span>
+                  {!showExplanation && (
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        onClick={() => {
+                          if (i === 0) return;
+                          const arr = [...orderingItems];
+                          [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+                          setOrderingItems(arr);
+                        }}
+                        disabled={i === 0}
+                        className="p-0.5 text-slate-400 hover:text-slate-200 disabled:text-slate-700 transition-colors"
+                      >
+                        <ChevronUp size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (i === orderingItems.length - 1) return;
+                          const arr = [...orderingItems];
+                          [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
+                          setOrderingItems(arr);
+                        }}
+                        disabled={i === orderingItems.length - 1}
+                        className="p-0.5 text-slate-400 hover:text-slate-200 disabled:text-slate-700 transition-colors"
+                      >
+                        <ChevronDown size={16} />
+                      </button>
+                    </div>
+                  )}
+                  {isWrongPos && (
+                    <span className="text-xs text-green-400 font-mono">#{correctPos + 1}</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Open ── */}
+        {currentQuestion.type === 'open' && (
+          <div>
+            <textarea
+              value={openAnswer}
+              onChange={(e) => setOpenAnswer(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.ctrlKey && e.key === 'Enter' && !showExplanation && openAnswer.trim()) onAnswer();
               }}
               disabled={showExplanation}
               placeholder={
@@ -263,10 +480,10 @@ export function QuizQuestion({
             />
             <p className="text-xs text-slate-500 font-mono mt-2">
               {(currentQuestion.bloomLevel || 1) >= 5
-                ? '🧠 Higher-Order: Препоръчително 5-8 изречения с анализ и обосновка'
+                ? 'Higher-Order: Препоръчително 5-8 изречения с анализ и обосновка'
                 : (currentQuestion.bloomLevel || 1) >= 3
-                  ? '💡 Препоръчително: 3-5 изречения за пълен отговор'
-                  : '📝 Препоръчително: 2-3 изречения'}
+                  ? 'Препоръчително: 3-5 изречения за пълен отговор'
+                  : 'Препоръчително: 2-3 изречения'}
             </p>
 
             {/* Hint button and display for open questions */}
@@ -303,8 +520,8 @@ export function QuizQuestion({
 
         {showExplanation && (
           <div className="mt-6 space-y-4">
-            {/* AI Evaluation for open questions */}
-            {currentQuestion.type === 'open' && openEval && (
+            {/* AI Evaluation for open/short_answer questions */}
+            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && openEval && (
               <div className={`p-4 rounded-lg border ${
                 openEval.score >= 0.7 ? 'bg-green-500/10 border-green-500/30' :
                 openEval.score >= 0.4 ? 'bg-yellow-500/10 border-yellow-500/30' :
@@ -357,8 +574,8 @@ export function QuizQuestion({
               </div>
             )}
 
-            {/* Standard result for MCQ */}
-            {(currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') && (
+            {/* Standard result for MCQ, true_false, fill_blank, matching, ordering */}
+            {(['multiple_choice', 'case_study', 'true_false', 'fill_blank', 'matching', 'ordering'].includes(currentQuestion.type)) && (
               <div className={`p-4 rounded-lg border ${
                 isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
               }`}>
@@ -372,8 +589,8 @@ export function QuizQuestion({
               </div>
             )}
 
-            {/* Model answer for open questions */}
-            {currentQuestion.type === 'open' && (
+            {/* Model answer for open/short_answer questions */}
+            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && (
               <div className="p-4 rounded-lg border bg-slate-800/50 border-slate-600">
                 <p className="text-xs text-slate-500 font-mono mb-2 uppercase">Примерен отговор:</p>
                 <p className="text-sm text-slate-300 font-mono">{currentQuestion.correctAnswer}</p>
@@ -393,7 +610,11 @@ export function QuizQuestion({
               onClick={onAnswer}
               disabled={
                 isEvaluatingOpen ||
-                ((currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study') ? !selectedAnswer : !openAnswer.trim())
+                (['multiple_choice', 'case_study', 'true_false'].includes(currentQuestion.type) ? !selectedAnswer :
+                 currentQuestion.type === 'fill_blank' ? !fillBlankAnswer.trim() :
+                 currentQuestion.type === 'matching' ? Object.keys(matchingAnswers).length < (currentQuestion.pairs?.length || 0) :
+                 currentQuestion.type === 'ordering' ? false :
+                 !openAnswer.trim())
               }
               className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center gap-2"
             >

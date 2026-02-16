@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
-import { QuizMode, Question, FreeRecallEvaluation, OpenAnswerEvaluation, MistakeAnalysis, QuizState, buildMasteryContext, calculateScore, getGradeFromScore } from '@/lib/quiz-types';
+import { QuizMode, Question, FreeRecallEvaluation, OpenAnswerEvaluation, MistakeAnalysis, QuizState, buildMasteryContext, calculateScore, getGradeFromScore, isAnswerCorrect, getQuestionScore } from '@/lib/quiz-types';
 import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@/lib/fetch-utils';
 import { checkAnkiConnect, addClozeNotes } from '@/lib/anki';
 import { showToast } from '@/components/Toast';
@@ -84,6 +84,10 @@ function QuizContent() {
   const [openAnswer, setOpenAnswer] = useState('');
   const [openHint, setOpenHint] = useState<string | null>(null);
   const [openHintLoading, setOpenHintLoading] = useState(false);
+  // New question type state
+  const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({});
+  const [orderingItems, setOrderingItems] = useState<string[]>([]);
+  const [fillBlankAnswer, setFillBlankAnswer] = useState('');
 
   // Preview screen state
   const [showPreview, setShowPreview] = useState(false);
@@ -530,6 +534,8 @@ function QuizContent() {
       answers: new Array(allQuestions.length).fill(null),
       showResult: false, isGenerating: false, error: null
     });
+    // Init state for first question
+    if (allQuestions.length > 0) initQuestionState(allQuestions[0]);
     timer.initQuestionTimes(allQuestions.length);
 
     // Save to cache for reuse
@@ -657,9 +663,30 @@ function QuizContent() {
     if (isEvaluatingOpen) return; // Guard against double-click
     const questionIndex = quizState.currentIndex; // Capture index before any async gap
     const currentQuestion = quizState.questions[questionIndex];
-    const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
-      ? selectedAnswer
-      : openAnswer;
+
+    // Determine answer based on question type
+    let answer: string | null = null;
+    switch (currentQuestion.type) {
+      case 'multiple_choice':
+      case 'case_study':
+      case 'true_false':
+        answer = selectedAnswer;
+        break;
+      case 'fill_blank':
+        answer = fillBlankAnswer.trim();
+        break;
+      case 'matching':
+        answer = JSON.stringify(matchingAnswers);
+        break;
+      case 'ordering':
+        answer = JSON.stringify(orderingItems);
+        break;
+      case 'open':
+      case 'short_answer':
+      default:
+        answer = openAnswer;
+        break;
+    }
 
     const newAnswers = [...quizState.answers];
     newAnswers[questionIndex] = answer;
@@ -670,8 +697,8 @@ function QuizContent() {
     // Record time spent on this question
     timer.recordQuestionTime(questionIndex);
 
-    // For open questions, evaluate with AI
-    if (currentQuestion.type === 'open' && openAnswer.trim()) {
+    // For open/short_answer questions, evaluate with AI
+    if ((currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && openAnswer.trim()) {
       const apiKey = localStorage.getItem('claude-api-key');
       if (apiKey) {
         setIsEvaluatingOpen(true);
@@ -709,24 +736,42 @@ function QuizContent() {
     setShowExplanation(true);
   };
 
+  // Initialize type-specific state for a question
+  const initQuestionState = (question: Question) => {
+    setSelectedAnswer(null);
+    setOpenAnswer('');
+    setOpenHint(null);
+    setFillBlankAnswer('');
+    setMatchingAnswers({});
+    // Shuffle ordering items
+    if (question.type === 'ordering' && question.items) {
+      const shuffled = [...question.items].sort(() => Math.random() - 0.5);
+      // Ensure it's not already in correct order
+      if (JSON.stringify(shuffled) === JSON.stringify(question.items)) {
+        shuffled.reverse();
+      }
+      setOrderingItems(shuffled);
+    } else {
+      setOrderingItems([]);
+    }
+  };
+
   const handleNext = () => {
     const currentQuestion = quizState.questions[quizState.currentIndex];
-    const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
-      ? selectedAnswer
-      : openAnswer;
+    // Get stored answer (already saved by handleAnswer)
+    const answer = quizState.answers[quizState.currentIndex];
 
     const newAnswers = [...quizState.answers];
-    newAnswers[quizState.currentIndex] = answer;
+    if (answer !== null) newAnswers[quizState.currentIndex] = answer;
 
     if (quizState.currentIndex < quizState.questions.length - 1) {
+      const nextQuestion = quizState.questions[quizState.currentIndex + 1];
       setQuizState(prev => ({
         ...prev,
         currentIndex: prev.currentIndex + 1,
         answers: newAnswers
       }));
-      setSelectedAnswer(null);
-      setOpenAnswer('');
-      setOpenHint(null);
+      initQuestionState(nextQuestion);
       setShowExplanation(false);
     } else {
       setQuizState(prev => ({
@@ -741,9 +786,19 @@ function QuizContent() {
   const handleEarlyStop = () => {
     // Save current answer if any
     const currentQuestion = quizState.questions[quizState.currentIndex];
-    const answer = currentQuestion.type === 'multiple_choice' || currentQuestion.type === 'case_study'
-      ? selectedAnswer
-      : openAnswer;
+    let answer: string | null = null;
+    switch (currentQuestion.type) {
+      case 'multiple_choice': case 'case_study': case 'true_false':
+        answer = selectedAnswer; break;
+      case 'fill_blank':
+        answer = fillBlankAnswer.trim() || null; break;
+      case 'matching':
+        answer = Object.keys(matchingAnswers).length > 0 ? JSON.stringify(matchingAnswers) : null; break;
+      case 'ordering':
+        answer = orderingItems.length > 0 ? JSON.stringify(orderingItems) : null; break;
+      default:
+        answer = openAnswer || null; break;
+    }
 
     const newAnswers = [...quizState.answers];
     if (answer) {
@@ -788,28 +843,15 @@ function QuizContent() {
 
     quizState.questions.forEach((q, i) => {
       const userAnswer = quizState.answers[i];
-
-      if (q.type === 'multiple_choice' || q.type === 'case_study') {
-        if (userAnswer !== q.correctAnswer) {
-          mistakes.push({
-            question: q.question,
-            userAnswer: userAnswer || '(без отговор)',
-            correctAnswer: q.correctAnswer,
-            concept: q.concept,
-            bloomLevel: q.bloomLevel
-          });
-        }
-      } else if (q.type === 'open') {
-        const evaluation = openEvaluations[i];
-        if (!evaluation || evaluation.score < 0.7) {
-          mistakes.push({
-            question: q.question,
-            userAnswer: userAnswer || '(без отговор)',
-            correctAnswer: q.correctAnswer,
-            concept: q.concept,
-            bloomLevel: q.bloomLevel
-          });
-        }
+      const correct = isAnswerCorrect(q, userAnswer, openEvaluations[i]);
+      if (!correct) {
+        mistakes.push({
+          question: q.question,
+          userAnswer: userAnswer || '(без отговор)',
+          correctAnswer: q.correctAnswer,
+          concept: q.concept,
+          bloomLevel: q.bloomLevel
+        });
       }
     });
 
@@ -890,25 +932,13 @@ function QuizContent() {
 
     quizState.questions.forEach((q, i) => {
       const userAnswer = quizState.answers[i];
-      if (q.type === 'open') {
-        const evaluation = openEvaluations[i];
-        if (!evaluation || evaluation.score < 0.7) {
-          wrongAnswers.push({
-            question: q.question,
-            userAnswer: userAnswer,
-            correctAnswer: q.correctAnswer,
-            explanation: q.explanation
-          });
-        }
-      } else {
-        if (userAnswer !== q.correctAnswer) {
-          wrongAnswers.push({
-            question: q.question,
-            userAnswer: userAnswer,
-            correctAnswer: q.correctAnswer,
-            explanation: q.explanation
-          });
-        }
+      if (!isAnswerCorrect(q, userAnswer, openEvaluations[i])) {
+        wrongAnswers.push({
+          question: q.question,
+          userAnswer: userAnswer,
+          correctAnswer: q.correctAnswer,
+          explanation: q.explanation
+        });
       }
     });
 
@@ -1069,46 +1099,21 @@ function QuizContent() {
     quizState.questions.forEach((q, i) => {
       const userAnswer = quizState.answers[i];
       const concept = q.concept || 'General';
+      const correct = isAnswerCorrect(q, userAnswer, openEvaluations[i]);
 
-      // Track MCQ/case_study based on exact match
-      if (q.type === 'multiple_choice' || q.type === 'case_study') {
-        const isCorrect = userAnswer === q.correctAnswer;
-
-        if (isCorrect) {
-          masteredConcepts.add(concept);
-        } else if (userAnswer !== null) {
-          newWrongAnswers.push({
-            question: q.question,
-            userAnswer: userAnswer,
-            correctAnswer: q.correctAnswer,
-            concept: concept,
-            bloomLevel: q.bloomLevel || 1,
-            date: new Date().toISOString(),
-            drillCount: 0,
-            timeSpent: timer.questionTimes[i] || 0
-          });
-        }
-      }
-      // Track open questions based on AI evaluation
-      else if (q.type === 'open') {
-        const evaluation = openEvaluations[i];
-        if (evaluation) {
-          if (evaluation.isCorrect || evaluation.score >= 0.7) {
-            masteredConcepts.add(concept);
-          } else if (userAnswer && userAnswer.trim()) {
-            // Track as wrong answer if AI score < 0.7
-            newWrongAnswers.push({
-              question: q.question,
-              userAnswer: userAnswer,
-              correctAnswer: q.correctAnswer,
-              concept: concept,
-              bloomLevel: q.bloomLevel || 1,
-              date: new Date().toISOString(),
-              drillCount: 0,
-              timeSpent: timer.questionTimes[i] || 0
-            });
-          }
-        }
+      if (correct) {
+        masteredConcepts.add(concept);
+      } else if (userAnswer !== null) {
+        newWrongAnswers.push({
+          question: q.question,
+          userAnswer: userAnswer,
+          correctAnswer: q.correctAnswer,
+          concept: concept,
+          bloomLevel: q.bloomLevel || 1,
+          date: new Date().toISOString(),
+          drillCount: 0,
+          timeSpent: timer.questionTimes[i] || 0
+        });
       }
     });
 
@@ -1181,16 +1186,7 @@ function QuizContent() {
         const level = q.bloomLevel || 1;
         if (!levelScores[level]) levelScores[level] = { correct: 0, total: 0 };
         levelScores[level].total++;
-        if ((q.type === 'multiple_choice' || q.type === 'case_study') && quizState.answers[i] === q.correctAnswer) {
-          levelScores[level].correct++;
-        } else if (q.type === 'open') {
-          // Use actual AI evaluation score for open questions
-          const evaluation = openEvaluations[i];
-          if (evaluation) {
-            levelScores[level].correct += evaluation.score;
-          }
-          // No automatic points if no evaluation
-        }
+        levelScores[level].correct += getQuestionScore(q, quizState.answers[i], openEvaluations[i]);
       });
 
       quizBloomLevel = 1;
@@ -1315,6 +1311,9 @@ function QuizContent() {
     setCountWarning(null);
     setShowEarlyStopConfirm(false);
     setShowBackConfirm(false);
+    setMatchingAnswers({});
+    setOrderingItems([]);
+    setFillBlankAnswer('');
   };
 
   // No topic selected - show simple topic selection (skip if multi-topic mode or showing preview)
@@ -1554,6 +1553,12 @@ function QuizContent() {
         onNext={handleNext}
         onEarlyStop={handleEarlyStop}
         onBack={() => { setShowBackConfirm(false); router.push('/quiz'); }}
+        matchingAnswers={matchingAnswers}
+        setMatchingAnswers={setMatchingAnswers}
+        orderingItems={orderingItems}
+        setOrderingItems={setOrderingItems}
+        fillBlankAnswer={fillBlankAnswer}
+        setFillBlankAnswer={setFillBlankAnswer}
       />
       </>
     );

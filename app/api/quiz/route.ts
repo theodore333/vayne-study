@@ -973,35 +973,50 @@ Intelligently select:
 - The most important concepts to test
 - Questions that efficiently assess deep understanding
 
-QUESTION TYPE DISTRIBUTION (ВАЖНО!):
-- ПРЕДПОЧИТАЙ "open" въпроси (60-70%) - изискват писане и показват истинско разбиране
-- Използвай "case_study" за клинични сценарии (20-30%) - пациентски случаи с решения
-- ИЗБЯГВАЙ "multiple_choice" (макс 10-20%) - само за фактологични въпроси на ниски Bloom нива
+QUESTION TYPE DISTRIBUTION (ВАЖНО — 8 ТИПА!):
+Use a DIVERSE mix of question types. The student benefits from varied testing formats:
+- "open" (25-35%) — free text, tests deep understanding (Bloom 3-6)
+- "short_answer" (10-15%) — кратък отговор, 1-3 sentences (Bloom 2-4)
+- "fill_blank" (10-15%) — попълни липсващия термин/факт (Bloom 1-3)
+- "true_false" (10-15%) — вярно/невярно твърдение (Bloom 1-3)
+- "matching" (5-10%) — свържи 3-5 двойки термин↔определение (Bloom 2-4)
+- "ordering" (5-10%) — подреди 3-6 стъпки в правилен ред (Bloom 3-5)
+- "multiple_choice" (10-15%) — 4 опции, фактологични въпроси (Bloom 1-3)
+- "case_study" (10-15%) — клинични сценарии с опции (Bloom 4-6)
 
-Причина: Студентът има Question Bank за MCQ практика. Този Quiz трябва да тества ДЪЛБОКО разбиране!
+Return ONLY a valid JSON array. Each question object MUST match one of these schemas:
 
-Return ONLY a valid JSON array:
-[
-  {
-    "type": "multiple_choice" | "open" | "case_study",
-    "question": "Question in Bulgarian",
-    "options": ["A", "B", "C", "D"], // only for multiple_choice/case_study
-    "correctAnswer": "correct answer (за open: примерен пълен отговор)",
-    "explanation": "detailed explanation in Bulgarian",
-    "bloomLevel": 1-6,
-    "concept": "main concept being tested"
-  }
-]
+FOR "multiple_choice" and "case_study":
+{ "type": "multiple_choice", "question": "...", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correctAnswer": "A) ...", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "open":
+{ "type": "open", "question": "...", "correctAnswer": "примерен пълен отговор", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "true_false":
+{ "type": "true_false", "question": "Твърдение за оценка", "correctAnswer": "true" OR "false", "explanation": "защо е вярно/невярно", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "short_answer":
+{ "type": "short_answer", "question": "Кратък въпрос?", "correctAnswer": "кратък отговор (1-3 изречения)", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "fill_blank":
+{ "type": "fill_blank", "question": "Текст с ____ на мястото на липсващия термин", "correctAnswer": "липсващият термин", "acceptableAnswers": ["алтернатива1", "алтернатива2"], "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "matching":
+{ "type": "matching", "question": "Свържете елементите", "pairs": [{"left": "термин1", "right": "определение1"}, {"left": "термин2", "right": "определение2"}], "correctAnswer": "see pairs", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
+
+FOR "ordering":
+{ "type": "ordering", "question": "Подредете стъпките", "items": ["първа стъпка", "втора стъпка", "трета стъпка"], "correctAnswer": "see items", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
 
 IMPORTANT:
 - Questions must be in Bulgarian
 - Focus on clinically relevant concepts
-- CRITICAL: For "open" questions, correctAnswer MUST MATCH the length the student sees:
-  * Bloom 1-2: EXACTLY 2-3 sentences (this is what student sees as recommended)
-  * Bloom 3-4: EXACTLY 3-5 sentences (this is what student sees as recommended)
-  * Bloom 5-6: EXACTLY 5-8 sentences (this is what student sees as recommended)
-  DO NOT exceed these limits! The student sees "Препоръчително: X изречения" and your answer must match.
-  If your answer is longer, the student feels inadequate. COUNT YOUR SENTENCES!
+- "matching" MUST have 3-5 pairs, "ordering" MUST have 3-6 items
+- "fill_blank" question MUST contain exactly one ____ (4 underscores) for the blank
+- For "open" questions, correctAnswer MUST MATCH the length the student sees:
+  * Bloom 1-2: EXACTLY 2-3 sentences
+  * Bloom 3-4: EXACTLY 3-5 sentences
+  * Bloom 5-6: EXACTLY 5-8 sentences
+- For "short_answer", correctAnswer should be 1-3 sentences max
 - Explanations should be educational
 - Return ONLY the JSON array
 ${questionCount ? `

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Brain, CheckCircle, XCircle, RefreshCw, ArrowLeft, Sparkles, Target, FileText, Clock, Repeat, Copy } from 'lucide-react';
-import { Question, OpenAnswerEvaluation, MistakeAnalysis, calculateScore, getGradeFromScore } from '@/lib/quiz-types';
+import { Question, OpenAnswerEvaluation, MistakeAnalysis, calculateScore, getGradeFromScore, isAnswerCorrect } from '@/lib/quiz-types';
 import { showToast } from '@/components/Toast';
 
 interface QuizResultsProps {
@@ -43,10 +43,7 @@ export function QuizResults({
   const percentage = Math.round((score / questionsCount) * 100);
 
   const wrongCount = questions.filter((q, i) => {
-    const openEval = openEvaluations[i];
-    return q.type === 'open'
-      ? (!openEval || openEval.score < 0.7)
-      : answers[i] !== q.correctAnswer;
+    return !isAnswerCorrect(q, answers[i], openEvaluations[i]);
   }).length;
 
   return (
@@ -122,9 +119,7 @@ export function QuizResults({
                 {questions.map((q, i) => {
                   const userAnswer = answers[i];
                   const openEval = openEvaluations[i];
-                  const isWrong = q.type === 'open'
-                    ? (!openEval || openEval.score < 0.7)
-                    : userAnswer !== q.correctAnswer;
+                  const isWrong = !isAnswerCorrect(q, userAnswer, openEval);
 
                   if (!isWrong) return null;
 
@@ -135,7 +130,10 @@ export function QuizResults({
                           Q{i + 1}
                         </span>
                         <span className="text-xs text-slate-500 font-mono">
-                          {q.type === 'case_study' ? 'Казус' : q.type === 'open' ? 'Отворен' : 'Избор'}
+                          {q.type === 'case_study' ? 'Казус' : q.type === 'open' ? 'Отворен' :
+                           q.type === 'true_false' ? 'Вярно/Невярно' : q.type === 'fill_blank' ? 'Попълни' :
+                           q.type === 'short_answer' ? 'Кратък' : q.type === 'matching' ? 'Свържи' :
+                           q.type === 'ordering' ? 'Подреди' : 'Избор'}
                         </span>
                         {q.concept && (
                           <span className="text-xs text-purple-400 font-mono ml-auto">
@@ -151,11 +149,30 @@ export function QuizResults({
                       <div className="grid gap-2 text-xs font-mono">
                         <div className="bg-red-500/10 rounded p-2 border-l-2 border-red-500">
                           <span className="text-red-400 font-semibold">Твой отговор: </span>
-                          <span className="text-red-300">{userAnswer || '(празен)'}</span>
+                          <span className="text-red-300">
+                            {!userAnswer ? '(празен)' :
+                             q.type === 'matching' ? (() => {
+                               try { const pairs = JSON.parse(userAnswer) as Record<string, string>;
+                                 return Object.entries(pairs).map(([l, r]) => `${l} → ${r}`).join('; ');
+                               } catch { return userAnswer; }
+                             })() :
+                             q.type === 'ordering' ? (() => {
+                               try { const items = JSON.parse(userAnswer) as string[];
+                                 return items.map((it, idx) => `${idx + 1}. ${it}`).join('; ');
+                               } catch { return userAnswer; }
+                             })() :
+                             q.type === 'true_false' ? (userAnswer === 'true' ? 'Вярно' : 'Невярно') :
+                             userAnswer}
+                          </span>
                         </div>
                         <div className="bg-green-500/10 rounded p-2 border-l-2 border-green-500">
                           <span className="text-green-400 font-semibold">Правилен: </span>
-                          <span className="text-green-300">{q.correctAnswer}</span>
+                          <span className="text-green-300">
+                            {q.type === 'matching' && q.pairs ? q.pairs.map(p => `${p.left} → ${p.right}`).join('; ') :
+                             q.type === 'ordering' && q.items ? q.items.map((it, idx) => `${idx + 1}. ${it}`).join('; ') :
+                             q.type === 'true_false' ? (q.correctAnswer === 'true' ? 'Вярно' : 'Невярно') :
+                             q.correctAnswer}
+                          </span>
                         </div>
                         {q.explanation && (
                           <div className="bg-slate-700/50 rounded p-2 border-l-2 border-slate-500">
@@ -163,7 +180,7 @@ export function QuizResults({
                             <span className="text-slate-300">{q.explanation}</span>
                           </div>
                         )}
-                        {q.type === 'open' && openEval && (
+                        {(q.type === 'open' || q.type === 'short_answer') && openEval && (
                           <div className="bg-purple-500/10 rounded p-2 border-l-2 border-purple-500">
                             <span className="text-purple-400 font-semibold">AI оценка: </span>
                             <span className="text-purple-300">{Math.round(openEval.score * 100)}% - {openEval.feedback}</span>

@@ -252,8 +252,8 @@ function QuizContent() {
 
     if (daysUntilExam !== null && daysUntilExam <= 3) {
       return {
-        recommendation: `${daysUntilExam} дни до изпита! → Gap Analysis за откриване на слаби места.`,
-        suggestedMode: 'gap_analysis'
+        recommendation: `${daysUntilExam} дни до изпита! → Drill Weakness за слабите места.`,
+        suggestedMode: 'drill_weakness'
       };
     }
 
@@ -464,7 +464,7 @@ function QuizContent() {
         quizHistory: topic?.quizHistory,
         wrongAnswers: mode === 'drill_weakness'
           ? (crossTopicDrill ? crossTopicWrongAnswers : topic?.wrongAnswers)
-          : mode === 'gap_analysis' ? topic?.wrongAnswers : undefined,
+          : undefined,
         model: selectedModel,
         masteryContext: topic ? buildMasteryContext(topic) : undefined,
         customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined

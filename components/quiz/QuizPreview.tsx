@@ -46,7 +46,6 @@ export function QuizPreview({
       case 'lower_order': return 'Lower-Order (Remember/Understand)';
       case 'mid_order': return 'Mid-Order (Apply/Analyze)';
       case 'higher_order': return 'Higher-Order (Evaluate/Create)';
-      case 'gap_analysis': return 'Gap Analysis';
       case 'drill_weakness': return 'Drill Weakness';
       case 'custom': return `Custom (Bloom ${customBloomLevel})`;
       default: return 'Quiz';
@@ -59,7 +58,6 @@ export function QuizPreview({
       case 'lower_order': return 'cyan';
       case 'mid_order': return 'blue';
       case 'higher_order': return 'pink';
-      case 'gap_analysis': return 'red';
       case 'drill_weakness': return 'orange';
       case 'custom': return 'purple';
       default: return 'slate';
@@ -291,9 +289,7 @@ export function QuizPreview({
             onClick={onGenerate}
             disabled={!mode}
             className={`w-full py-4 font-semibold rounded-lg font-mono flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
-              mode === 'gap_analysis'
-                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white hover:from-red-500 hover:to-orange-500'
-                : mode === 'drill_weakness'
+              mode === 'drill_weakness'
                   ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white hover:from-orange-500 hover:to-amber-500'
                   : mode === 'mid_order'
                     ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-500 hover:to-cyan-500'

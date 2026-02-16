@@ -1,6 +1,6 @@
 'use client';
 
-import { TrendingUp, Lightbulb, Zap, Brain, Target, FileText, Repeat, Settings, Sparkles } from 'lucide-react';
+import { TrendingUp, Lightbulb, Zap, Brain, FileText, Repeat, Settings, Sparkles } from 'lucide-react';
 import { QuizMode } from '@/lib/quiz-types';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 
@@ -116,20 +116,6 @@ export function QuizModeSelector({
               Higher-Order
             </span>
             <span className="text-xs text-slate-500 font-mono">Bloom 5-6: Evaluate, Create</span>
-          </button>
-
-          {/* Gap Analysis */}
-          <button
-            onClick={() => { setMode('gap_analysis'); setShowCustomOptions(false); }}
-            className={`p-4 rounded-xl border text-left transition-all ${
-              mode === 'gap_analysis' ? 'bg-red-500/20 border-red-500 ring-2 ring-red-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
-            }`}
-          >
-            <Target size={20} className={mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-400'} />
-            <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'gap_analysis' ? 'text-red-400' : 'text-slate-300'}`}>
-              Gap Analysis
-            </span>
-            <span className="text-xs text-slate-500 font-mono">Открий слаби места</span>
           </button>
 
           {/* Drill Weakness */}
@@ -336,9 +322,7 @@ export function QuizModeSelector({
             ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'
             : mode === 'free_recall'
               ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white'
-              : mode === 'gap_analysis'
-                ? 'bg-gradient-to-r from-red-600 to-orange-600 text-white'
-                : mode === 'mid_order'
+              : mode === 'mid_order'
                   ? 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white'
                   : mode === 'higher_order'
                     ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white'

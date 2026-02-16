@@ -76,7 +76,7 @@ export async function POST(request: Request) {
       subjectType, // 'preclinical' | 'clinical' | 'hybrid'
       examFormat,
       bloomLevel,
-      mode, // 'assessment' | 'free_recall' | 'gap_analysis' | 'mid_order' | 'higher_order' | 'custom'
+      mode, // 'assessment' | 'free_recall' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness'
       questionCount, // Only used in custom mode
       matchExamFormat, // boolean - whether to match exam format
       model, // 'opus' | 'sonnet' | 'haiku' - user-selected model for cost control
@@ -113,12 +113,6 @@ export async function POST(request: Request) {
       }
       if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
       return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall, studyTechniques, body.examSimulation);
-    }
-
-    if (mode === 'gap_analysis') {
-      // Gap Analysis mode - now includes wrongAnswers for smarter analysis
-      const { wrongAnswers } = body;
-      return handleGapAnalysis(anthropic, material, topicName, subjectName, examFormat, quizHistory, currentBloomLevel, wrongAnswers);
     }
 
     if (mode === 'drill_weakness') {
@@ -339,129 +333,6 @@ Be encouraging but honest. Focus on medical accuracy.`
 
   return NextResponse.json({
     evaluation,
-    usage: {
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
-      cost: Math.round(cost * 1000000) / 1000000
-    }
-  });
-}
-
-async function handleGapAnalysis(
-  anthropic: Anthropic,
-  material: string,
-  topicName: string,
-  subjectName: string,
-  examFormat: string | null,
-  quizHistory: Array<{ bloomLevel: number; score: number }> | null,
-  currentBloomLevel: number,
-  wrongAnswers?: WrongAnswerInput[] | null
-) {
-  // Analyze quiz history to find weak areas
-  const historyAnalysis = quizHistory?.length
-    ? `Previous quiz performance: ${quizHistory.map(q => `Level ${q.bloomLevel}: ${q.score}%`).join(', ')}`
-    : 'No previous quiz history.';
-
-  // Analyze wrong answers to identify weak concepts
-  let wrongAnswersAnalysis = '';
-  if (wrongAnswers && wrongAnswers.length > 0) {
-    // Group by concept and count
-    const conceptCounts: Record<string, { count: number; drillCount: number }> = {};
-    wrongAnswers.forEach(wa => {
-      if (!conceptCounts[wa.concept]) {
-        conceptCounts[wa.concept] = { count: 0, drillCount: 0 };
-      }
-      conceptCounts[wa.concept].count++;
-      conceptCounts[wa.concept].drillCount += (wa as WrongAnswerInput & { drillCount?: number }).drillCount || 0;
-    });
-
-    const weakConcepts = Object.entries(conceptCounts)
-      .sort((a, b) => b[1].count - a[1].count)
-      .slice(0, 10)
-      .map(([concept, data]) => `${concept}: ${data.count} грешки${data.drillCount > 0 ? ` (drilled ${data.drillCount}x)` : ''}`);
-
-    wrongAnswersAnalysis = `
-KNOWN WEAK AREAS (from previous quiz mistakes):
-${weakConcepts.join('\n')}
-
-PRIORITY: Focus questions heavily on these weak concepts! The student has demonstrably struggled with them.`;
-  }
-
-  const response = await anthropic.messages.create({
-    model: 'claude-opus-4-6',
-    max_tokens: 6144,
-    messages: [{
-      role: 'user',
-      content: `You are an expert medical educator performing a gap analysis for a Bulgarian medical student.
-
-Subject: ${subjectName}
-Topic: ${topicName}
-Current Bloom Level: ${currentBloomLevel}
-${examFormat ? `Exam Format: ${examFormat}` : ''}
-${historyAnalysis}
-${wrongAnswersAnalysis}
-
-${material?.trim() ? `Study Material:\n"""\n${material}\n"""` : `No study material provided. Use standard medical curriculum knowledge for "${topicName}" (${subjectName}).`}
-
-Perform a comprehensive gap analysis:
-1. Identify the most critical concepts that would be tested in an exam
-2. Generate targeted questions to probe potential knowledge gaps
-3. ${wrongAnswers?.length ? 'PRIORITIZE weak concepts from the wrong answers list above!' : 'Focus on areas where students typically struggle'}
-
-Return ONLY a valid JSON object:
-{
-  "criticalConcepts": [
-    {"concept": "name", "importance": "critical|high|medium", "examLikelihood": "very_likely|likely|possible"}
-  ],
-  "questions": [
-    {
-      "type": "multiple_choice" | "open" | "case_study",
-      "question": "Question in Bulgarian",
-      "options": ["A", "B", "C", "D"], // only for multiple_choice/case_study
-      "correctAnswer": "correct answer (за open: примерен пълен отговор 3-5 изречения)",
-      "explanation": "explanation in Bulgarian",
-      "bloomLevel": 1-6,
-      "targetConcept": "which concept this tests",
-      "commonMistake": "what students often get wrong here"
-    }
-  ],
-  "weakAreaPrediction": [
-    {"area": "predicted weak area", "reason": "why this might be weak", "priority": "high|medium|low"}
-  ],
-  "studyRecommendation": "personalized study recommendation in Bulgarian"
-}
-
-QUESTION TYPE DISTRIBUTION:
-- ПРЕДПОЧИТАЙ "open" (60%) - изискват писане, показват истинско разбиране
-- "case_study" (25%) - клинични сценарии
-- "multiple_choice" (15%) - само за бързи фактологични проверки
-
-Generate 8-12 strategically chosen questions that efficiently probe for gaps.
-Mix Bloom levels but focus on levels ${Math.max(1, currentBloomLevel - 1)} to ${Math.min(6, currentBloomLevel + 1)}.`
-    }]
-  });
-
-  const textContent = response.content.find(c => c.type === 'text');
-  if (!textContent || textContent.type !== 'text') {
-    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
-  }
-
-  let responseText = textContent.text.trim();
-  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-
-  let analysis;
-  try {
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-    analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
-  } catch {
-    return NextResponse.json({ error: 'Failed to parse gap analysis', raw: responseText.substring(0, 500) }, { status: 500 });
-  }
-
-  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
-
-  return NextResponse.json({
-    analysis,
-    questions: analysis.questions,
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

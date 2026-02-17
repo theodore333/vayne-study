@@ -277,7 +277,7 @@ export default function TopicDetailPage() {
           subjectName: subject?.name || '',
           material: material || '',
         }),
-        timeout: 90000,
+        timeout: 180000,
       });
 
       const data = await res.json();

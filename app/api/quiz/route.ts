@@ -84,15 +84,15 @@ export async function POST(request: Request) {
       userRecall,
       requestHint,
       hintContext,
-      // Gap analysis specific
-      quizHistory,
       currentBloomLevel,
       // Mastery context for smarter quiz generation
       masteryContext,
       // Study techniques for recommendations
       studyTechniques,
       // Custom questions from instructor/exercises
-      customQuestions
+      customQuestions,
+      // Previous questions to avoid repetition
+      previousQuestions
     } = body;
 
     if (!apiKey) {
@@ -193,7 +193,8 @@ export async function POST(request: Request) {
       masteryContext,
       customQuestions,
       overlapContext: body.overlapContext,
-      specimens: body.specimens
+      specimens: body.specimens,
+      previousQuestions
     });
 
   } catch (error: unknown) {
@@ -805,9 +806,10 @@ async function handleStandardQuiz(
       linkedTopicName: string;
     };
     specimens?: string[];
+    previousQuestions?: string[];
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext, specimens } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext, specimens, previousQuestions } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -955,6 +957,20 @@ ${customQuestions.map((q, i) => `${i + 1}. Q: ${q.question}${q.answer ? `\n   A:
 Включи поне 1 въпрос тип "open" за идентификация на препарат — опиши микроскопски находки (при конкретно увеличение: 4x, 10x или 40x) и попитай кой е препаратът. ВАЖНО: НЕ споменавай името на органа или диагнозата в описанието — описвай само морфология!`
     : '';
 
+  // Previous questions — avoid repetition and prioritize uncovered material
+  const previousQuestionsSection = previousQuestions && previousQuestions.length > 0
+    ? `\n\nPREVIOUS QUESTIONS (student has already seen these — DO NOT REPEAT):
+The student has answered ${previousQuestions.length} questions on this topic before. Generate NEW, DIFFERENT questions that:
+1. Cover DIFFERENT aspects/concepts from the material than the ones below
+2. Ask about the SAME concept from a DIFFERENT angle or Bloom level if needed
+3. NEVER copy or closely paraphrase any question below
+
+Previously asked questions:
+${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+
+PRIORITY: Focus on parts of the material NOT covered by the questions above. If all major concepts are covered, ask at HIGHER Bloom levels or test deeper understanding.`
+    : '';
+
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 12000,
@@ -973,6 +989,7 @@ ${materialSection}
 ${overlapSection}
 ${customQuestionsSection}
 ${specimensSection}
+${previousQuestionsSection}
 
 Generate ${targetQuestionCount}.
 

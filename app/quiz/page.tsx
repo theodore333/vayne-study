@@ -483,6 +483,30 @@ function QuizContent() {
           }
         : undefined;
 
+      // Collect previous question texts to avoid repetition
+      let previousQuestions: string[] = [];
+      if (topicId && mode !== 'drill_weakness') {
+        // From question bank (auto-saved AI quiz questions for this topic)
+        const banks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+        for (const bank of banks) {
+          for (const q of bank.questions || []) {
+            if (q.linkedTopicIds?.includes(topicId)) {
+              previousQuestions.push(q.text);
+            }
+          }
+        }
+        // From wrong answers (questions the student got wrong)
+        if (topic?.wrongAnswers?.length) {
+          for (const wa of topic.wrongAnswers) {
+            if (!previousQuestions.includes(wa.question)) {
+              previousQuestions.push(wa.question);
+            }
+          }
+        }
+        // Keep last 30 to limit token cost
+        previousQuestions = previousQuestions.slice(-30);
+      }
+
       requestBody = {
         apiKey, material: topic?.material, topicName: topic?.name,
         subjectName: subject?.name || '',
@@ -490,7 +514,6 @@ function QuizContent() {
         examFormat: subject?.examFormat, matchExamFormat, mode, questionCount,
         bloomLevel: mode === 'custom' ? customBloomLevel : null,
         currentBloomLevel: topic?.currentBloomLevel || 1,
-        quizHistory: topic?.quizHistory,
         wrongAnswers: mode === 'drill_weakness'
           ? (crossTopicDrill ? crossTopicWrongAnswers : topic?.wrongAnswers)
           : undefined,
@@ -498,7 +521,8 @@ function QuizContent() {
         masteryContext: topic ? buildMasteryContext({ ...topic, weakConcepts: topic.weakConcepts }) : undefined,
         specimens: topic?.specimens?.length ? topic.specimens : undefined,
         customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined,
-        overlapContext: topicOverlapCtx
+        overlapContext: topicOverlapCtx,
+        previousQuestions: previousQuestions.length > 0 ? previousQuestions : undefined
       };
     }
 

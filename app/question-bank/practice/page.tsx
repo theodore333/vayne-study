@@ -845,10 +845,16 @@ function PracticeContent() {
               )}
 
               {/* Model answer */}
-              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                <p className="text-xs text-blue-400 font-mono mb-2">Верен отговор:</p>
-                <p className="text-sm text-slate-200 whitespace-pre-wrap">{currentQuestion.correctAnswer}</p>
-              </div>
+              {currentQuestion.correctAnswer ? (
+                <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                  <p className="text-xs text-blue-400 font-mono mb-2">Верен отговор:</p>
+                  <p className="text-sm text-slate-200 whitespace-pre-wrap">{currentQuestion.correctAnswer}</p>
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-800/30 border border-slate-700/50 rounded-lg">
+                  <p className="text-xs text-slate-500 font-mono">Няма записан отговор — AI оценява по медицинските си познания</p>
+                </div>
+              )}
 
               {currentQuestion.explanation && (
                 <div className="p-3 bg-slate-800/30 rounded-lg">

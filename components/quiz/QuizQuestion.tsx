@@ -681,12 +681,12 @@ export function QuizQuestion({
             )}
             {newQType === 'open' && (
               <div>
-                <label className="text-xs text-slate-500 font-mono mb-1 block">Верен отговор</label>
+                <label className="text-xs text-slate-500 font-mono mb-1 block">Верен отговор <span className="text-slate-600">(по избор — AI ще оцени по материала)</span></label>
                 <textarea
                   value={newQAnswer}
                   onChange={(e) => setNewQAnswer(e.target.value)}
                   rows={2}
-                  placeholder="Напиши верния отговор..."
+                  placeholder="Остави празно → AI ще оцени по материала при следващ тест"
                   className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-emerald-500 focus:outline-none resize-none placeholder:text-slate-600"
                 />
               </div>
@@ -723,11 +723,10 @@ export function QuizQuestion({
                       explanation: newQExplanation.trim() || undefined
                     });
                   } else {
-                    if (!newQAnswer.trim()) return;
                     onAddQuestion({
                       type: 'open',
                       text: newQText.trim(),
-                      correctAnswer: newQAnswer.trim(),
+                      correctAnswer: newQAnswer.trim() || '',
                       explanation: newQExplanation.trim() || undefined
                     });
                   }
@@ -737,7 +736,7 @@ export function QuizQuestion({
                   setAddedConfirm(true);
                   setTimeout(() => setAddedConfirm(false), 2000);
                 }}
-                disabled={!newQText.trim() || (newQType === 'open' && !newQAnswer.trim()) || (newQType === 'mcq' && newQOptions.filter(o => o.trim()).length < 2)}
+                disabled={!newQText.trim() || (newQType === 'mcq' && newQOptions.filter(o => o.trim()).length < 2)}
                 className="px-3 py-1.5 text-sm font-mono bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
               >
                 <Save size={14} /> Запази

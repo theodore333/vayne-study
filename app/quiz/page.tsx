@@ -363,6 +363,8 @@ function QuizContent() {
       handleSaveGrade();
     } else if (isModuleQuiz && projectId && moduleId && module) {
       handleSaveGrade();
+    } else if (isMultiMode && multiTopics.length > 0) {
+      handleSaveGrade();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quizState.showResult]);
@@ -1217,12 +1219,13 @@ function QuizContent() {
 
   const handleSaveGrade = () => {
     // Prevent duplicate saves
-    // Support both topic quizzes and module quizzes
+    // Support topic quizzes, module quizzes, and multi-topic mix quizzes
     const isValidTopicQuiz = !isModuleQuiz && subjectId && topicId && topic;
     const isValidModuleQuiz = isModuleQuiz && projectId && moduleId && module;
+    const isValidMultiQuiz = isMultiMode && multiTopics.length > 0;
 
     if (gradeSaved || isSavingGrade) return;
-    if (!isValidTopicQuiz && !isValidModuleQuiz) return;
+    if (!isValidTopicQuiz && !isValidModuleQuiz && !isValidMultiQuiz) return;
     if (quizState.questions.length === 0) return; // Guard against division by zero
     setIsSavingGrade(true);
     const score = calculateScore(quizState.questions, quizState.answers, openEvaluations);
@@ -1241,6 +1244,16 @@ function QuizContent() {
         correctAnswers: score,
         weight: quizWeight
       });
+    } else if (isValidMultiQuiz) {
+      // Mix mode: save grade to EACH topic in the mix
+      for (const { subject: s, topic: t } of multiTopics) {
+        addGrade(s.id, t.id, grade, {
+          bloomLevel: t.currentBloomLevel || 1,
+          questionsCount: quizState.questions.length,
+          correctAnswers: score,
+          weight: quizWeight
+        });
+      }
     } else if (subjectId && topicId && topic) {
       addGrade(subjectId, topicId, grade, {
         bloomLevel: topic.currentBloomLevel || 1,
@@ -1369,22 +1382,31 @@ function QuizContent() {
       updateProjectModule(projectId, moduleId, {
         wrongAnswers: mergedWrongAnswers
       });
+    } else if (isMultiMode && multiTopics.length > 0) {
+      // Mix mode: save wrong answers to each topic in the mix
+      for (const { subject: s, topic: t } of multiTopics) {
+        const existingWA = t.wrongAnswers || [];
+        const merged = [...newWrongAnswers, ...existingWA].slice(0, 20);
+        updateTopic(s.id, t.id, { wrongAnswers: merged });
+      }
     } else if (subjectId && topicId) {
       updateTopic(subjectId, topicId, {
         wrongAnswers: mergedWrongAnswers
       });
     }
     // Auto-save quiz questions to question bank (for drilling later)
-    if (subjectId && quizState.questions.length > 0 && !isModuleQuiz) {
+    const saveBankSubjectId = isMultiMode ? multiTopics[0]?.subject.id : subjectId;
+    const saveBankTopicIds = isMultiMode ? multiTopics.map(({ topic: t }) => t.id) : (topicId ? [topicId] : []);
+    if (saveBankSubjectId && quizState.questions.length > 0 && !isModuleQuiz) {
       try {
-        const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+        const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === saveBankSubjectId);
         let aiBank = existingBanks.find(b => b.name === 'AI Quiz');
         let bankId: string;
         if (aiBank) {
           bankId = aiBank.id;
         } else {
-          bankId = addQuestionBank(subjectId, 'AI Quiz');
-          aiBank = { id: bankId, subjectId, name: 'AI Quiz', questions: [], cases: [], uploadedAt: new Date().toISOString() };
+          bankId = addQuestionBank(saveBankSubjectId, 'AI Quiz');
+          aiBank = { id: bankId, subjectId: saveBankSubjectId, name: 'AI Quiz', questions: [], cases: [], uploadedAt: new Date().toISOString() };
         }
         // Deduplicate: skip questions whose text already exists in the bank
         const existingTexts = new Set((aiBank.questions || []).map(q => q.text.toLowerCase().trim()));
@@ -1402,7 +1424,7 @@ function QuizContent() {
             options: q.type === 'multiple_choice' || q.type === 'case_study' ? q.options : undefined,
             correctAnswer: q.correctAnswer,
             explanation: q.explanation,
-            linkedTopicIds: topicId ? [topicId] : [],
+            linkedTopicIds: saveBankTopicIds,
             bloomLevel: q.bloomLevel,
             stats: { attempts: 0, correct: 0 }
           }));

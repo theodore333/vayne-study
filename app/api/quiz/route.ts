@@ -810,7 +810,7 @@ ${trend === 'improving' ? '- Student is IMPROVING. Challenge them with slightly 
   const materialSection = hasMaterial
     ? `Study Material (PROVIDED BY STUDENT):
 """
-${material}
+${material.length > 12000 ? material.substring(0, 12000) + '\n[... материалът е съкратен поради дължина]' : material}
 """
 
 CRITICAL RULE — STRICT MATERIAL MODE:
@@ -842,7 +842,7 @@ ${customQuestions.map((q, i) => `${i + 1}. Q: ${q.question}${q.answer ? `\n   A:
 
   const response = await anthropic.messages.create({
     model: modelConfig.id,
-    max_tokens: 8192,
+    max_tokens: 12000,
     messages: [{
       role: 'user',
       content: `You are an expert medical educator creating a quiz for a Bulgarian medical student.
@@ -925,6 +925,11 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
 
   let responseText = textContent.text.trim();
   responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  // Handle truncated JSON when response was cut off at token limit
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
 
   let questions;
   try {

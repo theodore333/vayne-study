@@ -12,9 +12,12 @@ interface Props {
   originalPlan: DailyTask[];
   customPlan: DailyTask[];
   onSave: (plan: DailyTask[]) => void;
+  startEmpty?: boolean;
+  onRequestAiReview?: (plan: DailyTask[]) => void;
+  isLoadingAiReview?: boolean;
 }
 
-export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, onSave }: Props) {
+export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, onSave, startEmpty = false, onRequestAiReview, isLoadingAiReview }: Props) {
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {

@@ -18,6 +18,7 @@ import { QuizModeSelector } from '@/components/quiz/QuizModeSelector';
 import { QuizQuestion } from '@/components/quiz/QuizQuestion';
 import { QuizResults } from '@/components/quiz/QuizResults';
 import { QuizPreview } from '@/components/quiz/QuizPreview';
+import ConfirmDialog from '@/components/modals/ConfirmDialog';
 
 function QuizContent() {
   const searchParams = useSearchParams();
@@ -101,6 +102,7 @@ function QuizContent() {
   const [hintsUsed, setHintsUsed] = useState(0);
   const [currentHint, setCurrentHint] = useState<string | null>(null);
   const [hintLoading, setHintLoading] = useState(false);
+  const [pendingCogAction, setPendingCogAction] = useState<(() => void) | null>(null);
   const [freeRecallEvaluation, setFreeRecallEvaluation] = useState<FreeRecallEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
 
@@ -1553,7 +1555,7 @@ function QuizContent() {
         setOpenAnswer={setOpenAnswer}
         openHint={openHint}
         openHintLoading={openHintLoading}
-        requestOpenHint={requestOpenHint}
+        requestOpenHint={() => setPendingCogAction(() => requestOpenHint)}
         openEvaluations={openEvaluations}
         isEvaluatingOpen={isEvaluatingOpen}
         showExplanation={showExplanation}
@@ -1742,7 +1744,7 @@ function QuizContent() {
 
           <div className="flex items-center justify-between">
             <button
-              onClick={requestHint}
+              onClick={() => setPendingCogAction(() => requestHint)}
               disabled={hintsUsed >= MAX_HINTS || hintLoading}
               className="flex items-center gap-2 px-4 py-2 bg-amber-600/20 text-amber-400 border border-amber-600/30 rounded-lg font-mono text-sm disabled:opacity-50"
             >
@@ -1894,6 +1896,21 @@ function QuizContent() {
           onOpenPreview={openPreview}
         />
       </div>
+
+      {/* Cognitive offloading warning */}
+      <ConfirmDialog
+        isOpen={!!pendingCogAction}
+        onClose={() => setPendingCogAction(null)}
+        onConfirm={() => {
+          pendingCogAction?.();
+          setPendingCogAction(null);
+        }}
+        title="Опитай първо сам!"
+        message="Активното припомняне укрепва паметта многократно повече от четенето на подсказки. Опитай да си спомниш сам преди да използваш AI помощ."
+        confirmText="Покажи подсказка"
+        cancelText="Ще опитам сам"
+        variant="warning"
+      />
     </div>
   );
 }

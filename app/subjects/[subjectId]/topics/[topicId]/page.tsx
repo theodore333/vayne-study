@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles, Link2 } from 'lucide-react';
 import LinkTopicModal from '@/components/modals/LinkTopicModal';
+import ConfirmDialog from '@/components/modals/ConfirmDialog';
 import ReaderMode from '@/components/ReaderMode';
 const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
   ssr: false,
@@ -65,6 +66,9 @@ export default function TopicDetailPage() {
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [analyzingOverlapId, setAnalyzingOverlapId] = useState<string | null>(null);
+  const [showEnrichWarning, setShowEnrichWarning] = useState(false);
+  const [isSearchingSimilar, setIsSearchingSimilar] = useState(false);
+  const [similarPairs, setSimilarPairs] = useState<Array<{ topicId: string; topicName: string; subjectId: string; subjectName: string; confidence: number; reason: string }>>([]);
 
   // Inline topic name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -466,6 +470,73 @@ export default function TopicDetailPage() {
     } finally {
       setIsAnalyzingSize(false);
     }
+  };
+
+  // AI: Find similar topics across all subjects
+  const handleFindSimilar = async () => {
+    if (!apiKey || !topic || !subject) return;
+    setIsSearchingSimilar(true);
+    setSimilarPairs([]);
+    try {
+      const subjectsPayload = data.subjects
+        .filter(s => s.topics.length > 0)
+        .map(s => ({
+          id: s.id,
+          name: s.name,
+          topics: s.topics.map(t => ({ id: t.id, name: t.name }))
+        }));
+
+      const res = await fetchWithTimeout('/api/find-overlaps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, subjects: subjectsPayload }),
+      });
+      const result = await res.json();
+      if (res.ok && result.pairs) {
+        // Filter to only pairs that include THIS topic
+        const relevant = result.pairs
+          .filter((p: any) => p.topicA.id === topicId || p.topicB.id === topicId)
+          .map((p: any) => {
+            const other = p.topicA.id === topicId ? p.topicB : p.topicA;
+            // Find the subject for the other topic
+            const otherSubject = data.subjects.find(s => s.topics.some(t => t.id === other.id));
+            return {
+              topicId: other.id,
+              topicName: other.name,
+              subjectId: otherSubject?.id || '',
+              subjectName: other.subjectName || otherSubject?.name || '',
+              confidence: p.confidence,
+              reason: p.reason || '',
+            };
+          })
+          // Exclude already linked topics
+          .filter((p: any) => !(topic.linkedTopicIds || []).includes(p.topicId));
+        setSimilarPairs(relevant);
+      }
+    } catch {} finally {
+      setIsSearchingSimilar(false);
+    }
+  };
+
+  const handleApplySimilarLink = (targetTopicId: string, targetSubjectId: string) => {
+    // Bidirectional link
+    const currentLinked = topic.linkedTopicIds || [];
+    if (!currentLinked.includes(targetTopicId)) {
+      updateTopic(subjectId, topicId, { linkedTopicIds: [...currentLinked, targetTopicId] });
+    }
+    // Link from the other side too
+    for (const s of data.subjects) {
+      const t = s.topics.find(t => t.id === targetTopicId);
+      if (t) {
+        const otherLinked = t.linkedTopicIds || [];
+        if (!otherLinked.includes(topicId)) {
+          updateTopic(s.id, targetTopicId, { linkedTopicIds: [...otherLinked, topicId] });
+        }
+        break;
+      }
+    }
+    // Remove from suggestions
+    setSimilarPairs(prev => prev.filter(p => p.topicId !== targetTopicId));
   };
 
   const daysSinceLastRead = getDaysSince(topic.lastRead);
@@ -1019,13 +1090,54 @@ export default function TopicDetailPage() {
                       Свързани теми ({linkedTopics.length})
                     </span>
                   </div>
-                  <button
-                    onClick={() => setShowLinkModal(true)}
-                    className="text-xs text-blue-400 hover:text-blue-300 font-mono px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 transition-all"
-                  >
-                    + Свържи
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {apiKey && (
+                      <button
+                        onClick={handleFindSimilar}
+                        disabled={isSearchingSimilar}
+                        className="text-xs text-purple-400 hover:text-purple-300 font-mono px-2 py-1 rounded bg-purple-500/10 hover:bg-purple-500/20 transition-all flex items-center gap-1 disabled:opacity-50"
+                      >
+                        {isSearchingSimilar ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}
+                        AI: Намери
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowLinkModal(true)}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-mono px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                    >
+                      + Ръчно
+                    </button>
+                  </div>
                 </div>
+
+                {/* AI Suggestions */}
+                {similarPairs.length > 0 && (
+                  <div className="mb-3 p-3 rounded-lg bg-purple-900/20 border border-purple-700/30">
+                    <p className="text-[11px] text-purple-400 font-mono mb-2">AI намери подобни теми:</p>
+                    <div className="space-y-1.5">
+                      {similarPairs.map(sp => (
+                        <div key={sp.topicId} className="flex items-center justify-between gap-2 p-2 rounded bg-slate-800/50 border border-slate-700/20">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-slate-200 font-mono truncate">{sp.topicName}</p>
+                            <p className="text-[10px] text-slate-500 font-mono">{sp.subjectName} · {sp.confidence}% съвпадение</p>
+                            {sp.reason && <p className="text-[10px] text-purple-400/70 font-mono mt-0.5">{sp.reason}</p>}
+                          </div>
+                          <button
+                            onClick={() => handleApplySimilarLink(sp.topicId, sp.subjectId)}
+                            className="shrink-0 text-[10px] text-emerald-400 hover:text-emerald-300 font-mono px-2 py-1 rounded bg-emerald-500/10 hover:bg-emerald-500/20 transition-all"
+                          >
+                            Свържи
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {isSearchingSimilar && (
+                  <div className="mb-3 flex items-center gap-2 text-xs text-purple-400 font-mono">
+                    <Loader2 size={14} className="animate-spin" /> Търсене на подобни теми с AI...
+                  </div>
+                )}
 
                 {linkedTopics.length > 0 ? (
                   <div className="space-y-2">
@@ -1090,14 +1202,15 @@ export default function TopicDetailPage() {
                               </div>
                             </Link>
                             <div className="flex items-center gap-1 shrink-0 ml-2">
-                              {bothHaveMaterial && !analysis && (
+                              {bothHaveMaterial && (
                                 <button
                                   onClick={handleAnalyze}
                                   disabled={isAnalyzing}
-                                  className="p-1 text-purple-400 hover:text-purple-300 transition-all text-[10px] font-mono"
-                                  title="Анализирай припокриването"
+                                  className="flex items-center gap-1 px-1.5 py-0.5 text-purple-400 hover:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 rounded transition-all text-[10px] font-mono"
+                                  title="Анализирай припокриването с AI"
                                 >
                                   {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}
+                                  {analysis ? 'Преанализирай' : 'Анализ'}
                                 </button>
                               )}
                               <button
@@ -1133,7 +1246,7 @@ export default function TopicDetailPage() {
                   </div>
                 ) : (
                   <p className="text-xs text-slate-500 font-mono">
-                    Няма свързани теми. Свържи припокриващи се теми от други предмети.
+                    Няма свързани теми. Натисни &quot;AI: Намери&quot; за автоматично търсене или &quot;+ Ръчно&quot; за ръчно свързване.
                   </p>
                 )}
               </div>
@@ -1329,7 +1442,7 @@ export default function TopicDetailPage() {
                     {/* Enrich with AI button */}
                     {questions.length > 0 && enrichedCount < questions.length && (
                       <button
-                        onClick={handleEnrichQuestions}
+                        onClick={() => setShowEnrichWarning(true)}
                         disabled={isEnriching || !apiKey}
                         className="w-full py-2 bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed text-white rounded-lg font-mono text-xs font-semibold transition-all flex items-center justify-center gap-2"
                       >
@@ -1445,6 +1558,18 @@ export default function TopicDetailPage() {
         </div>
       </div>
     </div>
+
+    {/* Cognitive offloading warning for enrichment */}
+    <ConfirmDialog
+      isOpen={showEnrichWarning}
+      onClose={() => setShowEnrichWarning(false)}
+      onConfirm={() => { setShowEnrichWarning(false); handleEnrichQuestions(); }}
+      title="Опитай първо сам!"
+      message="Преди AI да обогати отговорите, опитай да отговориш сам на въпросите. Самостоятелното формулиране укрепва разбирането повече от четенето на готови отговори."
+      confirmText="Обогати с AI"
+      cancelText="Ще отговоря сам"
+      variant="warning"
+    />
 
     {/* Link Topic Modal */}
     {showLinkModal && topic && (

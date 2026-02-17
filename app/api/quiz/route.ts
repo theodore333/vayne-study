@@ -1075,11 +1075,26 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
 
   let questions;
   try {
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    questions = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
-    if (!Array.isArray(questions)) throw new Error('Not an array');
+    const parsed = JSON.parse(responseText);
+    questions = Array.isArray(parsed) ? parsed : parsed.questions || [parsed];
   } catch {
-    return NextResponse.json({ error: 'Failed to generate quiz', raw: responseText.substring(0, 500) }, { status: 500 });
+    try {
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        questions = JSON.parse(jsonMatch[0]);
+      } else {
+        // Try extracting individual question objects
+        const objMatches = [...responseText.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
+        if (objMatches.length > 0) {
+          questions = objMatches.map(m => JSON.parse(m[0]));
+        } else {
+          return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+        }
+      }
+      if (!Array.isArray(questions)) questions = [questions];
+    } catch {
+      return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+    }
   }
 
   // Cost calculation using selected model's pricing (per MTok)

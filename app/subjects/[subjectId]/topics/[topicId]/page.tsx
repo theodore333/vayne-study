@@ -255,7 +255,7 @@ export default function TopicDetailPage() {
     return 2;
   }, []);
 
-  // Enrich all unenriched questions with AI
+  // Enrich all unenriched questions with AI (batched to avoid timeouts)
   const handleEnrichQuestions = useCallback(async () => {
     if (!topic || !apiKey) return;
     const questions = topic.customQuestions || [];
@@ -266,29 +266,44 @@ export default function TopicDetailPage() {
     setEnrichError(null);
 
     try {
-      const res = await fetchWithTimeout('/api/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          mode: 'enrich_custom_questions',
-          questions: unenriched.map(q => ({ question: q.question, answer: q.answer })),
-          topicName: topic.name,
-          subjectName: subject?.name || '',
-          material: material || '',
-        }),
-        timeout: 180000,
-      });
+      // Process in batches of 5 to avoid timeouts
+      const BATCH_SIZE = 5;
+      const allEnrichments: Array<{ index: number; bloomLevel: number; enrichedAnswer: string; explanation: string }> = [];
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Грешка при обогатяване');
+      for (let batchStart = 0; batchStart < unenriched.length; batchStart += BATCH_SIZE) {
+        const batch = unenriched.slice(batchStart, batchStart + BATCH_SIZE);
+
+        const res = await fetchWithTimeout('/api/quiz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey,
+            mode: 'enrich_custom_questions',
+            questions: batch.map(q => ({ question: q.question, answer: q.answer })),
+            topicName: topic.name,
+            subjectName: subject?.name || '',
+            material: material || '',
+          }),
+          timeout: 120000,
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Грешка при обогатяване');
+
+        // Remap batch indices to global unenriched indices
+        if (data.enrichments) {
+          for (const e of data.enrichments) {
+            allEnrichments.push({ ...e, index: batchStart + e.index });
+          }
+        }
+      }
 
       // Map enrichments back to questions by matching unenriched indices
       const updated = [...questions];
       let unenrichedIdx = 0;
       for (let i = 0; i < updated.length; i++) {
         if (!updated[i].enrichedAnswer) {
-          const enrichment = data.enrichments?.find((e: { index: number }) => e.index === unenrichedIdx);
+          const enrichment = allEnrichments.find(e => e.index === unenrichedIdx);
           if (enrichment) {
             updated[i] = {
               ...updated[i],

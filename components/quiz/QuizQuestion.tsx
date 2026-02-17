@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, ChevronUp, ChevronDown, ArrowUpDown, Pencil, Trash2, Save, X } from 'lucide-react';
 import { Question, OpenAnswerEvaluation, isAnswerCorrect } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
@@ -64,6 +64,8 @@ interface QuizQuestionProps {
   setOrderingItems: (items: string[]) => void;
   fillBlankAnswer: string;
   setFillBlankAnswer: (answer: string) => void;
+  onEditQuestion?: (index: number, updated: Question) => void;
+  onDeleteQuestion?: (index: number) => void;
 }
 
 export function QuizQuestion({
@@ -80,9 +82,15 @@ export function QuizQuestion({
   onAnswer, onNext, onEarlyStop, onBack,
   matchingAnswers, setMatchingAnswers,
   orderingItems, setOrderingItems,
-  fillBlankAnswer, setFillBlankAnswer
+  fillBlankAnswer, setFillBlankAnswer,
+  onEditQuestion, onDeleteQuestion
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
+  const [isEditing, setIsEditing] = useState(false);
+  const [editQuestion, setEditQuestion] = useState('');
+  const [editAnswer, setEditAnswer] = useState('');
+  const [editExplanation, setEditExplanation] = useState('');
+  const [editOptions, setEditOptions] = useState<string[]>([]);
   const openEval = openEvaluations[currentIndex];
   const currentAnswer = answers[currentIndex];
   const isCorrect = isAnswerCorrect(currentQuestion, currentAnswer, openEval);
@@ -576,7 +584,120 @@ export function QuizQuestion({
           </div>
         )}
 
-        <div className="mt-6 flex justify-end">
+        {/* Inline edit form */}
+        {showExplanation && isEditing && onEditQuestion && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-600 rounded-xl space-y-3">
+            <div>
+              <label className="text-xs text-slate-500 font-mono mb-1 block">Въпрос</label>
+              <textarea
+                value={editQuestion}
+                onChange={(e) => setEditQuestion(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none resize-none"
+              />
+            </div>
+            {['multiple_choice', 'case_study'].includes(currentQuestion.type) && (
+              <div>
+                <label className="text-xs text-slate-500 font-mono mb-1 block">Опции</label>
+                {editOptions.map((opt, i) => (
+                  <input
+                    key={i}
+                    value={opt}
+                    onChange={(e) => {
+                      const newOpts = [...editOptions];
+                      newOpts[i] = e.target.value;
+                      setEditOptions(newOpts);
+                    }}
+                    className="w-full px-3 py-1.5 mb-1 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none"
+                  />
+                ))}
+              </div>
+            )}
+            <div>
+              <label className="text-xs text-slate-500 font-mono mb-1 block">Верен отговор</label>
+              {['open', 'short_answer'].includes(currentQuestion.type) ? (
+                <textarea
+                  value={editAnswer}
+                  onChange={(e) => setEditAnswer(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none resize-none"
+                />
+              ) : (
+                <input
+                  value={editAnswer}
+                  onChange={(e) => setEditAnswer(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none"
+                />
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 font-mono mb-1 block">Обяснение</label>
+              <textarea
+                value={editExplanation}
+                onChange={(e) => setEditExplanation(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsEditing(false)}
+                className="px-3 py-1.5 text-sm font-mono text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              >
+                <X size={14} /> Отказ
+              </button>
+              <button
+                onClick={() => {
+                  const updated: Question = {
+                    ...currentQuestion,
+                    question: editQuestion,
+                    correctAnswer: editAnswer,
+                    explanation: editExplanation,
+                    ...((['multiple_choice', 'case_study'].includes(currentQuestion.type) && editOptions.length > 0)
+                      ? { options: editOptions }
+                      : {})
+                  };
+                  onEditQuestion(currentIndex, updated);
+                  setIsEditing(false);
+                }}
+                className="px-3 py-1.5 text-sm font-mono bg-green-600/30 text-green-400 hover:bg-green-600/50 rounded-lg transition-colors flex items-center gap-1"
+              >
+                <Save size={14} /> Запази
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          {/* Edit/Delete buttons — only after answering */}
+          {showExplanation && (onEditQuestion || onDeleteQuestion) ? (
+            <div className="flex items-center gap-2">
+              {onEditQuestion && !isEditing && (
+                <button
+                  onClick={() => {
+                    setEditQuestion(currentQuestion.question);
+                    setEditAnswer(currentQuestion.correctAnswer);
+                    setEditExplanation(currentQuestion.explanation || '');
+                    setEditOptions(currentQuestion.options ? [...currentQuestion.options] : []);
+                    setIsEditing(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 rounded-lg transition-colors"
+                >
+                  <Pencil size={13} /> Редактирай
+                </button>
+              )}
+              {onDeleteQuestion && (
+                <button
+                  onClick={() => onDeleteQuestion(currentIndex)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-red-400/70 hover:text-red-400 bg-slate-800/50 hover:bg-red-900/20 border border-slate-700 hover:border-red-700/50 rounded-lg transition-colors"
+                >
+                  <Trash2 size={13} /> Изтрий
+                </button>
+              )}
+            </div>
+          ) : <div />}
+
+          <div className="flex justify-end">
           {!showExplanation ? (
             <button
               onClick={onAnswer}
@@ -609,6 +730,7 @@ export function QuizQuestion({
               ) : 'Резултат'}
             </button>
           )}
+          </div>
         </div>
       </div>
     </div>

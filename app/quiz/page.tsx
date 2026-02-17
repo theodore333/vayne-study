@@ -89,6 +89,7 @@ function QuizContent() {
   const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({});
   const [orderingItems, setOrderingItems] = useState<string[]>([]);
   const [fillBlankAnswer, setFillBlankAnswer] = useState('');
+  const [deleteQuestionIndex, setDeleteQuestionIndex] = useState<number | null>(null);
 
   // Preview screen state
   const [showPreview, setShowPreview] = useState(false);
@@ -856,6 +857,53 @@ function QuizContent() {
     setShowEarlyStopConfirm(false);
   };
 
+  // Edit a question in-place (fix AI mistakes)
+  const handleEditQuestion = (index: number, updated: Question) => {
+    setQuizState(prev => ({
+      ...prev,
+      questions: prev.questions.map((q, i) => i === index ? updated : q)
+    }));
+  };
+
+  // Delete a question from the quiz
+  const handleDeleteQuestion = () => {
+    if (deleteQuestionIndex === null) return;
+    const idx = deleteQuestionIndex;
+
+    setQuizState(prev => {
+      const newQuestions = prev.questions.filter((_, i) => i !== idx);
+      const newAnswers = prev.answers.filter((_, i) => i !== idx);
+
+      // Shift openEvaluations indices
+      const newEvals: Record<number, typeof openEvaluations[number]> = {};
+      Object.entries(openEvaluations).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < idx) newEvals[k] = val;
+        else if (k > idx) newEvals[k - 1] = val;
+        // k === idx is deleted
+      });
+      // We'll update openEvaluations via setOpenEvaluations after
+      setTimeout(() => setOpenEvaluations(newEvals), 0);
+
+      if (newQuestions.length === 0) {
+        return { ...prev, questions: newQuestions, answers: newAnswers, showResult: true };
+      }
+
+      // If we deleted the current or a later question, stay at same index (or go back if at end)
+      const newIndex = idx >= newQuestions.length ? newQuestions.length - 1 : idx;
+      return {
+        ...prev,
+        questions: newQuestions,
+        answers: newAnswers,
+        currentIndex: newIndex
+      };
+    });
+
+    // Reset explanation view since we moved to a new question
+    setShowExplanation(false);
+    setDeleteQuestionIndex(null);
+  };
+
   // Analyze mistakes using AI
   const analyzeMistakes = async () => {
     if (isAnalyzingMistakes) return;
@@ -1590,6 +1638,8 @@ function QuizContent() {
         setOrderingItems={setOrderingItems}
         fillBlankAnswer={fillBlankAnswer}
         setFillBlankAnswer={setFillBlankAnswer}
+        onEditQuestion={handleEditQuestion}
+        onDeleteQuestion={(idx) => setDeleteQuestionIndex(idx)}
       />
       {/* Cognitive offloading warning (must render in quiz view) */}
       <ConfirmDialog
@@ -1604,6 +1654,17 @@ function QuizContent() {
         confirmText="Покажи подсказка"
         cancelText="Ще опитам сам"
         variant="warning"
+      />
+      {/* Delete question confirmation */}
+      <ConfirmDialog
+        isOpen={deleteQuestionIndex !== null}
+        onClose={() => setDeleteQuestionIndex(null)}
+        onConfirm={handleDeleteQuestion}
+        title="Изтрий въпрос?"
+        message={`Въпрос ${(deleteQuestionIndex ?? 0) + 1} ще бъде премахнат от quiz-а. Оставащи: ${quizState.questions.length - 1}`}
+        confirmText="Изтрий"
+        cancelText="Отказ"
+        variant="danger"
       />
       </>
     );

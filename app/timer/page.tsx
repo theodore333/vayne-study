@@ -393,10 +393,19 @@ export default function TimerPage() {
 
       if (settings.autoStartWork) {
         setTimeout(() => {
+          isCompletingPomodoroRef.current = false; // Reset guard before auto-starting next phase
           setPomodoroEndTime(Date.now() + settings.workDuration * 60 * 1000);
           setIsRunning(true);
         }, 100);
       }
+    }
+
+    // Reset completion guard so the next phase can complete normally
+    // (Only if not auto-starting — auto-start paths reset it themselves)
+    if (pomodoroPhase === 'work' || !settings.autoStartWork) {
+      // For work→break: ref will be reset when break auto-starts or user manually starts
+      // For break→work with no auto-start: reset now so manual start works
+      isCompletingPomodoroRef.current = false;
     }
   }, [pomodoroPhase, pomodoroCount, settings, playSound, showNotification, addPomodoroSession, selectedSubject, selectedTopic]);
 
@@ -477,6 +486,7 @@ export default function TimerPage() {
       setPomodoroEndTime(null);
       setIsRunning(false);
       setIsPaused(true); // Mark as paused to preserve remaining time
+      isCompletingPomodoroRef.current = false; // Reset guard on pause
     } else {
       // Normal timer pause - store the current elapsed time
       setNormalTimerPausedAt(elapsed);
@@ -571,6 +581,7 @@ export default function TimerPage() {
     // Auto-start break if enabled
     if (settings.autoStartBreaks) {
       setTimeout(() => {
+        isCompletingPomodoroRef.current = false; // Reset guard before auto-starting break
         setPomodoroEndTime(Date.now() + pendingPomodoroData.breakDuration * 60 * 1000);
         setIsRunning(true);
       }, 100);
@@ -594,6 +605,7 @@ export default function TimerPage() {
     setIsRunning(false);
     setPomodoroEndTime(null);
     setIsPaused(false);
+    isCompletingPomodoroRef.current = false; // Reset guard
     setPomodoroPhase('work');
     setPomodoroTimeLeft(settings.workDuration * 60);
     setPomodoroCount(0);

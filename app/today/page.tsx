@@ -11,7 +11,7 @@ import WeeklyReviewModal from '@/components/modals/WeeklyReviewModal';
 import Link from 'next/link';
 import { DailyTask, ProjectModule, DevelopmentProject } from '@/lib/types';
 import ModuleDetailModal from '@/components/modals/ModuleDetailModal';
-import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
+import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks, getTodayStats } from '@/lib/anki';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import { getActivityStreak } from '@/lib/analytics';
 
@@ -118,7 +118,6 @@ export default function TodayPage() {
         setAnkiStats(stats);
         // Cache today's Anki reviews for activity streak
         try {
-          const { getTodayStats } = await import('@/lib/anki');
           const todayStats = await getTodayStats();
           localStorage.setItem('anki-reviews-' + getTodayString(), String(todayStats.reviewed));
         } catch { /* ignore */ }

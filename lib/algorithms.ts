@@ -1581,7 +1581,7 @@ export function generateDailyPlan(
   // Science: 24-hour review of new material improves retention by 40%+
   // Targets topics studied yesterday that are still fragile (orange/yellow, low mastery)
   if (yesterdayCompletedTopicIds && yesterdayCompletedTopicIds.length > 0 && capacityAfterFsrs > 0) {
-    const yesterdaySet = new Set(yesterdayCompletedTopicIds);
+    const yesterdaySet = new Set(yesterdayCompletedTopicIds.filter(Boolean));
     const consolidationCandidates: { topic: Topic; subject: Subject }[] = [];
 
     for (const subject of subjects) {

@@ -122,7 +122,7 @@ export default function WeeklyBarChart({ subjects, dailyGoal, ankiStats }: Weekl
               <span className="text-[11px] text-slate-400 font-mono font-medium">Anki</span>
             </div>
             <div className="flex gap-4 text-[11px] font-mono">
-              <span className="text-amber-400">{ankiStats.dueToday} <span className="text-slate-500">оставащи</span></span>
+              <span className="text-amber-400">{ankiStats.dueToday + ankiStats.newToday} <span className="text-slate-500">оставащи</span></span>
               <span className="text-slate-400">{ankiStats.totalCards.toLocaleString()} <span className="text-slate-500">общо</span></span>
             </div>
           </div>

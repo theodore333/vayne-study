@@ -147,7 +147,7 @@ export default function GoalProgressRings({ subjects, questionBanks, dailyTopicG
         {ankiToday && (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/10">
             <Layers size={12} className="text-amber-400" />
-            <span className="text-xs text-amber-400 font-mono font-medium">{ankiToday.reviewed}<span className="text-amber-400/50">/{ankiToday.due + ankiToday.reviewed}</span></span>
+            <span className="text-xs text-amber-400 font-mono font-medium">{ankiToday.reviewed}<span className="text-amber-400/50">/{ankiToday.due}</span></span>
           </div>
         )}
       </div>

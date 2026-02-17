@@ -1,5 +1,5 @@
 import { Subject, TimerSession, UserProgress, QuestionBank } from './types';
-import { calculateRetrievability, getDaysUntilReview, toLocalDateStr, getTodayString } from './algorithms';
+import { calculateRetrievability, getDaysUntilReview, toLocalDateStr } from './algorithms';
 
 // Helper to extract local date string from TimerSession
 function getSessionDate(session: TimerSession): string {
@@ -379,9 +379,10 @@ export function getActivityDays(
 
   // Anki daily review cache (localStorage keys: anki-reviews-YYYY-MM-DD)
   if (typeof window !== 'undefined') {
+    const baseDate = new Date();
     for (let i = 0; i < 365; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
+      const date = new Date(baseDate);
+      date.setDate(baseDate.getDate() - i);
       const dateStr = toLocalDateStr(date);
       const cached = localStorage.getItem('anki-reviews-' + dateStr);
       if (cached && parseInt(cached) > 0) {

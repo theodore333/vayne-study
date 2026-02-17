@@ -27,7 +27,7 @@ export default function Dashboard() {
   const dailyTopicGoal = useMemo(() => {
     try {
       const result = calculateDailyTopics(activeSubjects, data.dailyStatus, data.studyGoals);
-      return result.total || 5;
+      return result.total > 0 ? result.total : 5;
     } catch { return 5; }
   }, [activeSubjects, data.dailyStatus, data.studyGoals]);
   const nextExamReadiness = useMemo(() => {

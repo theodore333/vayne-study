@@ -1315,72 +1315,11 @@ export default function TopicDetailPage() {
             </div>
           </div>
 
-          {/* Manual Weak Concepts */}
-          <div className="bg-gradient-to-br from-amber-900/20 to-yellow-900/20 border border-amber-700/30 rounded-xl p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertTriangle size={16} className="text-amber-400" />
-              <span className="text-sm font-medium text-amber-400 font-mono">
-                Слаби концепции (ръчно) {(topic.weakConcepts?.length || 0) > 0 && `(${topic.weakConcepts!.length})`}
-              </span>
-            </div>
-            {(topic.weakConcepts || []).length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mb-3">
-                {topic.weakConcepts!.map((concept, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 border border-amber-500/30 rounded-lg text-xs font-mono text-amber-300">
-                    {concept}
-                    <button
-                      onClick={() => {
-                        const updated = topic.weakConcepts!.filter((_, idx) => idx !== i);
-                        updateTopic(subjectId!, topic.id, { weakConcepts: updated.length > 0 ? updated : undefined });
-                      }}
-                      className="ml-0.5 text-amber-500 hover:text-red-400 transition-colors"
-                    >
-                      <X size={12} />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={weakConceptInput}
-                onChange={(e) => setWeakConceptInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && weakConceptInput.trim()) {
-                    const current = topic.weakConcepts || [];
-                    if (!current.includes(weakConceptInput.trim())) {
-                      updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
-                    }
-                    setWeakConceptInput('');
-                  }
-                }}
-                placeholder="напр. разлика между X и Y..."
-                className="flex-1 px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-amber-500/50 focus:outline-none"
-              />
-              <button
-                onClick={() => {
-                  if (weakConceptInput.trim()) {
-                    const current = topic.weakConcepts || [];
-                    if (!current.includes(weakConceptInput.trim())) {
-                      updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
-                    }
-                    setWeakConceptInput('');
-                  }
-                }}
-                className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
-              >
-                <Plus size={14} />
-              </button>
-            </div>
-            <p className="text-[10px] text-slate-600 font-mono mt-2">Quiz ще фокусира 40%+ въпроси върху тези области</p>
-          </div>
-
-          {/* Wrong Answers Section - Grouped by Concept (from quiz) */}
-          {topic.wrongAnswers && topic.wrongAnswers.length > 0 && (() => {
-            // Group wrong answers by concept
+          {/* Unified Weak Concepts — manual + quiz-derived */}
+          {(() => {
+            // Build quiz-derived concept stats
             const conceptStats: Record<string, { count: number; drilled: number; totalDrillCount: number }> = {};
-            topic.wrongAnswers.forEach(wa => {
+            (topic.wrongAnswers || []).forEach(wa => {
               if (!conceptStats[wa.concept]) {
                 conceptStats[wa.concept] = { count: 0, drilled: 0, totalDrillCount: 0 };
               }
@@ -1388,74 +1327,142 @@ export default function TopicDetailPage() {
               conceptStats[wa.concept].totalDrillCount += wa.drillCount;
               if (wa.drillCount > 0) conceptStats[wa.concept].drilled++;
             });
-
-            const sortedConcepts = Object.entries(conceptStats)
-              .sort((a, b) => b[1].count - a[1].count);
+            const sortedQuizConcepts = Object.entries(conceptStats).sort((a, b) => b[1].count - a[1].count);
+            const manualConcepts = topic.weakConcepts || [];
+            const totalCount = manualConcepts.length + sortedQuizConcepts.length;
 
             return (
-              <div className="bg-gradient-to-br from-orange-900/20 to-red-900/20 border border-orange-700/30 rounded-xl p-5">
-                <button
-                  onClick={() => setShowWrongAnswers(!showWrongAnswers)}
-                  className="w-full flex items-center justify-between"
-                >
+              <div className="bg-gradient-to-br from-amber-900/20 to-orange-900/20 border border-amber-700/30 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle size={16} className="text-orange-400" />
-                    <span className="text-sm font-medium text-orange-400 font-mono">
-                      Слаби концепции — от quiz ({sortedConcepts.length})
+                    <AlertTriangle size={16} className="text-amber-400" />
+                    <span className="text-sm font-medium text-amber-400 font-mono">
+                      Слаби концепции {totalCount > 0 && `(${totalCount})`}
                     </span>
                   </div>
-                  {showWrongAnswers ? (
-                    <ChevronUp size={16} className="text-orange-400" />
-                  ) : (
-                    <ChevronDown size={16} className="text-orange-400" />
+                  {sortedQuizConcepts.length > 0 && (
+                    <button
+                      onClick={() => setShowWrongAnswers(!showWrongAnswers)}
+                      className="text-xs text-slate-500 hover:text-slate-300 font-mono transition-colors"
+                    >
+                      {showWrongAnswers ? 'скрий детайли' : 'покажи детайли'}
+                    </button>
                   )}
-                </button>
+                </div>
 
-                {showWrongAnswers && (
-                  <div className="mt-4 space-y-2">
-                    {sortedConcepts.slice(0, 8).map(([concept, stats]) => (
-                      <div key={concept} className="p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
+                {/* Manual weak concepts — editable tags */}
+                {manualConcepts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {manualConcepts.map((concept, i) => (
+                      <span key={`manual-${i}`} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 border border-amber-500/30 rounded-lg text-xs font-mono text-amber-300">
+                        {concept}
+                        <button
+                          onClick={() => {
+                            const updated = manualConcepts.filter((_, idx) => idx !== i);
+                            updateTopic(subjectId!, topic.id, { weakConcepts: updated.length > 0 ? updated : undefined });
+                          }}
+                          className="ml-0.5 text-amber-500 hover:text-red-400 transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Quiz-derived concepts — compact tags or expanded details */}
+                {sortedQuizConcepts.length > 0 && !showWrongAnswers && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {sortedQuizConcepts.slice(0, 6).map(([concept, stats]) => (
+                      <span key={`quiz-${concept}`} className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-mono border ${
+                        stats.totalDrillCount >= 3
+                          ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                          : 'bg-orange-500/10 border-orange-500/30 text-orange-300'
+                      }`}>
+                        {String(concept || '')}
+                        <span className="text-[10px] opacity-60">{stats.count}x</span>
+                      </span>
+                    ))}
+                    {sortedQuizConcepts.length > 6 && (
+                      <span className="px-2 py-1 text-[10px] text-slate-500 font-mono">+{sortedQuizConcepts.length - 6}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Quiz-derived concepts — expanded view with drill progress */}
+                {sortedQuizConcepts.length > 0 && showWrongAnswers && (
+                  <div className="space-y-2 mb-3">
+                    {sortedQuizConcepts.slice(0, 8).map(([concept, stats]) => (
+                      <div key={concept} className="p-2.5 bg-slate-800/50 rounded-lg border border-slate-700/50">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm text-slate-200 font-mono font-medium">
-                            {String(concept || '')}
-                          </span>
+                          <span className="text-sm text-slate-200 font-mono font-medium">{String(concept || '')}</span>
                           <div className="flex items-center gap-2">
-                            <span className="text-xs text-orange-400 font-mono">
-                              {stats.count} {stats.count === 1 ? 'грешка' : 'грешки'}
-                            </span>
+                            <span className="text-xs text-orange-400 font-mono">{stats.count} {stats.count === 1 ? 'грешка' : 'грешки'}</span>
                             {stats.totalDrillCount > 0 && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-mono">
-                                {stats.totalDrillCount}x drilled
-                              </span>
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-mono">{stats.totalDrillCount}x drilled</span>
                             )}
                           </div>
                         </div>
-                        {/* Progress bar showing drill progress */}
-                        <div className="mt-2 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div className="mt-1.5 h-1 bg-slate-700 rounded-full overflow-hidden">
                           <div
-                            className={`h-full transition-all ${
-                              stats.totalDrillCount >= 3 ? 'bg-green-500' :
-                              stats.totalDrillCount > 0 ? 'bg-yellow-500' : 'bg-orange-500'
-                            }`}
+                            className={`h-full transition-all ${stats.totalDrillCount >= 3 ? 'bg-green-500' : stats.totalDrillCount > 0 ? 'bg-yellow-500' : 'bg-orange-500'}`}
                             style={{ width: `${Math.min(100, (stats.totalDrillCount / 3) * 100)}%` }}
                           />
                         </div>
                       </div>
                     ))}
-                    {sortedConcepts.length > 8 && (
-                      <p className="text-xs text-slate-500 font-mono text-center">
-                        +{sortedConcepts.length - 8} още концепции
-                      </p>
+                    {sortedQuizConcepts.length > 8 && (
+                      <p className="text-xs text-slate-500 font-mono text-center">+{sortedQuizConcepts.length - 8} още</p>
                     )}
-                    <Link
-                      href={`/quiz?subject=${subjectId}&topic=${topicId}`}
-                      className="w-full mt-2 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-red-500 transition-all font-mono text-sm flex items-center justify-center gap-2"
-                    >
-                      <Repeat size={14} />
-                      Drill Weakness Quiz
-                    </Link>
                   </div>
                 )}
+
+                {/* Add manual concept input */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={weakConceptInput}
+                    onChange={(e) => setWeakConceptInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && weakConceptInput.trim()) {
+                        const current = topic.weakConcepts || [];
+                        if (!current.includes(weakConceptInput.trim())) {
+                          updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
+                        }
+                        setWeakConceptInput('');
+                      }
+                    }}
+                    placeholder="добави слаба концепция..."
+                    className="flex-1 px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-amber-500/50 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (weakConceptInput.trim()) {
+                        const current = topic.weakConcepts || [];
+                        if (!current.includes(weakConceptInput.trim())) {
+                          updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
+                        }
+                        setWeakConceptInput('');
+                      }
+                    }}
+                    className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+
+                {/* Drill button when there are quiz concepts */}
+                {sortedQuizConcepts.length > 0 && (
+                  <Link
+                    href={`/quiz?subject=${subjectId}&topic=${topicId}`}
+                    className="w-full mt-3 py-2 bg-gradient-to-r from-orange-600 to-red-600 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-red-500 transition-all font-mono text-sm flex items-center justify-center gap-2"
+                  >
+                    <Repeat size={14} />
+                    Drill Weakness Quiz
+                  </Link>
+                )}
+
+                <p className="text-[10px] text-slate-600 font-mono mt-2">Quiz ще фокусира 40%+ въпроси върху тези области</p>
               </div>
             );
           })()}

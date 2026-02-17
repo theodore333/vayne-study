@@ -91,7 +91,7 @@ export default function QuestionBankPage() {
         accuracy: Math.round((val.correct / val.attempts) * 100)
       });
     });
-    const weakestTopics = topicAccuracy.sort((a, b) => a.accuracy - b.accuracy).slice(0, 5);
+    const weakestTopics = topicAccuracy.filter(t => t.accuracy < 80).sort((a, b) => a.accuracy - b.accuracy).slice(0, 5);
 
     // Recent 7-day activity
     const now = Date.now();
@@ -380,33 +380,39 @@ export default function QuestionBankPage() {
                       Bloom&apos;s Taxonomy
                     </h4>
                     <div className="grid grid-cols-3 gap-2">
-                      {analytics.bloomStats.map(b => {
-                        const acc = b.attempts > 0 ? Math.round((b.correct / b.attempts) * 100) : 0;
-                        const barColor = b.attempts === 0 ? 'bg-slate-700'
-                          : acc >= 80 ? 'bg-green-500' : acc >= 60 ? 'bg-yellow-500' : 'bg-red-500';
-                        return (
-                          <div key={b.level} className="bg-slate-800/30 rounded p-2">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] text-slate-400 font-mono">{b.level}. {b.name}</span>
-                              <span className="text-[10px] text-slate-500 font-mono">{b.count}q</span>
+                      {(() => {
+                        const maxCount = Math.max(...analytics.bloomStats.map(b => b.count));
+                        return analytics.bloomStats.map(b => {
+                          const acc = b.attempts > 0 ? Math.round((b.correct / b.attempts) * 100) : 0;
+                          const hasPractice = b.attempts > 0;
+                          const barColor = !hasPractice ? 'bg-indigo-500/60'
+                            : acc >= 80 ? 'bg-green-500' : acc >= 60 ? 'bg-yellow-500' : 'bg-red-500';
+                          // Show count distribution when no practice, accuracy when practiced
+                          const barWidth = hasPractice ? `${acc}%` : `${Math.round((b.count / maxCount) * 100)}%`;
+                          return (
+                            <div key={b.level} className="bg-slate-800/30 rounded p-2">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] text-slate-400 font-mono">{b.level}. {b.name}</span>
+                                <span className="text-[10px] text-slate-500 font-mono">{b.count}q</span>
+                              </div>
+                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${barColor}`}
+                                  style={{ width: barWidth }}
+                                />
+                              </div>
+                              <div className="text-right mt-0.5">
+                                <span className={`text-[10px] font-mono font-semibold ${
+                                  !hasPractice ? 'text-slate-600' :
+                                  acc >= 80 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'
+                                }`}>
+                                  {hasPractice ? `${acc}%` : '—'}
+                                </span>
+                              </div>
                             </div>
-                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full transition-all ${barColor}`}
-                                style={{ width: b.attempts > 0 ? `${acc}%` : '0%' }}
-                              />
-                            </div>
-                            <div className="text-right mt-0.5">
-                              <span className={`text-[10px] font-mono font-semibold ${
-                                b.attempts === 0 ? 'text-slate-600' :
-                                acc >= 80 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'
-                              }`}>
-                                {b.attempts > 0 ? `${acc}%` : '—'}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                 )}

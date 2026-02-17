@@ -2,10 +2,10 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Plus, BookOpen, Calendar, Flame, GraduationCap, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Plus, BookOpen, Calendar, Flame, GraduationCap, TrendingUp, AlertTriangle, CheckCircle2, Repeat, Target, Brain, BarChart3 } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, getNextExamReadiness, getOverallOnTrackStatus, calculateDailyTopics } from '@/lib/algorithms';
-import { getActivityStreak } from '@/lib/analytics';
+import { getSubjectProgress, getDaysUntil, getNextExamReadiness, getOverallOnTrackStatus, calculateDailyTopics, getTopicsNeedingFSRSReview, calculatePredictedGrade, toLocalDateStr } from '@/lib/algorithms';
+import { getActivityStreak, getActivityDays } from '@/lib/analytics';
 import { Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
@@ -37,6 +37,63 @@ export default function Dashboard() {
   const overallStatus = useMemo(() => {
     try { return getOverallOnTrackStatus(activeSubjects, data.questionBanks || []); }
     catch (e) { console.error('getOverallOnTrackStatus error:', e); return null; }
+  }, [activeSubjects, data.questionBanks]);
+
+  // Quick stats computations
+  const fsrsCount = useMemo(() => {
+    try { return getTopicsNeedingFSRSReview(activeSubjects, 20, data.studyGoals).length; }
+    catch { return 0; }
+  }, [activeSubjects, data.studyGoals]);
+
+  const masteryTotals = useMemo(() => {
+    const totals = { green: 0, yellow: 0, orange: 0, gray: 0, total: 0 };
+    for (const s of activeSubjects) {
+      const p = getSubjectProgress(s);
+      totals.green += p.counts.green;
+      totals.yellow += p.counts.yellow;
+      totals.orange += p.counts.orange;
+      totals.gray += p.counts.gray;
+      totals.total += s.topics.length;
+    }
+    return totals;
+  }, [activeSubjects]);
+
+  const qbAccuracy = useMemo(() => {
+    const banks = data.questionBanks || [];
+    let attempts = 0, correct = 0;
+    for (const b of banks) {
+      for (const q of b.questions) {
+        attempts += q.stats.attempts;
+        correct += q.stats.correct;
+      }
+    }
+    return { attempts, correct, pct: attempts > 0 ? Math.round((correct / attempts) * 100) : -1 };
+  }, [data.questionBanks]);
+
+  const activityDays30 = useMemo(() => {
+    const allDays = getActivityDays(data.timerSessions, data.subjects, data.questionBanks);
+    const now = new Date();
+    let count = 0;
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+      if (allDays.has(toLocalDateStr(d))) count++;
+    }
+    return count;
+  }, [data.timerSessions, data.subjects, data.questionBanks]);
+
+  const examPredictions = useMemo(() => {
+    const qb = data.questionBanks || [];
+    return activeSubjects
+      .filter(s => s.examDate && getDaysUntil(s.examDate) > 0 && getDaysUntil(s.examDate) < 120)
+      .sort((a, b) => getDaysUntil(a.examDate) - getDaysUntil(b.examDate))
+      .slice(0, 3)
+      .map(s => {
+        try {
+          const pred = calculatePredictedGrade(s, false, qb);
+          return { subject: s, grade: pred.current, daysUntil: getDaysUntil(s.examDate) };
+        } catch { return { subject: s, grade: 0, daysUntil: getDaysUntil(s.examDate) }; }
+      });
   }, [activeSubjects, data.questionBanks]);
 
   // Fetch Anki stats for WeeklyBarChart footer
@@ -165,10 +222,105 @@ export default function Dashboard() {
         );
       })()}
 
-      {/* ROW 1: Compact Subjects */}
+      {/* ROW 1: Quick Stats */}
+      {activeSubjects.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Link href="/today" className="flex items-center gap-3 p-3.5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b] hover:border-[#2e3b4e] transition-all">
+            <Repeat size={16} className={fsrsCount > 5 ? 'text-orange-400' : 'text-blue-400'} />
+            <div>
+              <div className={`text-lg font-bold font-mono ${fsrsCount > 5 ? 'text-orange-400' : 'text-blue-400'}`}>{fsrsCount}</div>
+              <div className="text-[10px] text-slate-500 font-mono">FSRS за днес</div>
+            </div>
+          </Link>
+          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
+            <CheckCircle2 size={16} className="text-green-400" />
+            <div>
+              <div className="text-lg font-bold font-mono text-green-400">{masteryTotals.green}<span className="text-slate-600 text-sm">/{masteryTotals.total}</span></div>
+              <div className="text-[10px] text-slate-500 font-mono">Усвоени</div>
+            </div>
+          </div>
+          <Link href="/question-bank" className="flex items-center gap-3 p-3.5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b] hover:border-[#2e3b4e] transition-all">
+            <Brain size={16} className={qbAccuracy.pct >= 75 ? 'text-green-400' : qbAccuracy.pct >= 50 ? 'text-yellow-400' : 'text-slate-500'} />
+            <div>
+              <div className={`text-lg font-bold font-mono ${qbAccuracy.pct >= 75 ? 'text-green-400' : qbAccuracy.pct >= 50 ? 'text-yellow-400' : 'text-slate-400'}`}>
+                {qbAccuracy.pct >= 0 ? qbAccuracy.pct + '%' : '—'}
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono">QB точност</div>
+            </div>
+          </Link>
+          <div className="flex items-center gap-3 p-3.5 rounded-xl bg-[rgba(20,20,35,0.8)] border border-[#1e293b]">
+            <BarChart3 size={16} className="text-purple-400" />
+            <div>
+              <div className="text-lg font-bold font-mono text-purple-400">{activityDays30}<span className="text-slate-600 text-sm">/30</span></div>
+              <div className="text-[10px] text-slate-500 font-mono">Активни дни</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ROW 2: Compact Subjects */}
       <SubjectsSection subjects={activeSubjects} onAddClick={() => setShowAddSubject(true)} />
 
-      {/* ROW 2: Weekly Chart (full width) */}
+      {/* ROW 3: Mastery + Exam Predictions (two columns) */}
+      {activeSubjects.length > 0 && masteryTotals.total > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Mastery Overview */}
+          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2 mb-3">
+              <Target size={15} className="text-green-400" />
+              Усвояване
+            </h3>
+            {/* Stacked bar */}
+            <div className="flex h-4 rounded-full overflow-hidden bg-slate-800 mb-3">
+              {masteryTotals.green > 0 && <div className="bg-green-500 transition-all" style={{ width: (masteryTotals.green / masteryTotals.total * 100) + '%' }} />}
+              {masteryTotals.yellow > 0 && <div className="bg-yellow-500 transition-all" style={{ width: (masteryTotals.yellow / masteryTotals.total * 100) + '%' }} />}
+              {masteryTotals.orange > 0 && <div className="bg-orange-500 transition-all" style={{ width: (masteryTotals.orange / masteryTotals.total * 100) + '%' }} />}
+              {masteryTotals.gray > 0 && <div className="bg-slate-600 transition-all" style={{ width: (masteryTotals.gray / masteryTotals.total * 100) + '%' }} />}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-mono">
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-green-500" /><span className="text-green-400">{masteryTotals.green}</span> <span className="text-slate-500">зелени</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-yellow-500" /><span className="text-yellow-400">{masteryTotals.yellow}</span> <span className="text-slate-500">жълти</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-orange-500" /><span className="text-orange-400">{masteryTotals.orange}</span> <span className="text-slate-500">оранжеви</span></span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-600" /><span className="text-slate-400">{masteryTotals.gray}</span> <span className="text-slate-500">нови</span></span>
+            </div>
+          </div>
+
+          {/* Exam Predictions */}
+          <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-300 font-mono flex items-center gap-2 mb-3">
+              <GraduationCap size={15} className="text-purple-400" />
+              Прогноза за изпити
+            </h3>
+            {examPredictions.length === 0 ? (
+              <p className="text-xs text-slate-500 font-mono">Няма предстоящи изпити</p>
+            ) : (
+              <div className="space-y-2.5">
+                {examPredictions.map(ep => {
+                  const gradeColor = ep.grade >= 5 ? 'text-green-400' : ep.grade >= 4 ? 'text-yellow-400' : ep.grade >= 3 ? 'text-orange-400' : 'text-red-400';
+                  const barColor = ep.grade >= 5 ? 'bg-green-500' : ep.grade >= 4 ? 'bg-yellow-500' : ep.grade >= 3 ? 'bg-orange-500' : 'bg-red-500';
+                  const progress = getSubjectProgress(ep.subject);
+                  return (
+                    <Link key={ep.subject.id} href={'/subjects?id=' + ep.subject.id} className="block hover:bg-slate-800/30 rounded-lg p-1.5 -mx-1.5 transition-colors">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-mono font-medium truncate" style={{ color: ep.subject.color }}>{ep.subject.name}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-sm font-bold font-mono ${gradeColor}`}>{ep.grade.toFixed(1)}</span>
+                          <span className="text-[10px] text-slate-600 font-mono">{ep.daysUntil}д</span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+                        <div className={`h-full rounded-full ${barColor}`} style={{ width: progress.percentage + '%' }} />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ROW 4: Weekly Chart (full width) */}
       <WeeklyBarChart
         subjects={activeSubjects}
         dailyGoal={dailyTopicGoal}

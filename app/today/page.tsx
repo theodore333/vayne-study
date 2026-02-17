@@ -1244,7 +1244,7 @@ export default function TodayPage() {
               <Brain size={20} className="text-purple-400" />
               <div>
                 <h3 className="text-sm font-semibold text-slate-100 font-mono">FSRS Преговор</h3>
-                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниска запаметеност</p>
+                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниско запомняне</p>
               </div>
             </div>
             {fsrsReviews.length > 1 && (

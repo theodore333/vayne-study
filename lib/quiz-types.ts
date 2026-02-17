@@ -1,6 +1,6 @@
 import { BloomLevel } from './types';
 
-export type QuizMode = 'assessment' | 'free_recall' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards';
+export type QuizMode = 'assessment' | 'free_recall' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards' | 'specimen_quiz';
 
 export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'fill_blank' | 'short_answer' | 'matching' | 'ordering';
 
@@ -83,7 +83,17 @@ export function buildMasteryContext(topic: {
   lastReview: string | null;
   quizHistory?: Array<{ date: string; score: number; bloomLevel: number }>;
   wrongAnswers?: Array<{ concept: string; drillCount: number }>;
+  weakConcepts?: string[];
 }): MasteryContext {
+  const quizDerived = (topic.wrongAnswers || [])
+    .filter(wa => wa.drillCount < 3)
+    .map(wa => ({ concept: wa.concept, drillCount: wa.drillCount }));
+  const quizConceptNames = new Set(quizDerived.map(wc => wc.concept.toLowerCase()));
+  // Manual weak concepts get drillCount 0 (highest priority), deduped against quiz-derived
+  const manualWeak = (topic.weakConcepts || [])
+    .filter(c => !quizConceptNames.has(c.toLowerCase()))
+    .map(c => ({ concept: c, drillCount: 0 }));
+
   return {
     topicStatus: topic.status,
     bloomLevel: topic.currentBloomLevel || 1,
@@ -99,9 +109,7 @@ export function buildMasteryContext(topic: {
         .filter(wa => wa.drillCount >= 3)
         .map(wa => wa.concept)
     )],
-    weakConcepts: (topic.wrongAnswers || [])
-      .filter(wa => wa.drillCount < 3)
-      .map(wa => ({ concept: wa.concept, drillCount: wa.drillCount }))
+    weakConcepts: [...manualWeak, ...quizDerived]
   };
 }
 

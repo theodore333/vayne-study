@@ -682,6 +682,11 @@ export function getTopicPriority(
     }
   }
 
+  // Manual weak concepts: user-identified weak areas boost priority
+  const weakCount = topic.weakConcepts?.length || 0;
+  if (weakCount >= 2) priority -= 8;
+  if (weakCount >= 5) priority -= 5; // Extra boost for heavily marked topics
+
   // Crunch mode: size bonus for gray topics (smaller topics get higher priority)
   // Lower priority score = needs more attention, so we SUBTRACT the bonus
   if (inCrunchMode && topic.status === 'gray' && topic.size) {

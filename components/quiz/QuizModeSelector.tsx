@@ -1,6 +1,6 @@
 'use client';
 
-import { TrendingUp, Lightbulb, Zap, Brain, FileText, Repeat, Settings, Sparkles } from 'lucide-react';
+import { TrendingUp, Lightbulb, Zap, Brain, FileText, Repeat, Settings, Sparkles, Microscope } from 'lucide-react';
 import { QuizMode } from '@/lib/quiz-types';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
 
@@ -25,6 +25,8 @@ interface QuizModeSelectorProps {
   setMatchExamFormat: (match: boolean) => void;
   isGenerating: boolean;
   hasMaterial: boolean;
+  hasSpecimens?: boolean;
+  specimenCount?: number;
   onOpenPreview: () => void;
 }
 
@@ -37,7 +39,7 @@ export function QuizModeSelector({
   crossTopicDrill, setCrossTopicDrill,
   subjectWeaknessStats, topicWrongAnswers,
   examFormat, matchExamFormat, setMatchExamFormat,
-  isGenerating, hasMaterial, onOpenPreview
+  isGenerating, hasMaterial, hasSpecimens, specimenCount, onOpenPreview
 }: QuizModeSelectorProps) {
   return (
     <>
@@ -152,6 +154,22 @@ export function QuizModeSelector({
                 Anki Карти
               </span>
               <span className="text-xs text-slate-500 font-mono">Bloom L1: дефиниции, факти</span>
+            </button>
+          )}
+
+          {/* Specimen Quiz - only when topic has specimens */}
+          {!isMultiMode && hasSpecimens && (
+            <button
+              onClick={() => { setMode('specimen_quiz' as QuizMode); setShowCustomOptions(false); }}
+              className={`p-4 rounded-xl border text-left transition-all ${
+                mode === 'specimen_quiz' ? 'bg-violet-500/20 border-violet-500 ring-2 ring-violet-500/30' : 'bg-slate-800/50 border-slate-700 hover:border-slate-600'
+              }`}
+            >
+              <Microscope size={20} className={mode === 'specimen_quiz' ? 'text-violet-400' : 'text-slate-400'} />
+              <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'specimen_quiz' ? 'text-violet-400' : 'text-slate-300'}`}>
+                Препарати
+              </span>
+              <span className="text-xs text-slate-500 font-mono">{specimenCount || 0} препарата</span>
             </button>
           )}
         </div>
@@ -305,7 +323,7 @@ export function QuizModeSelector({
       </div>
 
       {/* Material mode indicator */}
-      {mode && mode !== 'free_recall' && mode !== 'anki_cards' && !hasMaterial && (
+      {mode && mode !== 'free_recall' && mode !== 'anki_cards' && mode !== ('specimen_quiz' as QuizMode) && !hasMaterial && (
         <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
           <p className="text-xs text-amber-300 font-mono">
             <span className="font-bold">Общи знания</span> — няма добавен материал. Въпросите ще са от стандартния медицински курс, не от конкретния ти конспект.

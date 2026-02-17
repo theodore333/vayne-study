@@ -158,6 +158,8 @@ function sanitizeLoadedData(data: AppData): AppData {
         })).filter((q: { question: string }) => q.question.length > 0) : [],
         ankiCards: Array.isArray(t.ankiCards) ? t.ankiCards.filter((c: unknown) => typeof c === 'string') : undefined,
         ankiCardsSourceLength: typeof t.ankiCardsSourceLength === 'number' ? t.ankiCardsSourceLength : undefined,
+        weakConcepts: Array.isArray(t.weakConcepts) ? t.weakConcepts.filter((c: unknown) => typeof c === 'string').filter((c: string) => c.length > 0) : undefined,
+        specimens: Array.isArray(t.specimens) ? t.specimens.filter((s: unknown) => typeof s === 'string').filter((s: string) => s.length > 0) : undefined,
         fsrs: (t.fsrs && typeof t.fsrs === 'object' && typeof t.fsrs.stability === 'number' && typeof t.fsrs.difficulty === 'number') ? t.fsrs : undefined,
         linkedTopicIds: Array.isArray(t.linkedTopicIds) ? t.linkedTopicIds.filter((id: unknown) => typeof id === 'string') : undefined,
         overlapAnalysis: (t.overlapAnalysis && typeof t.overlapAnalysis === 'object' && typeof t.overlapAnalysis.linkedTopicId === 'string') ? t.overlapAnalysis : undefined,

@@ -213,6 +213,8 @@ export interface Topic {
   }>;
   ankiCards?: string[];  // Cloze cards generated from material (Bloom L1 - Remember)
   ankiCardsSourceLength?: number; // Length of material when cards were generated
+  weakConcepts?: string[]; // Manually marked weak areas (combined with quiz-derived in prompts)
+  specimens?: string[]; // Pathology specimen names for microscopy quiz
   linkedTopicIds?: string[]; // IDs of overlapping topics in other subjects
   overlapAnalysis?: {
     linkedTopicId: string;

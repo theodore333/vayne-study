@@ -165,6 +165,11 @@ export async function POST(request: Request) {
       return handleAnalyzeOverlap(anthropic, materialA, materialB, topicNameA, topicNameB, subjectNameA, subjectNameB);
     }
 
+    if (mode === 'specimen_quiz') {
+      const { specimens } = body;
+      return handleSpecimenQuiz(anthropic, specimens || [], topicName, subjectName, material || '');
+    }
+
     // Standard quiz generation (assessment, mid_order, higher_order, custom)
     // material can be empty — generates from general medical knowledge
     return handleStandardQuiz(anthropic, {
@@ -181,7 +186,8 @@ export async function POST(request: Request) {
       model,
       masteryContext,
       customQuestions,
-      overlapContext: body.overlapContext
+      overlapContext: body.overlapContext,
+      specimens: body.specimens
     });
 
   } catch (error: unknown) {
@@ -697,9 +703,10 @@ async function handleStandardQuiz(
       overlapPercent: number;
       linkedTopicName: string;
     };
+    specimens?: string[];
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext, specimens } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -840,6 +847,13 @@ The student has added these questions manually. You MUST include them in the qui
 ${customQuestions.map((q, i) => `${i + 1}. Q: ${q.question}${q.answer ? `\n   A: ${q.answer}` : ''}`).join('\n')}`
     : '';
 
+  // Pathology specimens — include at least 1 specimen identification question
+  const specimensSection = specimens && specimens.length > 0
+    ? `\n\nПРЕПАРАТИ (темата включва тези патологични препарати):
+Препарати: ${specimens.join(', ')}
+Включи поне 1 въпрос за идентификация на препарат — опиши микроскопски находки (при конкретно увеличение: 4x, 10x или 40x) и попитай кой е препаратът, ИЛИ дай името на препарата и попитай какви находки се очакват.`
+    : '';
+
   const response = await anthropic.messages.create({
     model: modelConfig.id,
     max_tokens: 12000,
@@ -857,6 +871,7 @@ ${masteryInstructions}
 ${materialSection}
 ${overlapSection}
 ${customQuestionsSection}
+${specimensSection}
 
 Generate ${targetQuestionCount}.
 
@@ -1549,6 +1564,102 @@ ${materialB.substring(0, 6000)}
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       cost: Math.round(overlapCost * 1000000) / 1000000
+    }
+  });
+}
+
+async function handleSpecimenQuiz(
+  anthropic: Anthropic,
+  specimens: string[],
+  topicName: string,
+  subjectName: string,
+  material: string
+) {
+  if (!specimens.length) {
+    return NextResponse.json({ error: 'Няма добавени препарати' }, { status: 400 });
+  }
+
+  const materialContext = material
+    ? `\nМатериал на студента (за контекст):\n${material.substring(0, 6000)}`
+    : '';
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-6',
+    max_tokens: 8192,
+    messages: [{
+      role: 'user',
+      content: `Ти си патологоанатом-преподавател. Създай quiz по микроскопски препарати за студент по "${topicName}" (${subjectName}).
+
+НАЛИЧНИ ПРЕПАРАТИ: ${specimens.join(', ')}
+${materialContext}
+
+Генерирай въпроси (1-2 на препарат, максимум ${Math.min(specimens.length * 2, 20)} общо).
+
+ДВА ТИПА ВЪПРОСИ:
+
+ТИП 1 — "Идентифицирай препарата" (describe→identify):
+- Опиши микроскопската картина на конкретно увеличение (4x, 10x или 40x)
+- Включи: тъканна архитектура, клетъчен тип, оцветяване с H&E, характерни находки
+- Започни с "На [увеличение] виждаме..."
+- Студентът трябва да каже кой препарат е
+- correctAnswer = името на препарата
+
+ТИП 2 — "Опиши препарата" (identify→describe):
+- Дай името на препарата
+- Питай: "Какво очакваш да видиш на 10x увеличение?" или "Опиши характерните хистологични находки"
+- correctAnswer = описание на микроскопската картина
+
+ВАЖНО:
+- Бъди клинично точен — описвай реални хистологични находки
+- Споменавай специфични клетъчни типове, структури, оцветяване
+- Разнообразявай увеличенията (4x за обзор, 10x за детайли, 40x за клетъчно ниво)
+- Всеки отговор трябва да е достатъчно детайлен за fair оценяване
+
+Върни JSON масив:
+[{
+  "question": "На 10x увеличение виждаме...",
+  "type": "open",
+  "correctAnswer": "хроничен хепатит",
+  "explanation": "Характерни находки при хроничен хепатит: ..."
+}]`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  if (response.stop_reason === 'max_tokens') {
+    responseText = repairTruncatedJson(responseText);
+  }
+
+  let questions;
+  try {
+    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+    questions = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+    if (!Array.isArray(questions)) throw new Error('Not an array');
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse specimen questions', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    questions: questions.map((q: Record<string, unknown>) => ({
+      question: q.question || '',
+      type: 'open',
+      correctAnswer: q.correctAnswer || '',
+      explanation: q.explanation || '',
+      options: [],
+    })),
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
     }
   });
 }

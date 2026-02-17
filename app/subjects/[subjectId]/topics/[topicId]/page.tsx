@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles, Link2 } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles, Link2, Microscope, Plus } from 'lucide-react';
 import LinkTopicModal from '@/components/modals/LinkTopicModal';
 import ConfirmDialog from '@/components/modals/ConfirmDialog';
 import ReaderMode from '@/components/ReaderMode';
@@ -55,6 +55,8 @@ export default function TopicDetailPage() {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null); // For enlarged view
   const [isAnalyzingSize, setIsAnalyzingSize] = useState(false);
   const [showWrongAnswers, setShowWrongAnswers] = useState(false);
+  const [weakConceptInput, setWeakConceptInput] = useState('');
+  const [specimenInput, setSpecimenInput] = useState('');
 
   // Quick-add question state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -1253,7 +1255,128 @@ export default function TopicDetailPage() {
             );
           })()}
 
-          {/* Wrong Answers Section - Grouped by Concept */}
+          {/* Specimens Section */}
+          <div className="bg-gradient-to-br from-violet-900/20 to-purple-900/20 border border-violet-700/30 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Microscope size={16} className="text-violet-400" />
+              <span className="text-sm font-medium text-violet-400 font-mono">
+                Препарати {(topic.specimens?.length || 0) > 0 && `(${topic.specimens!.length})`}
+              </span>
+            </div>
+            {(topic.specimens || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {topic.specimens!.map((spec, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-violet-500/15 border border-violet-500/30 rounded-lg text-xs font-mono text-violet-300">
+                    {spec}
+                    <button
+                      onClick={() => {
+                        const updated = topic.specimens!.filter((_, idx) => idx !== i);
+                        updateTopic(subjectId!, topic.id, { specimens: updated.length > 0 ? updated : undefined });
+                      }}
+                      className="ml-0.5 text-violet-500 hover:text-red-400 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={specimenInput}
+                onChange={(e) => setSpecimenInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && specimenInput.trim()) {
+                    const current = topic.specimens || [];
+                    if (!current.includes(specimenInput.trim())) {
+                      updateTopic(subjectId!, topic.id, { specimens: [...current, specimenInput.trim()] });
+                    }
+                    setSpecimenInput('');
+                  }
+                }}
+                placeholder="напр. хроничен хепатит..."
+                className="flex-1 px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-violet-500/50 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (specimenInput.trim()) {
+                    const current = topic.specimens || [];
+                    if (!current.includes(specimenInput.trim())) {
+                      updateTopic(subjectId!, topic.id, { specimens: [...current, specimenInput.trim()] });
+                    }
+                    setSpecimenInput('');
+                  }
+                }}
+                className="p-1.5 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 transition-colors"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+          </div>
+
+          {/* Manual Weak Concepts */}
+          <div className="bg-gradient-to-br from-amber-900/20 to-yellow-900/20 border border-amber-700/30 rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} className="text-amber-400" />
+              <span className="text-sm font-medium text-amber-400 font-mono">
+                Слаби концепции (ръчно) {(topic.weakConcepts?.length || 0) > 0 && `(${topic.weakConcepts!.length})`}
+              </span>
+            </div>
+            {(topic.weakConcepts || []).length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {topic.weakConcepts!.map((concept, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/15 border border-amber-500/30 rounded-lg text-xs font-mono text-amber-300">
+                    {concept}
+                    <button
+                      onClick={() => {
+                        const updated = topic.weakConcepts!.filter((_, idx) => idx !== i);
+                        updateTopic(subjectId!, topic.id, { weakConcepts: updated.length > 0 ? updated : undefined });
+                      }}
+                      className="ml-0.5 text-amber-500 hover:text-red-400 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={weakConceptInput}
+                onChange={(e) => setWeakConceptInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && weakConceptInput.trim()) {
+                    const current = topic.weakConcepts || [];
+                    if (!current.includes(weakConceptInput.trim())) {
+                      updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
+                    }
+                    setWeakConceptInput('');
+                  }
+                }}
+                placeholder="напр. разлика между X и Y..."
+                className="flex-1 px-3 py-1.5 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-amber-500/50 focus:outline-none"
+              />
+              <button
+                onClick={() => {
+                  if (weakConceptInput.trim()) {
+                    const current = topic.weakConcepts || [];
+                    if (!current.includes(weakConceptInput.trim())) {
+                      updateTopic(subjectId!, topic.id, { weakConcepts: [...current, weakConceptInput.trim()] });
+                    }
+                    setWeakConceptInput('');
+                  }
+                }}
+                className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-600 font-mono mt-2">Quiz ще фокусира 40%+ въпроси върху тези области</p>
+          </div>
+
+          {/* Wrong Answers Section - Grouped by Concept (from quiz) */}
           {topic.wrongAnswers && topic.wrongAnswers.length > 0 && (() => {
             // Group wrong answers by concept
             const conceptStats: Record<string, { count: number; drilled: number; totalDrillCount: number }> = {};
@@ -1278,7 +1401,7 @@ export default function TopicDetailPage() {
                   <div className="flex items-center gap-2">
                     <AlertTriangle size={16} className="text-orange-400" />
                     <span className="text-sm font-medium text-orange-400 font-mono">
-                      Слаби концепции ({sortedConcepts.length})
+                      Слаби концепции — от quiz ({sortedConcepts.length})
                     </span>
                   </div>
                   {showWrongAnswers ? (

@@ -376,6 +376,12 @@ function QuizContent() {
       generateAnkiFromMaterial();
       return;
     }
+    if (mode === 'specimen_quiz') {
+      // Specimen quiz skips preview, goes straight to generation
+      setPreviewQuestionCount(topic?.specimens?.length ? Math.min(topic.specimens.length * 2, 20) : 10);
+      setShowPreview(true);
+      return;
+    }
     const initialCount = mode === 'custom'
       ? customQuestionCount
       : QUIZ_LENGTH_PRESETS[quizLength].questions;
@@ -388,6 +394,12 @@ function QuizContent() {
 
     if (!mode) {
       setQuizState(prev => ({ ...prev, error: 'Избери режим на теста.' }));
+      return;
+    }
+
+    // specimen_quiz requires specimens
+    if (mode === 'specimen_quiz' && (!topic?.specimens || topic.specimens.length === 0)) {
+      setQuizState(prev => ({ ...prev, error: 'Добави препарати към темата преди да започнеш.' }));
       return;
     }
 
@@ -484,7 +496,8 @@ function QuizContent() {
           ? (crossTopicDrill ? crossTopicWrongAnswers : topic?.wrongAnswers)
           : undefined,
         model: selectedModel,
-        masteryContext: topic ? buildMasteryContext(topic) : undefined,
+        masteryContext: topic ? buildMasteryContext({ ...topic, weakConcepts: topic.weakConcepts }) : undefined,
+        specimens: topic?.specimens?.length ? topic.specimens : undefined,
         customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined,
         overlapContext: topicOverlapCtx
       };
@@ -1921,6 +1934,8 @@ function QuizContent() {
           setMatchExamFormat={setMatchExamFormat}
           isGenerating={quizState.isGenerating}
           hasMaterial={isMultiMode ? multiTopics.length > 0 : !!(topic?.material && topic.material.trim().length > 0)}
+          hasSpecimens={!isMultiMode && (topic?.specimens?.length || 0) > 0}
+          specimenCount={topic?.specimens?.length || 0}
           onOpenPreview={openPreview}
         />
       </div>

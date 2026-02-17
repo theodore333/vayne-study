@@ -343,7 +343,7 @@ export function QuizQuestion({
                     ? isCorrectPair ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
                     : 'bg-slate-800/30 border-slate-700/50'
                 }`}>
-                  <div className="flex-1 text-sm text-slate-200 font-mono">{pair.left}</div>
+                  <div className="shrink-0 min-w-[80px] max-w-[40%] text-sm text-slate-200 font-mono">{pair.left}</div>
                   <ArrowUpDown size={16} className="text-slate-500 shrink-0" />
                   {showExplanation ? (
                     <div className="flex-1 text-right">

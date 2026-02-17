@@ -917,6 +917,8 @@ IMPORTANT:
 - Focus on clinically relevant concepts
 - "matching" MUST have 3-5 pairs, "ordering" MUST have 3-6 items
 - "fill_blank" question MUST contain exactly one ____ (4 underscores) for the blank
+- "fill_blank" acceptableAnswers MUST include common spelling variants: with/without hyphens, spaces, dashes (e.g. if correctAnswer is "мастни киселини", add "мастни-киселини")
+- МЕХАНИЗМИ И ПРОЦЕСИ: Когато тестваш механизъм, патогенеза, каскада или последователност от стъпки — ВИНАГИ предпочитай "open" (Обясни механизма...) вместо "ordering". Ordering дава стъпките наготово (recognition), а open изисква студентът да ги знае наизуст (recall). Ordering използвай САМО за прости списъци или класификации, НЕ за механизми!
 - For "open" questions, correctAnswer MUST MATCH the length the student sees:
   * Bloom 1-2: EXACTLY 2-3 sentences
   * Bloom 3-4: EXACTLY 3-5 sentences

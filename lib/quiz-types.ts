@@ -121,9 +121,11 @@ export function isAnswerCorrect(q: Question, answer: string | null, openEval?: O
     case 'case_study':
       return answer === q.correctAnswer;
     case 'fill_blank': {
-      const userAns = answer.toLowerCase().trim();
-      if (userAns === q.correctAnswer.toLowerCase().trim()) return true;
-      return (q.acceptableAnswers || []).some(a => a.toLowerCase().trim() === userAns);
+      // Normalize: lowercase, trim, collapse whitespace, treat hyphens as spaces
+      const normalize = (s: string) => s.toLowerCase().trim().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ');
+      const userAns = normalize(answer);
+      if (userAns === normalize(q.correctAnswer)) return true;
+      return (q.acceptableAnswers || []).some(a => normalize(a) === userAns);
     }
     case 'short_answer':
     case 'open':

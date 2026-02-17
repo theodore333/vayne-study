@@ -706,7 +706,7 @@ async function handleEnrichCustomQuestions(
     : '';
 
   const response = await anthropic.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-sonnet-4-6',
     max_tokens: 4096,
     messages: [{
       role: 'user',
@@ -752,12 +752,12 @@ ${questions.map((q, i) => `${i + 1}. ${q.question}${q.answer ? `\n   Отгов�
     return NextResponse.json({ error: 'Failed to parse enrichment response', raw: responseText.substring(0, 500) }, { status: 500 });
   }
 
-  // Haiku pricing: $1/$5 per MTok
-  const cost = (response.usage.input_tokens * 1 + response.usage.output_tokens * 5) / 1000000;
+  // Sonnet 4.6 pricing: $3/$15 per MTok
+  const cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1000000;
 
   return NextResponse.json({
     enrichments,
-    model: 'haiku',
+    model: 'sonnet',
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

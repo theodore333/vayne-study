@@ -2,7 +2,7 @@ import { BloomLevel } from './types';
 
 export type QuizMode = 'assessment' | 'free_recall' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards' | 'specimen_quiz';
 
-export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'fill_blank' | 'short_answer' | 'matching' | 'ordering';
+export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'fill_blank' | 'short_answer';
 
 export interface Question {
   type: QuestionType;
@@ -14,8 +14,6 @@ export interface Question {
   concept?: string;
   // New type-specific fields
   acceptableAnswers?: string[]; // fill_blank: alternative correct answers
-  pairs?: Array<{ left: string; right: string }>; // matching: correct pairs
-  items?: string[]; // ordering: items in CORRECT order (UI shuffles)
 }
 
 export interface FreeRecallEvaluation {
@@ -130,18 +128,6 @@ export function isAnswerCorrect(q: Question, answer: string | null, openEval?: O
     case 'short_answer':
     case 'open':
       return !!openEval && openEval.score >= 0.7;
-    case 'matching': {
-      try {
-        const userPairs = JSON.parse(answer) as Record<string, string>;
-        return (q.pairs || []).every(p => userPairs[p.left] === p.right);
-      } catch { return false; }
-    }
-    case 'ordering': {
-      try {
-        const userOrder = JSON.parse(answer) as string[];
-        return JSON.stringify(userOrder) === JSON.stringify(q.items);
-      } catch { return false; }
-    }
     default:
       return answer === q.correctAnswer;
   }
@@ -154,15 +140,6 @@ export function getQuestionScore(q: Question, answer: string | null, openEval?: 
     case 'open':
     case 'short_answer':
       return openEval ? openEval.score : 0;
-    case 'matching': {
-      try {
-        const userPairs = JSON.parse(answer) as Record<string, string>;
-        const pairs = q.pairs || [];
-        if (pairs.length === 0) return 0;
-        const correctCount = pairs.filter(p => userPairs[p.left] === p.right).length;
-        return correctCount / pairs.length;
-      } catch { return 0; }
-    }
     default:
       return isAnswerCorrect(q, answer, openEval) ? 1 : 0;
   }

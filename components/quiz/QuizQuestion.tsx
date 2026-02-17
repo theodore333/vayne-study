@@ -1,11 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, ChevronUp, ChevronDown, ArrowUpDown, Pencil, Trash2, Save, X } from 'lucide-react';
+import { useState } from 'react';
+import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, Pencil, Trash2, Save, X, MessageSquare, Send } from 'lucide-react';
 import { Question, OpenAnswerEvaluation, isAnswerCorrect } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
-// Format matching/numbered question text with line breaks
+// Format numbered/lettered question text with line breaks
 function formatQuestionText(text: string): React.ReactNode {
   const formatted = text
     .replace(/\s+(\d+)\.\s/g, '\n$1. ')
@@ -27,8 +27,6 @@ const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   open: { label: 'Отворен', color: 'bg-purple-500/20 text-purple-400' },
   fill_blank: { label: 'Попълни', color: 'bg-cyan-500/20 text-cyan-400' },
   short_answer: { label: 'Кратък', color: 'bg-indigo-500/20 text-indigo-400' },
-  matching: { label: 'Свържи', color: 'bg-emerald-500/20 text-emerald-400' },
-  ordering: { label: 'Подреди', color: 'bg-orange-500/20 text-orange-400' },
 };
 
 interface QuizQuestionProps {
@@ -58,14 +56,11 @@ interface QuizQuestionProps {
   onEarlyStop: () => void;
   onBack: () => void;
   // New type props
-  matchingAnswers: Record<string, string>;
-  setMatchingAnswers: (answers: Record<string, string>) => void;
-  orderingItems: string[];
-  setOrderingItems: (items: string[]) => void;
   fillBlankAnswer: string;
   setFillBlankAnswer: (answer: string) => void;
   onEditQuestion?: (index: number, updated: Question) => void;
   onDeleteQuestion?: (index: number) => void;
+  onReEvaluate?: (index: number, feedback: string) => void;
 }
 
 export function QuizQuestion({
@@ -80,10 +75,8 @@ export function QuizQuestion({
   countWarning, setCountWarning,
   elapsedTime, formatTime,
   onAnswer, onNext, onEarlyStop, onBack,
-  matchingAnswers, setMatchingAnswers,
-  orderingItems, setOrderingItems,
   fillBlankAnswer, setFillBlankAnswer,
-  onEditQuestion, onDeleteQuestion
+  onEditQuestion, onDeleteQuestion, onReEvaluate
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
   const [isEditing, setIsEditing] = useState(false);
@@ -91,17 +84,13 @@ export function QuizQuestion({
   const [editAnswer, setEditAnswer] = useState('');
   const [editExplanation, setEditExplanation] = useState('');
   const [editOptions, setEditOptions] = useState<string[]>([]);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackText, setFeedbackText] = useState('');
   const openEval = openEvaluations[currentIndex];
   const currentAnswer = answers[currentIndex];
   const isCorrect = isAnswerCorrect(currentQuestion, currentAnswer, openEval);
   const typeInfo = TYPE_LABELS[currentQuestion.type] || TYPE_LABELS.open;
 
-  // Memoize shuffled right-side options for matching (avoid re-shuffle on every render)
-  const shuffledMatchingOptions = useMemo(() => {
-    if (currentQuestion.type !== 'matching' || !currentQuestion.pairs) return [];
-    return [...currentQuestion.pairs.map(p => p.right)].sort(() => Math.random() - 0.5);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentIndex, currentQuestion.type]);
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -338,105 +327,6 @@ export function QuizQuestion({
           </div>
         )}
 
-        {/* ── Matching ── */}
-        {currentQuestion.type === 'matching' && currentQuestion.pairs && (
-          <div className="space-y-3">
-            {currentQuestion.pairs.map((pair, i) => {
-              const userChoice = matchingAnswers[pair.left] || '';
-              const isCorrectPair = showExplanation && userChoice === pair.right;
-              const isWrongPair = showExplanation && userChoice !== pair.right;
-              return (
-                <div key={i} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                  showExplanation
-                    ? isCorrectPair ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
-                    : 'bg-slate-800/30 border-slate-700/50'
-                }`}>
-                  <div className="shrink-0 min-w-[80px] max-w-[40%] text-sm text-slate-200 font-mono">{pair.left}</div>
-                  <ArrowUpDown size={16} className="text-slate-500 shrink-0" />
-                  {showExplanation ? (
-                    <div className="flex-1 text-right">
-                      <span className={`text-sm font-mono ${isCorrectPair ? 'text-green-400' : 'text-red-400'}`}>
-                        {userChoice || '(не е избран)'}
-                      </span>
-                      {isWrongPair && (
-                        <span className="text-xs text-green-400 font-mono block">→ {pair.right}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <select
-                      value={userChoice}
-                      onChange={(e) => setMatchingAnswers({ ...matchingAnswers, [pair.left]: e.target.value })}
-                      className="flex-1 px-3 py-2 bg-slate-800/50 border border-slate-600 rounded-lg text-slate-200 font-mono text-sm focus:border-purple-500 focus:outline-none"
-                    >
-                      <option value="">— избери —</option>
-                      {shuffledMatchingOptions.map((right, j) => (
-                        <option key={j} value={right}>{right}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Ordering ── */}
-        {currentQuestion.type === 'ordering' && orderingItems.length > 0 && (
-          <div className="space-y-2">
-            {orderingItems.map((item, i) => {
-              const correctPos = currentQuestion.items?.indexOf(item) ?? -1;
-              const isCorrectPos = showExplanation && correctPos === i;
-              const isWrongPos = showExplanation && correctPos !== i;
-              return (
-                <div key={item} className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-                  showExplanation
-                    ? isCorrectPos ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'
-                    : 'bg-slate-800/30 border-slate-700/50'
-                }`}>
-                  <span className={`w-7 h-7 rounded flex items-center justify-center text-sm font-bold font-mono ${
-                    showExplanation
-                      ? isCorrectPos ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                      : 'bg-slate-700 text-slate-300'
-                  }`}>
-                    {i + 1}
-                  </span>
-                  <span className="flex-1 text-sm text-slate-200 font-mono">{item}</span>
-                  {!showExplanation && (
-                    <div className="flex flex-col gap-0.5">
-                      <button
-                        onClick={() => {
-                          if (i === 0) return;
-                          const arr = [...orderingItems];
-                          [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
-                          setOrderingItems(arr);
-                        }}
-                        disabled={i === 0}
-                        className="p-0.5 text-slate-400 hover:text-slate-200 disabled:text-slate-700 transition-colors"
-                      >
-                        <ChevronUp size={16} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (i === orderingItems.length - 1) return;
-                          const arr = [...orderingItems];
-                          [arr[i], arr[i + 1]] = [arr[i + 1], arr[i]];
-                          setOrderingItems(arr);
-                        }}
-                        disabled={i === orderingItems.length - 1}
-                        className="p-0.5 text-slate-400 hover:text-slate-200 disabled:text-slate-700 transition-colors"
-                      >
-                        <ChevronDown size={16} />
-                      </button>
-                    </div>
-                  )}
-                  {isWrongPos && (
-                    <span className="text-xs text-green-400 font-mono">#{correctPos + 1}</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
 
         {/* ── Open ── */}
         {currentQuestion.type === 'open' && (
@@ -501,7 +391,7 @@ export function QuizQuestion({
         {showExplanation && (
           <div className="mt-6 space-y-4">
             {/* AI Evaluation for open/short_answer questions */}
-            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && openEval && (
+            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && openEval && (<>
               <div className={`p-4 rounded-lg border ${
                 openEval.score >= 0.7 ? 'bg-green-500/10 border-green-500/30' :
                 openEval.score >= 0.4 ? 'bg-yellow-500/10 border-yellow-500/30' :
@@ -552,10 +442,56 @@ export function QuizQuestion({
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Standard result for MCQ, true_false, fill_blank, matching, ordering */}
-            {(['multiple_choice', 'case_study', 'fill_blank', 'matching', 'ordering'].includes(currentQuestion.type)) && (
+              {/* Feedback button for open/short_answer evaluations */}
+              {onReEvaluate && !isEvaluatingOpen && (
+                <div className="mt-2">
+                  {!showFeedback ? (
+                    <button
+                      onClick={() => setShowFeedback(true)}
+                      className="flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-400 transition-colors"
+                    >
+                      <MessageSquare size={13} /> Не съм съгласен с оценката
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-2">
+                      <p className="text-xs text-amber-400 font-mono">Обясни какво не е правилно в оценката:</p>
+                      <textarea
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        rows={2}
+                        placeholder="Напр. &quot;Въпросът е за Na/K помпа, не за калциеви канали...&quot;"
+                        className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-amber-500 focus:outline-none resize-none placeholder:text-slate-600"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => { setShowFeedback(false); setFeedbackText(''); }}
+                          className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors"
+                        >
+                          Отказ
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (feedbackText.trim()) {
+                              onReEvaluate(currentIndex, feedbackText.trim());
+                              setShowFeedback(false);
+                              setFeedbackText('');
+                            }
+                          }}
+                          disabled={!feedbackText.trim()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <Send size={12} /> Преоцени
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>)}
+
+            {/* Standard result for MCQ, fill_blank */}
+            {(['multiple_choice', 'case_study', 'fill_blank'].includes(currentQuestion.type)) && (
               <div className={`p-4 rounded-lg border ${
                 isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
               }`}>
@@ -705,8 +641,6 @@ export function QuizQuestion({
                 isEvaluatingOpen ||
                 (['multiple_choice', 'case_study'].includes(currentQuestion.type) ? !selectedAnswer :
                  currentQuestion.type === 'fill_blank' ? !fillBlankAnswer.trim() :
-                 currentQuestion.type === 'matching' ? Object.keys(matchingAnswers).length < (currentQuestion.pairs?.length || 0) :
-                 currentQuestion.type === 'ordering' ? false :
                  !openAnswer.trim())
               }
               className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center gap-2"

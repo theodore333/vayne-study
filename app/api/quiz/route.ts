@@ -25,7 +25,7 @@ function repairTruncatedJson(text: string): string {
 // Bloom's Taxonomy level descriptions
 const BLOOM_PROMPTS: Record<number, string> = {
   1: `Level 1 - REMEMBER (Запомняне): Focus on recall of facts, terms, and basic concepts.
-     Use question types: definitions, lists, matching, true/false, fill-in-the-blank.`,
+     Use question types: definitions, lists, fill-in-the-blank.`,
   2: `Level 2 - UNDERSTAND (Разбиране): Focus on explaining ideas and concepts.
      Use question types: explain, describe, compare, summarize, interpret.`,
   3: `Level 3 - APPLY (Прилагане): Focus on using information in new situations.
@@ -125,6 +125,12 @@ export async function POST(request: Request) {
       // Evaluate an open answer against the correct answer
       const { userAnswer, correctAnswer, question, bloomLevel: qBloomLevel } = body;
       return handleEvaluateOpen(anthropic, question, userAnswer, correctAnswer, qBloomLevel || 3);
+    }
+
+    if (mode === 're_evaluate_open') {
+      // Re-evaluate with student feedback about the evaluation
+      const { userAnswer, correctAnswer, question, bloomLevel: qBloomLevel, previousEvaluation, studentFeedback } = body;
+      return handleReEvaluateOpen(anthropic, question, userAnswer, correctAnswer, qBloomLevel || 3, previousEvaluation, studentFeedback);
     }
 
     if (mode === 'analyze_mistakes') {
@@ -587,6 +593,95 @@ ${isShortExpected
   });
 }
 
+// Re-evaluate an open answer considering student feedback about the previous evaluation
+async function handleReEvaluateOpen(
+  anthropic: Anthropic,
+  question: string,
+  userAnswer: string,
+  correctAnswer: string,
+  bloomLevel: number,
+  previousEvaluation: { score: number; feedback: string; keyPointsCovered: string[]; keyPointsMissed: string[] },
+  studentFeedback: string
+) {
+  const modelId = 'claude-opus-4-6';
+
+  const response = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: 1024,
+    messages: [{
+      role: 'user',
+      content: `Ти си справедлив медицински преподавател. Преоцени отговора на студента, като вземеш предвид неговата обратна връзка.
+
+ВЪПРОС: ${question}
+
+ПРАВИЛЕН ОТГОВОР (reference):
+${correctAnswer}
+
+ОТГОВОР НА СТУДЕНТА:
+${userAnswer}
+
+ПРЕДИШНА ОЦЕНКА:
+- Score: ${previousEvaluation.score}
+- Feedback: ${previousEvaluation.feedback}
+- Покрити точки: ${previousEvaluation.keyPointsCovered.join(', ')}
+- Пропуснати точки: ${previousEvaluation.keyPointsMissed.join(', ')}
+
+ОБРАТНА ВРЪЗКА ОТ СТУДЕНТА:
+${studentFeedback}
+
+ИНСТРУКЦИИ:
+- Внимателно прочети обратната връзка на студента
+- Ако студентът има ПРАВО (напр. въпросът пита за конкретна помпа, а ти наказваш за друга) — коригирай оценката НАГОРЕ
+- Ако студентът ГРЕШИ — запази оценката и обясни ЗАЩО
+- Бъди ЧЕСТЕН и СПРАВЕДЛИВ — оценявай САМО спрямо ОБХВАТА на въпроса
+- Ако въпросът пита за конкретен механизъм/структура, НЕ наказвай за неспоменаване на други механизми/структури
+
+Върни САМО валиден JSON:
+{
+  "score": <0.0-1.0>,
+  "isCorrect": <true ако score >= 0.7>,
+  "feedback": "<нова обратна връзка, обяснявайки какво е променено и защо>",
+  "keyPointsCovered": ["<покрити ключови точки>"],
+  "keyPointsMissed": ["<наистина пропуснати ключови точки спрямо ОБХВАТА на въпроса>"]
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let evaluation;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    evaluation = {
+      score: previousEvaluation.score,
+      isCorrect: previousEvaluation.score >= 0.7,
+      feedback: 'Не успях да преоценя. Запазена е предишната оценка.',
+      keyPointsCovered: previousEvaluation.keyPointsCovered,
+      keyPointsMissed: previousEvaluation.keyPointsMissed
+    };
+  }
+
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    evaluation,
+    model: 'opus',
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
+}
+
 // Enrich custom questions — classify Bloom level + generate answers using Haiku (cost-efficient)
 async function handleEnrichCustomQuestions(
   anthropic: Anthropic,
@@ -882,13 +977,11 @@ Intelligently select:
 - The most important concepts to test
 - Questions that efficiently assess deep understanding
 
-QUESTION TYPE DISTRIBUTION (ВАЖНО — 7 ТИПА!):
+QUESTION TYPE DISTRIBUTION (ВАЖНО — 5 ТИПА!):
 Use a DIVERSE mix of question types. The student benefits from varied testing formats:
-- "open" (25-35%) — free text, tests deep understanding (Bloom 3-6)
-- "short_answer" (10-20%) — кратък отговор, 1-3 sentences (Bloom 2-4)
+- "open" (35-45%) — free text, tests deep understanding and RECALL (Bloom 3-6). За механизми, процеси, каскади ВИНАГИ използвай open — "Обясни механизма..." тества recall, не recognition!
+- "short_answer" (15-20%) — кратък отговор, 1-3 sentences (Bloom 2-4)
 - "fill_blank" (10-15%) — попълни липсващия термин/факт (Bloom 1-3)
-- "matching" (5-10%) — свържи 3-5 двойки термин↔определение (Bloom 2-4)
-- "ordering" (5-10%) — подреди 3-6 стъпки в правилен ред (Bloom 3-5)
 - "multiple_choice" (15-20%) — 4 опции, фактологични въпроси (Bloom 1-3)
 - "case_study" (10-15%) — клинични сценарии с опции (Bloom 4-6)
 
@@ -906,19 +999,11 @@ FOR "short_answer":
 FOR "fill_blank":
 { "type": "fill_blank", "question": "Текст с ____ на мястото на липсващия термин", "correctAnswer": "липсващият термин", "acceptableAnswers": ["алтернатива1", "алтернатива2"], "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
 
-FOR "matching":
-{ "type": "matching", "question": "Свържете елементите", "pairs": [{"left": "термин1", "right": "определение1"}, {"left": "термин2", "right": "определение2"}], "correctAnswer": "see pairs", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
-
-FOR "ordering":
-{ "type": "ordering", "question": "Подредете стъпките", "items": ["първа стъпка", "втора стъпка", "трета стъпка"], "correctAnswer": "see items", "explanation": "...", "bloomLevel": 1-6, "concept": "..." }
-
 IMPORTANT:
 - Questions must be in Bulgarian
 - Focus on clinically relevant concepts
-- "matching" MUST have 3-5 pairs, "ordering" MUST have 3-6 items
 - "fill_blank" question MUST contain exactly one ____ (4 underscores) for the blank
 - "fill_blank" acceptableAnswers MUST include common spelling variants: with/without hyphens, spaces, dashes (e.g. if correctAnswer is "мастни киселини", add "мастни-киселини")
-- МЕХАНИЗМИ И ПРОЦЕСИ: Когато тестваш механизъм, патогенеза, каскада или последователност от стъпки — ВИНАГИ предпочитай "open" (Обясни механизма...) вместо "ordering". Ordering дава стъпките наготово (recognition), а open изисква студентът да ги знае наизуст (recall). Ordering използвай САМО за прости списъци или класификации, НЕ за механизми!
 - For "open" questions, correctAnswer MUST MATCH the length the student sees:
   * Bloom 1-2: EXACTLY 2-3 sentences
   * Bloom 3-4: EXACTLY 3-5 sentences

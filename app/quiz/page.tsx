@@ -86,8 +86,6 @@ function QuizContent() {
   const [openHint, setOpenHint] = useState<string | null>(null);
   const [openHintLoading, setOpenHintLoading] = useState(false);
   // New question type state
-  const [matchingAnswers, setMatchingAnswers] = useState<Record<string, string>>({});
-  const [orderingItems, setOrderingItems] = useState<string[]>([]);
   const [fillBlankAnswer, setFillBlankAnswer] = useState('');
   const [deleteQuestionIndex, setDeleteQuestionIndex] = useState<number | null>(null);
 
@@ -707,12 +705,6 @@ function QuizContent() {
       case 'fill_blank':
         answer = fillBlankAnswer.trim();
         break;
-      case 'matching':
-        answer = JSON.stringify(matchingAnswers);
-        break;
-      case 'ordering':
-        answer = JSON.stringify(orderingItems);
-        break;
       case 'open':
       case 'short_answer':
       default:
@@ -774,18 +766,6 @@ function QuizContent() {
     setOpenAnswer('');
     setOpenHint(null);
     setFillBlankAnswer('');
-    setMatchingAnswers({});
-    // Shuffle ordering items
-    if (question.type === 'ordering' && question.items) {
-      const shuffled = [...question.items].sort(() => Math.random() - 0.5);
-      // Ensure it's not already in correct order
-      if (JSON.stringify(shuffled) === JSON.stringify(question.items)) {
-        shuffled.reverse();
-      }
-      setOrderingItems(shuffled);
-    } else {
-      setOrderingItems([]);
-    }
   };
 
   const handleNext = () => {
@@ -824,10 +804,6 @@ function QuizContent() {
         answer = selectedAnswer; break;
       case 'fill_blank':
         answer = fillBlankAnswer.trim() || null; break;
-      case 'matching':
-        answer = Object.keys(matchingAnswers).length > 0 ? JSON.stringify(matchingAnswers) : null; break;
-      case 'ordering':
-        answer = orderingItems.length > 0 ? JSON.stringify(orderingItems) : null; break;
       default:
         answer = openAnswer || null; break;
     }
@@ -902,6 +878,48 @@ function QuizContent() {
     // Reset explanation view since we moved to a new question
     setShowExplanation(false);
     setDeleteQuestionIndex(null);
+  };
+
+  // Re-evaluate open answer with student feedback
+  const handleReEvaluate = async (index: number, feedback: string) => {
+    const question = quizState.questions[index];
+    const userAnswer = quizState.answers[index];
+    const prevEval = openEvaluations[index];
+    if (!question || !userAnswer || !prevEval) return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return;
+
+    setIsEvaluatingOpen(true);
+    try {
+      const response = await fetchWithTimeout('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 're_evaluate_open',
+          question: question.question,
+          userAnswer,
+          correctAnswer: question.correctAnswer,
+          bloomLevel: question.bloomLevel || 3,
+          previousEvaluation: prevEval,
+          studentFeedback: feedback
+        }),
+        signal: gen.abortControllerRef.current?.signal
+      });
+
+      const result = await response.json();
+      if (result.evaluation) {
+        setOpenEvaluations(prev => ({
+          ...prev,
+          [index]: result.evaluation
+        }));
+        if (result.usage) incrementApiCalls(result.usage.cost);
+      }
+    } catch {
+      // Keep previous evaluation on error
+    }
+    setIsEvaluatingOpen(false);
   };
 
   // Analyze mistakes using AI
@@ -1390,8 +1408,6 @@ function QuizContent() {
     setCountWarning(null);
     setShowEarlyStopConfirm(false);
     setShowBackConfirm(false);
-    setMatchingAnswers({});
-    setOrderingItems([]);
     setFillBlankAnswer('');
   };
 
@@ -1632,14 +1648,11 @@ function QuizContent() {
         onNext={handleNext}
         onEarlyStop={handleEarlyStop}
         onBack={() => { setShowBackConfirm(false); router.push('/quiz'); }}
-        matchingAnswers={matchingAnswers}
-        setMatchingAnswers={setMatchingAnswers}
-        orderingItems={orderingItems}
-        setOrderingItems={setOrderingItems}
         fillBlankAnswer={fillBlankAnswer}
         setFillBlankAnswer={setFillBlankAnswer}
         onEditQuestion={handleEditQuestion}
         onDeleteQuestion={(idx) => setDeleteQuestionIndex(idx)}
+        onReEvaluate={handleReEvaluate}
       />
       {/* Cognitive offloading warning (must render in quiz view) */}
       <ConfirmDialog

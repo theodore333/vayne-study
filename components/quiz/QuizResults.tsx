@@ -131,8 +131,7 @@ export function QuizResults({
                         </span>
                         <span className="text-xs text-slate-500 font-mono">
                           {q.type === 'case_study' ? 'Казус' : q.type === 'open' ? 'Отворен' :
-                           q.type === 'fill_blank' ? 'Попълни' : q.type === 'short_answer' ? 'Кратък' :
-                           q.type === 'matching' ? 'Свържи' : q.type === 'ordering' ? 'Подреди' : 'Избор'}
+                           q.type === 'fill_blank' ? 'Попълни' : q.type === 'short_answer' ? 'Кратък' : 'Избор'}
                         </span>
                         {q.concept && (
                           <span className="text-xs text-purple-400 font-mono ml-auto">
@@ -149,26 +148,13 @@ export function QuizResults({
                         <div className="bg-red-500/10 rounded p-2 border-l-2 border-red-500">
                           <span className="text-red-400 font-semibold">Твой отговор: </span>
                           <span className="text-red-300">
-                            {!userAnswer ? '(празен)' :
-                             q.type === 'matching' ? (() => {
-                               try { const pairs = JSON.parse(userAnswer) as Record<string, string>;
-                                 return Object.entries(pairs).map(([l, r]) => `${l} → ${r}`).join('; ');
-                               } catch { return userAnswer; }
-                             })() :
-                             q.type === 'ordering' ? (() => {
-                               try { const items = JSON.parse(userAnswer) as string[];
-                                 return items.map((it, idx) => `${idx + 1}. ${it}`).join('; ');
-                               } catch { return userAnswer; }
-                             })() :
-                             userAnswer}
+                            {!userAnswer ? '(празен)' : userAnswer}
                           </span>
                         </div>
                         <div className="bg-green-500/10 rounded p-2 border-l-2 border-green-500">
                           <span className="text-green-400 font-semibold">Правилен: </span>
                           <span className="text-green-300">
-                            {q.type === 'matching' && q.pairs ? q.pairs.map(p => `${p.left} → ${p.right}`).join('; ') :
-                             q.type === 'ordering' && q.items ? q.items.map((it, idx) => `${idx + 1}. ${it}`).join('; ') :
-                             q.correctAnswer}
+                            {q.correctAnswer}
                           </span>
                         </div>
                         {q.explanation && (

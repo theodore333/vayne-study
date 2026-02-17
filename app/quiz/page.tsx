@@ -941,7 +941,7 @@ function QuizContent() {
   };
 
   // Analyze mistakes using AI
-  const analyzeMistakes = async () => {
+  const analyzeMistakes = async (selfReflection?: string, errorTypes?: string[]) => {
     if (isAnalyzingMistakes) return;
 
     const apiKey = localStorage.getItem('claude-api-key');
@@ -992,6 +992,8 @@ function QuizContent() {
           mistakes,
           topicName: topic.name,
           subjectName: subject.name,
+          selfReflection: selfReflection || undefined,
+          errorTypes: errorTypes?.length ? errorTypes : undefined,
           studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
             name: t.name, slug: t.slug, howToApply: t.howToApply.substring(0, 150)
           }))

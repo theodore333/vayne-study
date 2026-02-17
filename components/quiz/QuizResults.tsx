@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Brain, CheckCircle, XCircle, RefreshCw, ArrowLeft, Sparkles, Target, FileText, Clock, Repeat, Copy } from 'lucide-react';
+import { useState } from 'react';
+import { Brain, CheckCircle, XCircle, RefreshCw, ArrowLeft, Sparkles, Target, FileText, Clock, Repeat, Copy, MessageSquare, Send } from 'lucide-react';
 import { Question, OpenAnswerEvaluation, MistakeAnalysis, calculateScore, getGradeFromScore, isAnswerCorrect } from '@/lib/quiz-types';
 import { showToast } from '@/components/Toast';
 
@@ -26,7 +27,94 @@ interface QuizResultsProps {
   onResetCloze: () => void;
   mistakeAnalysis: MistakeAnalysis | null;
   isAnalyzingMistakes: boolean;
-  onAnalyzeMistakes: () => void;
+  onAnalyzeMistakes: (selfReflection: string, errorTypes: string[]) => void;
+}
+
+const ERROR_TYPES = [
+  { id: 'concept_gap', label: 'Не знаех концепцията', desc: 'Не съм учил или не помня' },
+  { id: 'confusion', label: 'Объркване на сходни понятия', desc: 'Знам ги, но ги бъркам' },
+  { id: 'detail_miss', label: 'Пропуснах детайл', desc: 'Знам общо, но пропуснах конкретика' },
+  { id: 'rush', label: 'Прибързах / не прочетох', desc: 'Знаех отговора, но не внимавах' },
+  { id: 'application', label: 'Не можах да приложа', desc: 'Знам теорията, но не практически' },
+];
+
+function SelfReflectionForm({ onSubmit }: { onSubmit: (reflection: string, errorTypes: string[]) => void }) {
+  const [showForm, setShowForm] = useState(false);
+  const [reflection, setReflection] = useState('');
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+
+  if (!showForm) {
+    return (
+      <button
+        onClick={() => setShowForm(true)}
+        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg font-mono hover:from-purple-700 hover:to-indigo-700 transition-all"
+      >
+        <Brain size={20} /> Анализирай грешките
+      </button>
+    );
+  }
+
+  return (
+    <div className="bg-slate-800/50 border border-purple-500/30 rounded-xl p-6 space-y-4">
+      <div className="flex items-center gap-2 text-purple-400 font-mono font-semibold">
+        <MessageSquare size={18} />
+        Първо помисли — после AI
+      </div>
+      <p className="text-xs text-slate-400 font-mono">
+        Преди AI да анализира, помисли сам/а: какво сбърка и защо? Това е по-полезно от пасивно четене на анализ.
+      </p>
+
+      <div>
+        <label className="text-xs text-slate-500 font-mono mb-1.5 block">Кои въпроси сбърка и защо?</label>
+        <textarea
+          value={reflection}
+          onChange={(e) => setReflection(e.target.value)}
+          rows={3}
+          placeholder="Напр. &quot;Объркал съм Na/K помпата с Ca помпата, не помня каскадата при хипоксия...&quot;"
+          className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none resize-none placeholder:text-slate-600"
+          autoFocus
+        />
+      </div>
+
+      <div>
+        <label className="text-xs text-slate-500 font-mono mb-1.5 block">Какъв тип грешки допусна?</label>
+        <div className="flex flex-wrap gap-2">
+          {ERROR_TYPES.map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setSelectedTypes(prev => {
+                const next = new Set(prev);
+                next.has(id) ? next.delete(id) : next.add(id);
+                return next;
+              })}
+              className={`px-3 py-1.5 text-xs font-mono rounded-lg border transition-colors ${
+                selectedTypes.has(id)
+                  ? 'bg-purple-500/20 border-purple-500 text-purple-300'
+                  : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-2">
+        <button
+          onClick={() => onSubmit('', [])}
+          className="px-4 py-2 text-xs font-mono text-slate-500 hover:text-slate-300 transition-colors"
+        >
+          Пропусни →
+        </button>
+        <button
+          onClick={() => onSubmit(reflection.trim(), [...selectedTypes])}
+          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg font-mono text-sm hover:from-purple-700 hover:to-indigo-700 transition-all"
+        >
+          <Send size={14} /> Покажи AI анализа
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function QuizResults({
@@ -296,16 +384,11 @@ export function QuizResults({
           </div>
         )}
 
-        {/* AI Mistake Analysis Section */}
+        {/* AI Mistake Analysis Section — with self-reflection first */}
         {wrongCount > 0 && (
           <div className="mt-8 w-full max-w-2xl mx-auto">
             {!mistakeAnalysis && !isAnalyzingMistakes && (
-              <button
-                onClick={onAnalyzeMistakes}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-semibold rounded-lg font-mono hover:from-purple-700 hover:to-indigo-700 transition-all"
-              >
-                <Brain size={20} /> Анализирай грешките с AI
-              </button>
+              <SelfReflectionForm onSubmit={onAnalyzeMistakes} />
             )}
 
             {isAnalyzingMistakes && (

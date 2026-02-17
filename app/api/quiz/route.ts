@@ -135,8 +135,8 @@ export async function POST(request: Request) {
 
     if (mode === 'analyze_mistakes') {
       // Analyze wrong answers pattern and provide study recommendations
-      const { mistakes, topicName: topic, subjectName: subject } = body;
-      return handleAnalyzeMistakes(anthropic, mistakes, topic, subject, studyTechniques);
+      const { mistakes, topicName: topic, subjectName: subject, selfReflection, errorTypes } = body;
+      return handleAnalyzeMistakes(anthropic, mistakes, topic, subject, studyTechniques, selfReflection, errorTypes);
     }
 
     if (mode === 'open_hint') {
@@ -1088,7 +1088,9 @@ async function handleAnalyzeMistakes(
   mistakes: MistakeForAnalysis[],
   topicName: string,
   subjectName: string,
-  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null
+  studyTechniques?: Array<{ name: string; slug: string; howToApply: string }> | null,
+  selfReflection?: string,
+  errorTypes?: string[]
 ) {
   if (!mistakes || mistakes.length === 0) {
     return NextResponse.json({
@@ -1121,7 +1123,17 @@ async function handleAnalyzeMistakes(
 
 ГРЕШКИ:
 ${mistakesText}
+${selfReflection ? `
+САМООЦЕНКА НА СТУДЕНТА:
+"${selfReflection}"
+${errorTypes && errorTypes.length > 0 ? `Типове грешки (self-identified): ${errorTypes.join(', ')}` : ''}
 
+ВАЖНО: Студентът вече е помислил за грешките си. В анализа:
+- Ако самооценката е ТОЧНА — потвърди и допълни с конкретни стъпки
+- Ако студентът ПРОПУСКА важен проблем — посочи го деликатно
+- Ако самооценката е ГРЕШНА — коригирай учтиво и обясни защо
+- Дай КРЕДИТ за правилната саморефлексия — това е ценно умение
+` : ''}
 Анализирай pattern-ите в грешките и дай КОНКРЕТНИ, ДЕЙСТВАЩИ съвети.
 
 Отговори САМО с валиден JSON (без markdown, без \`\`\`, без текст преди/след JSON):

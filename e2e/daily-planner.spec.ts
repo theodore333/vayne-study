@@ -20,11 +20,11 @@ test.describe('Daily Planner (Днешен план)', () => {
     expect(hasDate || hasNumericDate).toBeTruthy();
   });
 
-  test('should display level/xp or user progress', async ({ page }) => {
-    // Look for level indicator in various formats
-    const hasLevel = await page.locator('text=/Lv\\.|Level|Ниво|XP/i').count() > 0;
-    const hasProgress = await page.locator('[class*="progress"], [class*="Progress"]').count() > 0;
-    expect(hasLevel || hasProgress).toBeTruthy();
+  test('should display daily plan content', async ({ page }) => {
+    // Look for plan-related UI elements (tasks, edit button, or empty state)
+    const hasPlanContent = await page.locator('text=/Редактирай|Ръчен план|Няма задачи|теми/i').count() > 0;
+    const hasButtons = await page.locator('button').count() > 0;
+    expect(hasPlanContent || hasButtons).toBeTruthy();
   });
 
   test('should show daily status controls', async ({ page }) => {

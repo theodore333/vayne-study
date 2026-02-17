@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat, MessageSquare, X, Send } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, calculateRetrievability, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
+import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -246,6 +246,29 @@ export default function TodayPage() {
     [data.timerSessions, data.subjects, data.questionBanks]
   );
 
+  const spacingTechnique = useMemo(() =>
+    (data.studyTechniques || []).find(t => t.slug === 'spacing'),
+    [data.studyTechniques]
+  );
+
+  // Strip materials from subjects to reduce payload size for AI plan
+  const subjectsForPlan = useMemo(() => activeSubjects.map(s => ({
+    ...s,
+    topics: s.topics.map(t => ({
+      id: t.id,
+      number: t.number,
+      name: t.name,
+      status: t.status,
+      avgGrade: t.avgGrade,
+      quizHistory: t.quizHistory,
+      fsrs: t.fsrs,
+      quizCount: t.quizCount,
+      lastReview: t.lastReview,
+      size: t.size,
+      hasMaterial: !!(t.material && t.material.trim().length > 0) || !!(t.materialImages && t.materialImages.length > 0),
+    }))
+  })), [activeSubjects]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -253,11 +276,6 @@ export default function TodayPage() {
       </div>
     );
   }
-
-  const spacingTechnique = useMemo(() =>
-    (data.studyTechniques || []).find(t => t.slug === 'spacing'),
-    [data.studyTechniques]
-  );
 
   const toggleTask = (taskId: string, task?: DailyTask) => {
     const wasCompleted = completedTasks.has(taskId);
@@ -334,26 +352,35 @@ export default function TodayPage() {
       });
 
       const result = await response.json();
-      if (result.tasks && result.tasks.length > 0) {
-        // Merge: keep manual plan, add only NEW tasks from AI (topics not already in manual plan)
-        const manualTopicIds = new Set(manualPlan.flatMap(t => t.topics.map(tp => tp.id)));
-        const newTasks = result.tasks.filter((task: DailyTask) =>
-          task.topics.some(tp => !manualTopicIds.has(tp.id))
-        ).map((task: DailyTask) => ({
-          ...task,
-          topics: task.topics.filter(tp => !manualTopicIds.has(tp.id)),
-          typeLabel: '🤖 ' + task.typeLabel,
-        })).filter((task: DailyTask) => task.topics.length > 0);
+      if (result.error) {
+        alert('AI грешка: ' + result.error);
+        return;
+      }
+      if (!result.tasks || result.tasks.length === 0) {
+        alert('AI не намери нищо за допълване — планът ти е добър!');
+        return;
+      }
+      // Merge: keep manual plan, add only NEW tasks from AI (topics not already in manual plan)
+      const manualTopicIds = new Set(manualPlan.flatMap(t => t.topics.map(tp => tp.id)));
+      const newTasks = result.tasks.filter((task: DailyTask) =>
+        task.topics.some(tp => !manualTopicIds.has(tp.id))
+      ).map((task: DailyTask) => ({
+        ...task,
+        topics: task.topics.filter(tp => !manualTopicIds.has(tp.id)),
+        typeLabel: '🤖 ' + task.typeLabel,
+      })).filter((task: DailyTask) => task.topics.length > 0);
 
-        if (newTasks.length > 0) {
-          const merged = [...manualPlan, ...newTasks];
-          handleSaveCustomPlan(merged);
-          // Close both modals
-          setShowEditModal(false);
-          setShowEditModalEmpty(false);
-        } else {
-          alert('AI не намери нищо за допълване — планът ти е добър! 👍');
-        }
+      if (result.cost) {
+        incrementApiCalls(result.cost);
+      }
+
+      if (newTasks.length > 0) {
+        const merged = [...manualPlan, ...newTasks];
+        handleSaveCustomPlan(merged);
+        setShowEditModal(false);
+        setShowEditModalEmpty(false);
+      } else {
+        alert('AI не намери нищо за допълване — планът ти е добър!');
       }
     } catch (err) {
       alert('Грешка при AI ревю: ' + getFetchErrorMessage(err));
@@ -361,23 +388,6 @@ export default function TodayPage() {
       setLoadingAiReview(false);
     }
   };
-
-  // Strip materials from subjects to reduce payload size for AI plan
-  const subjectsForPlan = useMemo(() => activeSubjects.map(s => ({
-    ...s,
-    topics: s.topics.map(t => ({
-      id: t.id,
-      number: t.number,
-      name: t.name,
-      status: t.status,
-      avgGrade: t.avgGrade,
-      quizHistory: t.quizHistory,
-      quizCount: t.quizCount,
-      lastReview: t.lastReview,
-      size: t.size,
-      hasMaterial: !!(t.material && t.material.trim().length > 0) || !!(t.materialImages && t.materialImages.length > 0),
-    }))
-  })), [activeSubjects]);
 
   // Generate bonus AI plan (when 100% complete)
   const handleGenerateBonusPlan = async (mode: 'tomorrow' | 'review' | 'weak') => {
@@ -489,6 +499,10 @@ export default function TodayPage() {
         setPlanIsCustomized(true);
         setAiPlanReasoning(result.reasoning || null);
 
+        // Reset completed states for new plan
+        setCompletedTasks(new Set());
+        setCompletedTopics(new Set());
+
         if (result.cost) {
           incrementApiCalls(result.cost);
         }
@@ -545,6 +559,10 @@ export default function TodayPage() {
         setAiPlanReasoning(result.reasoning || null);
         setShowFeedbackModal(false);
         setPlanFeedback('');
+
+        // Reset completed states for new plan
+        setCompletedTasks(new Set());
+        setCompletedTopics(new Set());
 
         if (result.cost) {
           incrementApiCalls(result.cost);

@@ -76,7 +76,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   };
 
   // Handle adding a new task
-  const handleAddTask = (subject: Subject, topics: Topic[]) => {
+  const handleAddTask = (subject: Subject, topics: Topic[], customDescription?: string) => {
     const newTask: DailyTask = {
       id: generateId(),
       subjectId: subject.id,
@@ -84,7 +84,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
       subjectColor: subject.color,
       type: 'normal',
       typeLabel: '📝 Добавена ръчно',
-      description: 'Ръчно добавена задача',
+      description: customDescription || 'Ръчно добавена задача',
       topics: topics,
       estimatedMinutes: topics.length * 20,
       completed: false
@@ -171,6 +171,9 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
                       <div className="text-sm font-medium text-slate-200 font-mono mt-1 truncate">
                         {task.subjectName}
                       </div>
+                      {task.description && task.description !== 'Ръчно добавена задача' && (
+                        <div className="text-xs text-cyan-400/80 font-mono mt-0.5 truncate">{task.description}</div>
+                      )}
                       <div className="text-xs text-slate-500 font-mono">{task.topics.length} теми</div>
                     </div>
                     <button
@@ -327,11 +330,12 @@ function AddTaskPanel({
 }: {
   subjects: Subject[];
   topicsInPlan: Set<string>;
-  onAdd: (subject: Subject, topics: Topic[]) => void;
+  onAdd: (subject: Subject, topics: Topic[], description?: string) => void;
   onCancel: () => void;
 }) {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
+  const [taskDescription, setTaskDescription] = useState('');
 
   const availableTopics = useMemo(() => {
     if (!selectedSubject) return [];
@@ -353,7 +357,7 @@ function AddTaskPanel({
   const handleAdd = () => {
     if (!selectedSubject || selectedTopics.size === 0) return;
     const topics = selectedSubject.topics.filter(t => selectedTopics.has(t.id));
-    onAdd(selectedSubject, topics);
+    onAdd(selectedSubject, topics, taskDescription.trim() || undefined);
   };
 
   return (
@@ -415,6 +419,22 @@ function AddTaskPanel({
               ))
             )}
           </div>
+        </div>
+      )}
+
+      {/* Task Description */}
+      {selectedTopics.size > 0 && (
+        <div>
+          <label className="text-xs text-slate-500 font-mono block mb-2">
+            Какво ще правиш с тях? (по избор):
+          </label>
+          <textarea
+            value={taskDescription}
+            onChange={(e) => setTaskDescription(e.target.value)}
+            placeholder="напр. прочети, направи quiz, преговори, резюме..."
+            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none resize-none"
+            rows={2}
+          />
         </div>
       )}
 

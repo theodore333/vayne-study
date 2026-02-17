@@ -627,21 +627,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteSubject = useCallback((id: string) => {
     updateData(prev => {
-      // Find the subject to calculate stats to decrement
-      const subjectToDelete = prev.subjects.find(s => s.id === id);
-      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
-
-      if (subjectToDelete) {
-        subjectToDelete.topics.forEach(topic => {
-          if (topic.status !== 'gray') statsDecrements.topicsCompleted++;
-          if (topic.status === 'green') statsDecrements.greenTopics++;
-          statsDecrements.quizzesTaken += topic.quizCount || 0;
-        });
-      }
+      // Collect all topic IDs being deleted for linked topic cleanup
+      const deletedTopicIds = new Set(
+        prev.subjects.find(s => s.id === id)?.topics.map(t => t.id) || []
+      );
 
       return {
         ...prev,
-        subjects: prev.subjects.filter(s => s.id !== id),
+        subjects: prev.subjects.filter(s => s.id !== id).map(s => {
+          // Clean up dangling linkedTopicIds referencing deleted subject's topics
+          const hasLink = s.topics.some(t => t.linkedTopicIds?.some(lid => deletedTopicIds.has(lid)));
+          if (!hasLink) return s;
+          return { ...s, topics: s.topics.map(t => ({
+            ...t,
+            linkedTopicIds: t.linkedTopicIds?.filter(lid => !deletedTopicIds.has(lid)),
+          })) };
+        }),
         schedule: prev.schedule.filter(c => c.subjectId !== id),
         academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
         questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
@@ -689,7 +690,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           wrongAnswers: [],
           highlights: [],
           customQuestions: [],
-          fsrs: undefined
+          fsrs: undefined,
+          linkedTopicIds: undefined,
+          overlapAnalysis: undefined
         }))
       };
 
@@ -810,13 +813,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const emptyTrash = useCallback(() => {
     updateData(prev => {
       const trashedSubjects = prev.subjects.filter(s => s.deletedAt);
-      let totalDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
-
       const trashedIds = new Set(trashedSubjects.map(s => s.id));
+      // Collect all topic IDs being trashed for linked topic cleanup
+      const trashedTopicIds = new Set(trashedSubjects.flatMap(s => s.topics.map(t => t.id)));
 
       return {
         ...prev,
-        subjects: prev.subjects.filter(s => !s.deletedAt),
+        subjects: prev.subjects.filter(s => !s.deletedAt).map(s => {
+          const hasLink = s.topics.some(t => t.linkedTopicIds?.some(lid => trashedTopicIds.has(lid)));
+          if (!hasLink) return s;
+          return { ...s, topics: s.topics.map(t => ({
+            ...t,
+            linkedTopicIds: t.linkedTopicIds?.filter(lid => !trashedTopicIds.has(lid)),
+          })) };
+        }),
         schedule: prev.schedule.filter(c => !trashedIds.has(c.subjectId)),
         academicEvents: prev.academicEvents.filter(e => !trashedIds.has(e.subjectId)),
         questionBanks: prev.questionBanks.filter(b => !trashedIds.has(b.subjectId)),
@@ -861,9 +871,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateData(prev => ({
       ...prev,
       subjects: prev.subjects.map(s => {
-        if (s.id !== subjectId) return s;
-        const filtered = s.topics.filter(t => t.id !== topicId);
-        return { ...s, topics: filtered.map((t, i) => ({ ...t, number: i + 1 })) };
+        if (s.id === subjectId) {
+          const filtered = s.topics.filter(t => t.id !== topicId);
+          return { ...s, topics: filtered.map((t, i) => ({
+            ...t,
+            number: i + 1,
+            linkedTopicIds: t.linkedTopicIds?.filter(id => id !== topicId),
+          })) };
+        }
+        // Clean up dangling linkedTopicIds in other subjects
+        const hasLink = s.topics.some(t => t.linkedTopicIds?.includes(topicId));
+        if (!hasLink) return s;
+        return { ...s, topics: s.topics.map(t => ({
+          ...t,
+          linkedTopicIds: t.linkedTopicIds?.filter(id => id !== topicId),
+        })) };
       }),
     }));
   }, [updateData]);

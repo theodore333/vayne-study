@@ -1643,7 +1643,7 @@ export function generateDailyPlan(
           consolidationBySubject.set(subject.id, { topics: [topic], subject });
         }
         consolidationCount++;
-        usedTopicIds.add(topic.id);
+        markTopicsUsed([topic], usedTopicIds);
       }
 
       for (const [, { topics: consTopics, subject }] of consolidationBySubject) {

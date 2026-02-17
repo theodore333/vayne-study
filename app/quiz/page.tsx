@@ -1578,6 +1578,20 @@ function QuizContent() {
         fillBlankAnswer={fillBlankAnswer}
         setFillBlankAnswer={setFillBlankAnswer}
       />
+      {/* Cognitive offloading warning (must render in quiz view) */}
+      <ConfirmDialog
+        isOpen={!!pendingCogAction}
+        onClose={() => setPendingCogAction(null)}
+        onConfirm={() => {
+          pendingCogAction?.();
+          setPendingCogAction(null);
+        }}
+        title="Опитай първо сам!"
+        message="Активното припомняне укрепва паметта многократно повече от четенето на подсказки. Опитай да си спомниш сам преди да използваш AI помощ."
+        confirmText="Покажи подсказка"
+        cancelText="Ще опитам сам"
+        variant="warning"
+      />
       </>
     );
   }
@@ -1765,6 +1779,20 @@ function QuizContent() {
             </button>
           </div>
         </div>
+        {/* Cognitive offloading warning (must render in free recall view) */}
+        <ConfirmDialog
+          isOpen={!!pendingCogAction}
+          onClose={() => setPendingCogAction(null)}
+          onConfirm={() => {
+            pendingCogAction?.();
+            setPendingCogAction(null);
+          }}
+          title="Опитай първо сам!"
+          message="Активното припомняне укрепва паметта многократно повече от четенето на подсказки. Опитай да си спомниш сам преди да използваш AI помощ."
+          confirmText="Покажи подсказка"
+          cancelText="Ще опитам сам"
+          variant="warning"
+        />
       </div>
     );
   }

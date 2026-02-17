@@ -8,7 +8,6 @@ describe('migrateData', () => {
     expect(Array.isArray(result.schedule)).toBe(true);
     expect(Array.isArray(result.questionBanks)).toBe(true);
     expect(Array.isArray(result.studyTechniques)).toBe(true);
-    expect(result.userProgress).toBeDefined();
     expect(result.lastModified).toBeDefined();
   });
 

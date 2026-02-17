@@ -629,8 +629,8 @@ ${userAnswer}
 ПРЕДИШНА ОЦЕНКА:
 - Score: ${previousEvaluation.score}
 - Feedback: ${previousEvaluation.feedback}
-- Покрити точки: ${previousEvaluation.keyPointsCovered.join(', ')}
-- Пропуснати точки: ${previousEvaluation.keyPointsMissed.join(', ')}
+- Покрити точки: ${Array.isArray(previousEvaluation.keyPointsCovered) ? previousEvaluation.keyPointsCovered.join(', ') : String(previousEvaluation.keyPointsCovered || '')}
+- Пропуснати точки: ${Array.isArray(previousEvaluation.keyPointsMissed) ? previousEvaluation.keyPointsMissed.join(', ') : String(previousEvaluation.keyPointsMissed || '')}
 
 ОБРАТНА ВРЪЗКА ОТ СТУДЕНТА:
 ${studentFeedback}

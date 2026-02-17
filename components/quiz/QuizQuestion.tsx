@@ -453,9 +453,14 @@ export function QuizQuestion({
               </div>
 
               {/* Feedback button for open/short_answer evaluations */}
-              {onReEvaluate && !isEvaluatingOpen && (
+              {onReEvaluate && (
                 <div className="mt-2">
-                  {!showFeedback ? (
+                  {isEvaluatingOpen ? (
+                    <div className="flex items-center gap-2 text-xs font-mono text-amber-400/70">
+                      <div className="w-3 h-3 border-2 border-amber-400/50 border-t-amber-400 rounded-full animate-spin" />
+                      Преоценяване...
+                    </div>
+                  ) : !showFeedback ? (
                     <button
                       onClick={() => setShowFeedback(true)}
                       className="flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-400 transition-colors"

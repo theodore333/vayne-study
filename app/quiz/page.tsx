@@ -903,10 +903,24 @@ function QuizContent() {
     const question = quizState.questions[index];
     const userAnswer = quizState.answers[index];
     const prevEval = openEvaluations[index];
-    if (!question || !userAnswer || !prevEval) return;
+    if (!question || !userAnswer || !prevEval) {
+      console.error('Re-evaluate: missing data', { question: !!question, userAnswer: !!userAnswer, prevEval: !!prevEval, index });
+      return;
+    }
 
     const apiKey = localStorage.getItem('claude-api-key');
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.error('Re-evaluate: no API key');
+      return;
+    }
+
+    // Ensure arrays for API compatibility
+    const safeEval = {
+      score: prevEval.score,
+      feedback: prevEval.feedback,
+      keyPointsCovered: Array.isArray(prevEval.keyPointsCovered) ? prevEval.keyPointsCovered : [],
+      keyPointsMissed: Array.isArray(prevEval.keyPointsMissed) ? prevEval.keyPointsMissed : []
+    };
 
     setIsEvaluatingOpen(true);
     try {
@@ -920,11 +934,18 @@ function QuizContent() {
           userAnswer,
           correctAnswer: question.correctAnswer,
           bloomLevel: question.bloomLevel || 3,
-          previousEvaluation: prevEval,
+          previousEvaluation: safeEval,
           studentFeedback: feedback
         }),
-        signal: gen.abortControllerRef.current?.signal
+        timeout: 120000
       });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        console.error('Re-evaluate API error:', response.status, errData);
+        setIsEvaluatingOpen(false);
+        return;
+      }
 
       const result = await response.json();
       if (result.evaluation) {

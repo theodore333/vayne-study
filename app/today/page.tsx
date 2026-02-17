@@ -149,6 +149,20 @@ export default function TodayPage() {
     [data.subjects]
   );
 
+  // Yesterday's completed topics for consolidation tier
+  const yesterdayCompletedTopicIds = useMemo(() => {
+    if (typeof window === 'undefined') return [];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = toLocalDateStr(yesterdayDate);
+    const stored = localStorage.getItem(`completed-topics-${yesterdayStr}`);
+    try {
+      return stored ? JSON.parse(stored) as string[] : [];
+    } catch {
+      return [];
+    }
+  }, []); // Empty deps — yesterday doesn't change during session
+
   // Auto-mark topics that were reviewed today
   useEffect(() => {
     const reviewedToday = new Set<string>();
@@ -193,9 +207,11 @@ export default function TodayPage() {
       data.academicEvents,
       data.studyTechniques,
       data.techniquePractices,
-      data.academicPeriod
+      data.academicPeriod,
+      data.questionBanks,
+      yesterdayCompletedTopicIds
     ),
-    [activeSubjects, activeSchedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices, data.academicPeriod]
+    [activeSubjects, activeSchedule, data.dailyStatus, data.studyGoals, ankiStats, data.developmentProjects, data.academicEvents, data.studyTechniques, data.techniquePractices, data.academicPeriod, data.questionBanks, yesterdayCompletedTopicIds]
   );
 
   // Calculate syllabus progress/workload

@@ -623,12 +623,17 @@ export function getWeightedMasteryScore(topic: Topic): number {
  * Combines: mastery score, bloom level, time since last review, quiz weight
  * In crunch mode, adds size bonus for gray topics (small topics get higher priority)
  */
-export function getTopicPriority(topic: Topic, inCrunchMode: boolean = false): number {
+export function getTopicPriority(
+  topic: Topic,
+  inCrunchMode: boolean = false,
+  qbWeakness?: { accuracy: number; attempts: number } | null
+): number {
   const masteryScore = getWeightedMasteryScore(topic);
   const bloomLevel = topic.currentBloomLevel || 1;
   const daysSinceReview = getDaysSince(topic.lastReview);
 
   // Base priority from mastery (0-100)
+  // Lower score = needs more attention = selected first
   let priority = masteryScore;
 
   // Bloom level bonus (higher bloom = better understanding)
@@ -642,6 +647,40 @@ export function getTopicPriority(topic: Topic, inCrunchMode: boolean = false): n
   // Status penalty
   const statusPenalty = { gray: 30, orange: 20, yellow: 10, green: 0 };
   priority -= statusPenalty[topic.status];
+
+  // Material bonus for gray topics: topics with material ready are more productive to study
+  if (topic.status === 'gray') {
+    const hasMaterial = (topic.material?.trim()?.length ?? 0) > 0
+      || (topic.materialImages?.length ?? 0) > 0;
+    if (hasMaterial) {
+      priority -= 10; // Higher priority for studyable topics
+    }
+  }
+
+  // Question bank weakness: low accuracy on practiced questions = needs review
+  if (qbWeakness && qbWeakness.attempts >= 3) {
+    if (qbWeakness.accuracy < 60) {
+      priority -= 15; // Significant weakness detected
+    } else if (qbWeakness.accuracy < 75) {
+      priority -= 8; // Moderate weakness
+    }
+  }
+
+  // Recent quiz failure boost: very recent bad scores trigger immediate review
+  const recentHistory = (topic.quizHistory || []).filter(q => {
+    const daysSince = getDaysSince(q.date);
+    return daysSince >= 0 && daysSince <= 3;
+  });
+  if (recentHistory.length > 0) {
+    const worstRecentScore = Math.min(...recentHistory.map(q => q.score));
+    if (worstRecentScore < 40) {
+      priority -= 25; // Critical failure needs immediate attention
+    } else if (worstRecentScore < 50) {
+      priority -= 20; // Bad score needs urgent review
+    } else if (worstRecentScore < 60) {
+      priority -= 10; // Below passing, boost somewhat
+    }
+  }
 
   // Crunch mode: size bonus for gray topics (smaller topics get higher priority)
   // Lower priority score = needs more attention, so we SUBTRACT the bonus
@@ -1075,33 +1114,125 @@ export function calculatePredictedGrade(
   };
 }
 
+/** Filter out topics already assigned to other tasks */
+function filterUsedTopics(topics: Topic[], usedTopicIds: Set<string>): Topic[] {
+  return topics.filter(t => !usedTopicIds.has(t.id));
+}
+
+/** Add all topic IDs from a task's topics to the used set */
+function markTopicsUsed(topics: Topic[], usedTopicIds: Set<string>): void {
+  for (const topic of topics) {
+    usedTopicIds.add(topic.id);
+  }
+}
+
 /**
- * Select topics while keeping related topics together
- * Returns topics sorted/grouped by relations
+ * Get question bank weakness data for a topic.
+ * Returns accuracy (0-100) and attempt count from linked questions.
+ */
+export function getTopicQBWeakness(
+  questionBanks: QuestionBank[],
+  topicId: string
+): { accuracy: number; attempts: number } | null {
+  let totalAttempts = 0;
+  let totalCorrect = 0;
+
+  for (const bank of questionBanks) {
+    for (const q of bank.questions) {
+      if (q.linkedTopicIds?.includes(topicId) && q.stats.attempts > 0) {
+        totalAttempts += q.stats.attempts;
+        totalCorrect += q.stats.correct;
+      }
+    }
+  }
+
+  if (totalAttempts === 0) return null;
+  return {
+    accuracy: Math.round((totalCorrect / totalAttempts) * 100),
+    attempts: totalAttempts
+  };
+}
+
+/**
+ * Select topics with smart priority + material preference + gap filling.
+ * Lower getTopicPriority score = needs more attention = selected first.
  */
 function selectTopicsWithRelations(
   allTopics: Topic[],
   maxCount: number,
-  inCrunchMode: boolean = false
+  inCrunchMode: boolean = false,
+  qbWeaknessMap?: Map<string, { accuracy: number; attempts: number }>
 ): Topic[] {
   if (allTopics.length === 0 || maxCount <= 0) return [];
 
-  // Sort by priority first
-  const sorted = [...allTopics].sort((a, b) => getTopicPriority(a, inCrunchMode) - getTopicPriority(b, inCrunchMode));
+  const getQB = (t: Topic) => qbWeaknessMap?.get(t.id) ?? null;
 
+  // Sort by priority, then material as tie-breaker
+  const sorted = [...allTopics].sort((a, b) => {
+    const priorityDiff = getTopicPriority(a, inCrunchMode, getQB(a)) - getTopicPriority(b, inCrunchMode, getQB(b));
+    if (priorityDiff !== 0) return priorityDiff;
+    // Tie-break: topics with material first
+    const aHas = (a.material?.trim()?.length ?? 0) > 0 || (a.materialImages?.length ?? 0) > 0;
+    const bHas = (b.material?.trim()?.length ?? 0) > 0 || (b.materialImages?.length ?? 0) > 0;
+    if (aHas && !bHas) return -1;
+    if (!aHas && bHas) return 1;
+    return 0;
+  });
+
+  // Phase 1: Pick top N by priority
   const selected: Topic[] = [];
   const selectedIds = new Set<string>();
 
   for (const topic of sorted) {
     if (selected.length >= maxCount) break;
     if (selectedIds.has(topic.id)) continue;
-
-    // Add this topic
     selected.push(topic);
     selectedIds.add(topic.id);
   }
 
-  // Sort by topic number
+  // Phase 2: Gap filling — try to swap weakest selected with an adjacent gap filler
+  // This creates natural topic sequences (5,6,7 instead of 5,9,12)
+  if (selected.length >= 2 && selected.length === maxCount) {
+    const selectedNumbers = new Set(selected.map(t => t.number));
+
+    // Find gap candidates: topics adjacent to already-selected ones
+    const gapCandidates: Topic[] = [];
+    for (const topic of allTopics) {
+      if (selectedIds.has(topic.id)) continue;
+      if (selectedNumbers.has(topic.number - 1) || selectedNumbers.has(topic.number + 1)) {
+        gapCandidates.push(topic);
+      }
+    }
+
+    if (gapCandidates.length > 0) {
+      // Sort gap candidates: prefer those with 2 selected neighbors, then by priority
+      gapCandidates.sort((a, b) => {
+        const aNeighbors = (selectedNumbers.has(a.number - 1) ? 1 : 0) + (selectedNumbers.has(a.number + 1) ? 1 : 0);
+        const bNeighbors = (selectedNumbers.has(b.number - 1) ? 1 : 0) + (selectedNumbers.has(b.number + 1) ? 1 : 0);
+        if (bNeighbors !== aNeighbors) return bNeighbors - aNeighbors;
+        return getTopicPriority(a, inCrunchMode, getQB(a)) - getTopicPriority(b, inCrunchMode, getQB(b));
+      });
+
+      // Find the weakest (highest priority score = least urgent) selected topic
+      const weakest = selected.reduce((worst, t) =>
+        getTopicPriority(t, inCrunchMode, getQB(t)) > getTopicPriority(worst, inCrunchMode, getQB(worst)) ? t : worst
+      );
+      const bestGap = gapCandidates[0];
+
+      const weakestPriority = getTopicPriority(weakest, inCrunchMode, getQB(weakest));
+      const gapPriority = getTopicPriority(bestGap, inCrunchMode, getQB(bestGap));
+
+      // Only swap if gap candidate is reasonably close in priority (within 20 points)
+      if (gapPriority - weakestPriority <= 20) {
+        const weakestIdx = selected.indexOf(weakest);
+        selected[weakestIdx] = bestGap;
+        selectedIds.delete(weakest.id);
+        selectedIds.add(bestGap.id);
+      }
+    }
+  }
+
+  // Sort final selection by topic number for natural reading order
   return selected.sort((a, b) => a.number - b.number);
 }
 
@@ -1115,9 +1246,36 @@ export function generateDailyPlan(
   academicEvents?: AcademicEvent[],
   studyTechniques?: StudyTechnique[],
   techniquePractices?: TechniquePractice[],
-  academicPeriod?: AcademicPeriod
+  academicPeriod?: AcademicPeriod,
+  questionBanks?: QuestionBank[],
+  yesterdayCompletedTopicIds?: string[]
 ): DailyTask[] {
   const tasks: DailyTask[] = [];
+  const usedTopicIds = new Set<string>();
+
+  // Pre-compute QB weakness map for O(1) lookups during priority scoring
+  const qbWeaknessMap = new Map<string, { accuracy: number; attempts: number }>();
+  if (questionBanks && questionBanks.length > 0) {
+    const topicStats = new Map<string, { attempts: number; correct: number }>();
+    for (const bank of questionBanks) {
+      for (const q of bank.questions) {
+        if (q.stats.attempts > 0 && q.linkedTopicIds?.length) {
+          for (const tid of q.linkedTopicIds) {
+            const existing = topicStats.get(tid) || { attempts: 0, correct: 0 };
+            existing.attempts += q.stats.attempts;
+            existing.correct += q.stats.correct;
+            topicStats.set(tid, existing);
+          }
+        }
+      }
+    }
+    for (const [tid, stats] of topicStats) {
+      qbWeaknessMap.set(tid, {
+        accuracy: Math.round((stats.correct / stats.attempts) * 100),
+        attempts: stats.attempts
+      });
+    }
+  }
 
   // Detect crunch mode for priority calculation (disabled in vacation mode)
   const crunchStatus = detectCrunchMode(subjects);
@@ -1204,9 +1362,9 @@ export function generateDailyPlan(
     const subjectWork = subjectWorkload.get(subject.id);
     const topicsToTake = subjectWork ? Math.min(subjectWork.topics, capacityForPriority) : Math.min(5, capacityForPriority);
 
-    // Select topics with related grouping
-    const candidates = subject.topics.filter(t => t.status !== 'green');
-    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode);
+    // Select topics with related grouping (filter already-used topics)
+    const candidates = filterUsedTopics(subject.topics.filter(t => t.status !== 'green'), usedTopicIds);
+    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode, qbWeaknessMap);
 
     if (weakTopics.length > 0) {
       tasks.push({
@@ -1221,6 +1379,7 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20, // ~20 min per topic
         completed: false
       });
+      markTopicsUsed(weakTopics, usedTopicIds);
       capacityForPriority -= weakTopics.length;
     }
   }
@@ -1241,9 +1400,9 @@ export function generateDailyPlan(
     const examFormat = parseExamFormat(subject.examFormat);
     const formatGaps = analyzeFormatGaps(subject);
 
-    // Select topics with related grouping
-    const candidates = subject.topics.filter(t => t.status !== 'green');
-    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode);
+    // Select topics with related grouping (filter already-used topics)
+    const candidates = filterUsedTopics(subject.topics.filter(t => t.status !== 'green'), usedTopicIds);
+    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode, qbWeaknessMap);
 
     if (weakTopics.length > 0) {
       // Format-aware description
@@ -1271,6 +1430,7 @@ export function generateDailyPlan(
         estimatedMinutes: weakTopics.length * 20,
         completed: false
       });
+      markTopicsUsed(weakTopics, usedTopicIds);
       capacityForPriority -= weakTopics.length;
     }
   }
@@ -1296,20 +1456,20 @@ export function generateDailyPlan(
         : subject.topics;
 
       // Prioritize yellow/orange topics (consolidation of learned material)
-      const candidates = eventTopicPool.filter(t =>
+      const candidates = filterUsedTopics(eventTopicPool.filter(t =>
         t.status === 'yellow' || t.status === 'orange'
-      );
+      ), usedTopicIds);
 
       // If no yellow/orange topics, include green topics that need review
       // Also include gray topics if event has specific topicIds (student must cover them)
-      const fallbackStatuses = event.topicIds && event.topicIds.length > 0
+      const fallbackStatuses = filterUsedTopics(event.topicIds && event.topicIds.length > 0
         ? eventTopicPool.filter(t => t.status === 'green' || t.status === 'gray')
-        : eventTopicPool.filter(t => t.status === 'green');
+        : eventTopicPool.filter(t => t.status === 'green'), usedTopicIds);
       const finalCandidates = candidates.length >= topicsToReview
         ? candidates
         : [...candidates, ...fallbackStatuses];
 
-      const selectedTopics = selectTopicsWithRelations(finalCandidates, topicsToReview, inCrunchMode);
+      const selectedTopics = selectTopicsWithRelations(finalCandidates, topicsToReview, inCrunchMode, qbWeaknessMap);
 
       if (selectedTopics.length > 0) {
         const eventName = event.name || config.label;
@@ -1327,6 +1487,7 @@ export function generateDailyPlan(
           estimatedMinutes: selectedTopics.length * 25, // ~25 min per topic for consolidation
           completed: false
         });
+        markTopicsUsed(selectedTopics, usedTopicIds);
         capacityForPriority -= selectedTopics.length;
       }
     }
@@ -1342,11 +1503,11 @@ export function generateDailyPlan(
     // Skip subjects already covered
     if (tasks.some(t => t.subjectId === subject.id)) continue;
 
-    const orangeTopics = subject.topics.filter(t => t.status === 'orange');
+    const orangeTopics = filterUsedTopics(subject.topics.filter(t => t.status === 'orange'), usedTopicIds);
     if (orangeTopics.length === 0) continue;
 
     const topicsToTake = Math.min(orangeTopics.length, capacityForOrange, 3);
-    const selectedTopics = selectTopicsWithRelations(orangeTopics, topicsToTake, inCrunchMode);
+    const selectedTopics = selectTopicsWithRelations(orangeTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
 
     if (selectedTopics.length > 0) {
       tasks.push({
@@ -1361,6 +1522,7 @@ export function generateDailyPlan(
         estimatedMinutes: selectedTopics.length * 20,
         completed: false
       });
+      markTopicsUsed(selectedTopics, usedTopicIds);
       capacityForOrange -= selectedTopics.length;
       capacityForPriority -= selectedTopics.length;
     }
@@ -1377,9 +1539,12 @@ export function generateDailyPlan(
     const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForPriority, fsrsParams.maxDailyReviews), studyGoals);
 
     if (fsrsReviews.length > 0) {
+      // Filter out already-used topics from FSRS candidates
+      const filteredFsrsReviews = fsrsReviews.filter(item => !usedTopicIds.has(item.topic.id));
+
       // Group by subject
       const bySubject = new Map<string, typeof fsrsReviews>();
-      for (const item of fsrsReviews) {
+      for (const item of filteredFsrsReviews) {
         const existing = bySubject.get(item.subject.id) || [];
         existing.push(item);
         bySubject.set(item.subject.id, existing);
@@ -1406,7 +1571,76 @@ export function generateDailyPlan(
           estimatedMinutes: selectedTopics.length * 25, // Reviews - realistic for medical topics
           completed: false
         });
+        markTopicsUsed(selectedTopics, usedTopicIds);
         capacityAfterFsrs -= selectedTopics.length;
+      }
+    }
+  }
+
+  // 4a. YESTERDAY'S CONSOLIDATION - Brief review of newly learned material
+  // Science: 24-hour review of new material improves retention by 40%+
+  // Targets topics studied yesterday that are still fragile (orange/yellow, low mastery)
+  if (yesterdayCompletedTopicIds && yesterdayCompletedTopicIds.length > 0 && capacityAfterFsrs > 0) {
+    const yesterdaySet = new Set(yesterdayCompletedTopicIds);
+    const consolidationCandidates: { topic: Topic; subject: Subject }[] = [];
+
+    for (const subject of subjects) {
+      for (const topic of subject.topics) {
+        if (!yesterdaySet.has(topic.id)) continue;
+        if (usedTopicIds.has(topic.id)) continue;
+
+        // Only consolidate topics that are still fragile:
+        // - Orange (just learned, grade ~3-3.5)
+        // - Yellow with quiz count ≤ 1 (learned but not yet tested)
+        // - Any status with low mastery score
+        const isNewlyLearned = topic.status === 'orange' ||
+          (topic.status === 'yellow' && (topic.quizCount || 0) <= 1);
+        const hasLowMastery = getWeightedMasteryScore(topic) < 60;
+
+        if (isNewlyLearned || hasLowMastery) {
+          consolidationCandidates.push({ topic, subject });
+        }
+      }
+    }
+
+    if (consolidationCandidates.length > 0) {
+      // Sort by mastery (lowest first = most needs consolidation)
+      consolidationCandidates.sort((a, b) =>
+        getWeightedMasteryScore(a.topic) - getWeightedMasteryScore(b.topic)
+      );
+
+      // Group by subject, max 3 total consolidation topics
+      const maxConsolidation = Math.min(3, capacityAfterFsrs);
+      const consolidationBySubject = new Map<string, { topics: Topic[]; subject: Subject }>();
+      let consolidationCount = 0;
+
+      for (const { topic, subject } of consolidationCandidates) {
+        if (consolidationCount >= maxConsolidation) break;
+
+        const existing = consolidationBySubject.get(subject.id);
+        if (existing) {
+          existing.topics.push(topic);
+        } else {
+          consolidationBySubject.set(subject.id, { topics: [topic], subject });
+        }
+        consolidationCount++;
+        usedTopicIds.add(topic.id);
+      }
+
+      for (const [, { topics: consTopics, subject }] of consolidationBySubject) {
+        tasks.push({
+          id: generateId(),
+          subjectId: subject.id,
+          subjectName: subject.name,
+          subjectColor: subject.color,
+          type: 'medium',
+          typeLabel: '🔄 Затвърждаване',
+          description: `Бърз преговор на вчерашен материал (${consTopics.length} ${consTopics.length === 1 ? 'тема' : 'теми'})`,
+          topics: consTopics,
+          estimatedMinutes: consTopics.length * 10, // Quick review: 10 min each
+          completed: false
+        });
+        capacityAfterFsrs -= consTopics.length;
       }
     }
   }
@@ -1471,8 +1705,8 @@ export function generateDailyPlan(
     let bloomCount = 0;
     for (const { topic, subject } of bloomCandidates) {
       if (bloomCount >= 2) break;
-      // Skip if topic already in a task
-      if (tasks.some(t => t.topics.some(tt => tt.id === topic.id))) continue;
+      // Skip if topic already in a task (use global set for O(1) check)
+      if (usedTopicIds.has(topic.id)) continue;
       const existing = bloomBySubject.get(subject.id);
       if (existing) {
         existing.topics.push(topic);
@@ -1497,6 +1731,7 @@ export function generateDailyPlan(
         estimatedMinutes: bloomTopics.length * 20,
         completed: false
       });
+      markTopicsUsed(bloomTopics, usedTopicIds);
       capacityAfterFsrs -= bloomTopics.length;
     }
   }
@@ -1511,13 +1746,13 @@ export function generateDailyPlan(
     const subjectsWithGray = subjects
       .filter(s => {
         const daysUntilExam = getDaysUntil(s.examDate);
-        return daysUntilExam !== Infinity && s.topics.some(t => t.status === 'gray');
+        return daysUntilExam !== Infinity && s.topics.some(t => t.status === 'gray' && !usedTopicIds.has(t.id));
       })
       .map(s => ({
         subject: s,
-        grayTopics: s.topics.filter(t => t.status === 'gray'),
+        grayTopics: filterUsedTopics(s.topics.filter(t => t.status === 'gray'), usedTopicIds),
         daysUntilExam: getDaysUntil(s.examDate),
-        priority: s.topics.filter(t => t.status === 'gray').length / Math.max(1, getDaysUntil(s.examDate))
+        priority: s.topics.filter(t => t.status === 'gray' && !usedTopicIds.has(t.id)).length / Math.max(1, getDaysUntil(s.examDate))
       }))
       .sort((a, b) => b.priority - a.priority);
 
@@ -1536,17 +1771,19 @@ export function generateDailyPlan(
       );
 
       if (topicsToTake > 0) {
-        const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode);
+        const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
 
         if (selectedTopics.length > 0) {
           // Check if there's already a task for this subject
           const existingTask = tasks.find(t => t.subjectId === subject.id);
 
           if (existingTask && existingTask.type !== 'critical') {
-            // Add to existing task
-            existingTask.topics.push(...selectedTopics);
-            existingTask.estimatedMinutes += selectedTopics.length * 20;
+            // Add to existing task (filter duplicates first)
+            const newTopics = filterUsedTopics(selectedTopics, usedTopicIds);
+            existingTask.topics.push(...newTopics);
+            existingTask.estimatedMinutes += newTopics.length * 20;
             existingTask.description += ' + нов материал';
+            markTopicsUsed(newTopics, usedTopicIds);
           } else {
             // Create new task - NORMAL PRIORITY (tier 4)
             tasks.push({
@@ -1561,6 +1798,7 @@ export function generateDailyPlan(
               estimatedMinutes: selectedTopics.length * 20,
               completed: false
             });
+            markTopicsUsed(selectedTopics, usedTopicIds);
           }
 
           newMaterialBudget -= selectedTopics.length;
@@ -1574,19 +1812,19 @@ export function generateDailyPlan(
   for (const subject of subjects) {
     if (capacityAfterNew <= 0) break;
 
-    // Only consider topics WITHOUT fsrs state (legacy)
-    const decayingTopics = subject.topics.filter(t => {
+    // Only consider topics WITHOUT fsrs state (legacy), filter already-used
+    const decayingTopics = filterUsedTopics(subject.topics.filter(t => {
       if (t.status === 'gray') return false;
       if (t.fsrs) return false; // Skip FSRS topics, already handled
       const days = getDaysSince(t.lastReview);
       const baseWarningDays = getDecayWarningDays(t);
       const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
       return days >= warningDays;
-    });
+    }), usedTopicIds);
 
     if (decayingTopics.length > 0 && capacityAfterNew > 0) {
       const topicsToTake = Math.min(Math.ceil(capacityAfterNew * 0.3), decayingTopics.length, 5);
-      const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode);
+      const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
       if (selectedTopics.length === 0) continue;
       const avgWarningDays = Math.round(
         selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
@@ -1603,6 +1841,7 @@ export function generateDailyPlan(
         estimatedMinutes: selectedTopics.length * 20,
         completed: false
       });
+      markTopicsUsed(selectedTopics, usedTopicIds);
       capacityAfterNew -= selectedTopics.length;
     }
   }

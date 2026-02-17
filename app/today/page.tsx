@@ -37,8 +37,10 @@ export default function TodayPage() {
   // Custom plan state
   const [customPlan, setCustomPlan] = useState<DailyTask[] | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditModalEmpty, setShowEditModalEmpty] = useState(false);
   const [showWeeklyReviewModal, setShowWeeklyReviewModal] = useState(false);
   const [planIsCustomized, setPlanIsCustomized] = useState(false);
+  const [loadingAiReview, setLoadingAiReview] = useState(false);
 
   // AI plan generation state
   const [loadingAiPlan, setLoadingAiPlan] = useState(false);
@@ -301,6 +303,63 @@ export default function TodayPage() {
     }));
     setCustomPlan(plan);
     setPlanIsCustomized(true);
+  };
+
+  // AI review of manual plan — asks AI to suggest additions
+  const handleAiReviewPlan = async (manualPlan: DailyTask[]) => {
+    if (!apiKey) return;
+    setLoadingAiReview(true);
+    try {
+      const topicSummary = manualPlan.map(task =>
+        `${task.subjectName}: ${task.topics.map(t => `#${t.number} ${t.name} (${t.status})`).join(', ')}`
+      ).join('\n');
+
+      const response = await fetchWithTimeout('/api/ai-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjects: subjectsForPlan,
+          schedule: data.schedule,
+          dailyStatus: data.dailyStatus,
+          studyGoals: data.studyGoals,
+          academicEvents: data.academicEvents,
+          academicPeriod: data.academicPeriod,
+          apiKey,
+          studyTechniques: data.studyTechniques?.filter(t => t.isActive).map(t => ({
+            name: t.name, slug: t.slug, practiceCount: t.practiceCount,
+            lastPracticedAt: t.lastPracticedAt, howToApply: t.howToApply.substring(0, 150)
+          })),
+          userFeedback: `Студентът ВЕЧЕ е създал ръчен план с тези задачи:\n${topicSummary}\n\nТвоята задача е да ДОПЪЛНИШ плана с липсващи важни теми, НЕ да го заменяш. Запази всичко което е вече в плана и добави само ако нещо критично липсва (напр. наближаващ изпит, FSRS ревю, нова тема). Ако планът е добър — НЕ добавяй нищо ненужно.`,
+        })
+      });
+
+      const result = await response.json();
+      if (result.tasks && result.tasks.length > 0) {
+        // Merge: keep manual plan, add only NEW tasks from AI (topics not already in manual plan)
+        const manualTopicIds = new Set(manualPlan.flatMap(t => t.topics.map(tp => tp.id)));
+        const newTasks = result.tasks.filter((task: DailyTask) =>
+          task.topics.some(tp => !manualTopicIds.has(tp.id))
+        ).map((task: DailyTask) => ({
+          ...task,
+          topics: task.topics.filter(tp => !manualTopicIds.has(tp.id)),
+          typeLabel: '🤖 ' + task.typeLabel,
+        })).filter((task: DailyTask) => task.topics.length > 0);
+
+        if (newTasks.length > 0) {
+          const merged = [...manualPlan, ...newTasks];
+          handleSaveCustomPlan(merged);
+          // Close both modals
+          setShowEditModal(false);
+          setShowEditModalEmpty(false);
+        } else {
+          alert('AI не намери нищо за допълване — планът ти е добър! 👍');
+        }
+      }
+    } catch (err) {
+      alert('Грешка при AI ревю: ' + getFetchErrorMessage(err));
+    } finally {
+      setLoadingAiReview(false);
+    }
   };
 
   // Strip materials from subjects to reduce payload size for AI plan
@@ -790,6 +849,12 @@ export default function TodayPage() {
                   className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-cyan-400 border border-slate-700 hover:border-cyan-500/50 rounded-lg transition-colors"
                 >
                   Редактирай
+                </button>
+                <button
+                  onClick={() => setShowEditModalEmpty(true)}
+                  className="px-3 py-1.5 text-xs font-mono text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/50 rounded-lg transition-colors"
+                >
+                  Ръчен план
                 </button>
               </div>
               <div className="text-right">
@@ -1359,6 +1424,20 @@ export default function TodayPage() {
           originalPlan={dailyPlan}
           customPlan={customPlan || []}
           onSave={handleSaveCustomPlan}
+          onRequestAiReview={apiKey ? handleAiReviewPlan : undefined}
+          isLoadingAiReview={loadingAiReview}
+        />
+      )}
+
+      {showEditModalEmpty && (
+        <EditDailyPlanModal
+          onClose={() => setShowEditModalEmpty(false)}
+          originalPlan={dailyPlan}
+          customPlan={[]}
+          onSave={handleSaveCustomPlan}
+          startEmpty
+          onRequestAiReview={apiKey ? handleAiReviewPlan : undefined}
+          isLoadingAiReview={loadingAiReview}
         />
       )}
 

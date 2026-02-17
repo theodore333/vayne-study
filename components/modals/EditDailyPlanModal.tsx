@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check, Brain, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DailyTask, Topic, Subject } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -33,7 +33,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   );
 
   const [editedPlan, setEditedPlan] = useState<DailyTask[]>(
-    customPlan.length > 0 ? JSON.parse(JSON.stringify(customPlan)) : JSON.parse(JSON.stringify(originalPlan))
+    startEmpty ? [] : (customPlan.length > 0 ? JSON.parse(JSON.stringify(customPlan)) : JSON.parse(JSON.stringify(originalPlan)))
   );
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [showAddTopicFor, setShowAddTopicFor] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b] shrink-0">
           <h2 className="text-lg font-semibold text-slate-100 font-mono">
-            Редактирай днешния план
+            {startEmpty ? 'Създай ръчен план' : 'Редактирай днешния план'}
           </h2>
           <button
             onClick={onClose}
@@ -142,7 +142,8 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {editedPlan.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-slate-500 font-mono">Няма задачи в плана</p>
+              <p className="text-slate-500 font-mono mb-2">{startEmpty ? 'Добави теми за днешния ден' : 'Няма задачи в плана'}</p>
+              {startEmpty && <p className="text-xs text-slate-600 font-mono">Избери предмет и теми, после натисни &quot;AI: Допълни&quot; за предложения</p>}
             </div>
           ) : (
             editedPlan.map(task => {
@@ -282,16 +283,31 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
 
         {/* Footer */}
         <div className="p-6 border-t border-[#1e293b] flex items-center justify-between shrink-0">
-          <button
-            onClick={handleReset}
-            className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-slate-200 font-mono transition-colors"
-          >
-            <RotateCcw size={16} />
-            Нулирай към генериран
-          </button>
+          <div className="flex items-center gap-2">
+            {!startEmpty && (
+              <button
+                onClick={handleReset}
+                className="flex items-center gap-2 px-4 py-2 text-slate-400 hover:text-slate-200 font-mono transition-colors"
+              >
+                <RotateCcw size={16} />
+                Нулирай
+              </button>
+            )}
+            {onRequestAiReview && editedPlan.length > 0 && (
+              <button
+                onClick={() => onRequestAiReview(editedPlan)}
+                disabled={isLoadingAiReview}
+                className="flex items-center gap-2 px-4 py-2 text-purple-400 hover:text-purple-300 border border-purple-500/30 hover:border-purple-500/50 rounded-lg font-mono transition-colors text-sm disabled:opacity-50"
+              >
+                {isLoadingAiReview ? <Loader2 size={14} className="animate-spin" /> : <Brain size={14} />}
+                AI: Допълни
+              </button>
+            )}
+          </div>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all font-mono"
+            disabled={editedPlan.length === 0}
+            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-500 hover:to-purple-500 transition-all font-mono disabled:opacity-50"
           >
             <Check size={16} />
             Запази

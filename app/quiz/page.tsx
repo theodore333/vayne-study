@@ -934,8 +934,8 @@ function QuizContent() {
         }));
         if (result.usage) incrementApiCalls(result.usage.cost);
       }
-    } catch {
-      // Keep previous evaluation on error
+    } catch (err) {
+      console.error('Re-evaluate failed:', err);
     }
     setIsEvaluatingOpen(false);
   };

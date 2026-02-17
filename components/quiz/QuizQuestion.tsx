@@ -714,11 +714,12 @@ export function QuizQuestion({
                     const filledOptions = newQOptions.filter(o => o.trim());
                     if (filledOptions.length < 2) return;
                     const opts = filledOptions.map((o, i) => `${String.fromCharCode(1040 + i)}. ${o}`);
+                    const clampedIdx = Math.min(newQCorrectIdx, opts.length - 1);
                     onAddQuestion({
                       type: 'mcq',
                       text: newQText.trim(),
                       options: opts,
-                      correctAnswer: opts[newQCorrectIdx] || opts[0],
+                      correctAnswer: opts[clampedIdx],
                       explanation: newQExplanation.trim() || undefined
                     });
                   } else {

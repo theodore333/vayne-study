@@ -745,11 +745,28 @@ ${questions.map((q, i) => `${i + 1}. ${q.question}${q.answer ? `\n   Отгов�
 
   let enrichments;
   try {
-    const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-    enrichments = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
-    if (!Array.isArray(enrichments)) throw new Error('Not an array');
+    // Try full text as JSON first
+    const parsed = JSON.parse(responseText);
+    enrichments = Array.isArray(parsed) ? parsed : [parsed];
   } catch {
-    return NextResponse.json({ error: 'Failed to parse enrichment response', raw: responseText.substring(0, 500) }, { status: 500 });
+    try {
+      // Extract array from surrounding text
+      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        enrichments = JSON.parse(jsonMatch[0]);
+      } else {
+        // Try extracting individual objects
+        const objMatches = [...responseText.matchAll(/\{[^{}]*\}/g)];
+        if (objMatches.length > 0) {
+          enrichments = objMatches.map(m => JSON.parse(m[0]));
+        } else {
+          return NextResponse.json({ error: 'Failed to parse enrichment response' }, { status: 500 });
+        }
+      }
+      if (!Array.isArray(enrichments)) enrichments = [enrichments];
+    } catch {
+      return NextResponse.json({ error: 'Failed to parse enrichment response' }, { status: 500 });
+    }
   }
 
   // Sonnet 4.6 pricing: $3/$15 per MTok

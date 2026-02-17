@@ -189,7 +189,6 @@ export default function WeeklyReviewModal({ onClose }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subjects: activeSubjects,
-          userProgress: data.userProgress,
           timerSessions: data.timerSessions,
           dailyStatus: data.dailyStatus,
           studyGoals: data.studyGoals,

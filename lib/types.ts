@@ -379,58 +379,6 @@ export interface QuestionBank {
   uploadedAt: string;
 }
 
-// Gamification Types
-export interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  unlockedAt: string;
-}
-
-export interface UserProgress {
-  xp: number;
-  level: number;
-  totalXpEarned: number;
-  achievements: Achievement[];
-  combo: {
-    count: number;
-    lastActionTime: string | null;
-  };
-  stats: {
-    topicsCompleted: number;
-    quizzesTaken: number;
-    perfectQuizzes: number;
-    greenTopics: number;
-    longestStreak: number;
-  };
-}
-
-export const LEVEL_THRESHOLDS = [
-  { level: 1, xp: 0, name: 'Студент', icon: '📚' },
-  { level: 2, xp: 500, name: 'Редовен', icon: '📖' },
-  { level: 3, xp: 1500, name: 'Старателен', icon: '✏️' },
-  { level: 4, xp: 3500, name: 'Амбициозен', icon: '🎯' },
-  { level: 5, xp: 6500, name: 'Специалист', icon: '🔬' },
-  { level: 6, xp: 11000, name: 'Експерт', icon: '🧠' },
-  { level: 7, xp: 17500, name: 'Майстор', icon: '🏆' },
-  { level: 8, xp: 26000, name: 'Легенда', icon: '👑' },
-  { level: 9, xp: 40000, name: 'Vayne Mode', icon: '⚡' },
-];
-
-export const XP_REWARDS = {
-  topicGrayToOrange: 50,
-  topicOrangeToYellow: 75,
-  topicYellowToGreen: 100,
-  topicAnyToGreen: 150, // Direct to green bonus
-  quizComplete: 20,
-  quizGood: 30, // ≥70%
-  quizGreat: 50, // ≥85%
-  quizPerfect: 100, // 100%
-  bloomLevelUp: 100,
-  streakDay: 20, // × streak multiplier
-  comboBonus: 10, // per combo level
-};
 
 export interface AppData {
   subjects: Subject[];
@@ -443,7 +391,6 @@ export interface AppData {
   pomodoroSettings: PomodoroSettings;
   studyGoals: StudyGoals;
   academicPeriod: AcademicPeriod;
-  userProgress: UserProgress;
   clinicalCaseSessions: ClinicalCaseSession;
   orRoomSessions: ORRoomSession;
   // Phase 1: Vayne Doctor

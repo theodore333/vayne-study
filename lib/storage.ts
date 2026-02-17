@@ -3,7 +3,6 @@
 import { AppData, DailyStatus, GPAData, UsageData, PomodoroSettings, StudyGoals, AcademicPeriod, Subject, Topic, TopicStatus, SubjectType, QuizResult, TopicSize, BloomLevel, ClinicalCaseSession, DevelopmentProject, ProjectModule, StudyTechnique } from './types';
 import { STORAGE_KEY, DEFAULT_TECHNIQUES } from './constants';
 import { getTodayString, applyDecayToSubjects } from './algorithms';
-import { defaultUserProgress } from './gamification';
 import LZString from 'lz-string';
 import { getMaterialFromIDB, setMaterialInIDB, getAllMaterialsFromIDB, migrateFromLocalStorage, isIndexedDBAvailable, saveBackupSnapshot } from './indexeddb-storage';
 
@@ -172,7 +171,6 @@ const defaultData: AppData = {
   pomodoroSettings: defaultPomodoroSettings,
   studyGoals: defaultStudyGoals,
   academicPeriod: defaultAcademicPeriod,
-  userProgress: defaultUserProgress,
   clinicalCaseSessions: defaultClinicalCaseSessions,
   orRoomSessions: { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 },
   // Phase 1: Vayne Doctor
@@ -328,7 +326,6 @@ export function migrateData(rawData: any): AppData {
   if (data.studyGoals.vacationMode === undefined) data.studyGoals.vacationMode = false;
   if (data.studyGoals.vacationMultiplier === undefined) data.studyGoals.vacationMultiplier = 0.4;
   if (!data.academicPeriod) data.academicPeriod = defaultAcademicPeriod;
-  if (!data.userProgress) data.userProgress = defaultUserProgress;
   if (!data.clinicalCaseSessions) data.clinicalCaseSessions = defaultClinicalCaseSessions;
   if (!data.orRoomSessions) data.orRoomSessions = { activeCaseId: null, cases: [], totalCasesCompleted: 0, averageScore: 0 };
 
@@ -421,34 +418,6 @@ export function migrateData(rawData: any): AppData {
         highlights: module.highlights ?? [],
       }))
     }));
-  }
-
-  // Migrate: Calculate stats from existing data
-  if (data.userProgress && data.subjects) {
-    let topicsCompleted = 0;
-    let greenTopics = 0;
-    let quizzesTaken = 0;
-
-    (data.subjects as LegacySubject[]).forEach((subject) => {
-      (subject.topics || []).forEach((topic) => {
-        if (topic.status !== 'gray') topicsCompleted++;
-        if (topic.status === 'green') greenTopics++;
-        quizzesTaken += topic.quizCount || 0;
-      });
-    });
-
-    if (!data.userProgress.stats) {
-      data.userProgress.stats = {
-        topicsCompleted: 0,
-        quizzesTaken: 0,
-        perfectQuizzes: 0,
-        greenTopics: 0,
-        longestStreak: 0
-      };
-    }
-    data.userProgress.stats.topicsCompleted = topicsCompleted;
-    data.userProgress.stats.greenTopics = greenTopics;
-    data.userProgress.stats.quizzesTaken = quizzesTaken;
   }
 
   // Remove deprecated focusSession

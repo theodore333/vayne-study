@@ -101,12 +101,10 @@ export default function AnalyticsPage() {
       grayTopics,
       totalQuizzes,
       avgScore,
-      level: data.userProgress.level,
-      xp: data.userProgress.xp,
       bySubject,
       last7Days
     };
-  }, [data.timerSessions, activeSubjects, data.userProgress]);
+  }, [data.timerSessions, activeSubjects]);
 
   if (isLoading) {
     return (
@@ -271,20 +269,6 @@ export default function AnalyticsPage() {
           </div>
         </div>
       )}
-
-      {/* Level & XP */}
-      <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 rounded-xl border border-purple-500/30 p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-xs text-purple-400 font-mono">НИВО</span>
-            <div className="text-3xl font-bold text-white">{stats.level}</div>
-          </div>
-          <div className="text-right">
-            <span className="text-xs text-pink-400 font-mono">XP</span>
-            <div className="text-3xl font-bold text-white">{stats.xp.toLocaleString()}</div>
-          </div>
-        </div>
-      </div>
 
       {/* Empty State */}
       {stats.totalSessions === 0 && (

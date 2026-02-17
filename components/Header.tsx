@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { Thermometer, Palmtree, Zap, DollarSign, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getLevelInfo, getXpForNextLevel } from '@/lib/gamification';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from './modals/DailyCheckinModal';
 
@@ -18,10 +17,6 @@ export default function Header() {
       </header>
     );
   }
-
-  const progress = data.userProgress;
-  const levelInfo = getLevelInfo(progress?.level || 1);
-  const xpProgress = getXpForNextLevel(progress?.xp || 0);
 
   // Calculate total status counts across all subjects
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
@@ -39,23 +34,6 @@ export default function Header() {
     <>
       <header className="sticky top-0 z-30 bg-[rgba(10,10,15,0.9)] backdrop-blur-sm border-b border-[#1e293b] px-6 py-4">
         <div className="flex items-center justify-between">
-          {/* Level & XP */}
-          <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-900/30 to-cyan-900/30 border border-purple-500/20">
-            <span className="text-xl">{levelInfo.icon}</span>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-white font-mono">{levelInfo.name}</span>
-                <span className="text-xs text-purple-300 font-mono">Lv.{progress?.level || 1}</span>
-              </div>
-              <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-purple-500 to-cyan-500"
-                  style={{ width: `${xpProgress.progress}%` }}
-                />
-              </div>
-            </div>
-          </div>
-
           {/* Daily Status Button */}
           <button
             onClick={() => setShowCheckin(true)}

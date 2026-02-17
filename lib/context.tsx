@@ -1,11 +1,10 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, Achievement, UserProgress, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal, StudyTechnique, TechniquePractice } from './types';
+import { AppData, Subject, Topic, ScheduleClass, DailyStatus, TopicStatus, TimerSession, SemesterGrade, GPAData, UsageData, SubjectType, BankQuestion, ClinicalCase, PomodoroSettings, StudyGoals, AcademicPeriod, TopicSize, ClinicalCaseSession, DevelopmentProject, ProjectModule, ProjectInsight, CareerProfile, WrongAnswer, TextHighlight, BloomLevel, QuizResult, AcademicEvent, LastOpenedTopic, DailyGoal, StudyTechnique, TechniquePractice } from './types';
 import { loadData, saveData, migrateData, setStorageErrorCallback, StorageError, getStorageUsage, initMaterialsCache } from './storage';
 import { loadFromCloud, debouncedSaveToCloud } from './cloud-sync';
 import { generateId, getTodayString, gradeToStatus, initializeFSRS, updateFSRS } from './algorithms';
-import { calculateTopicXp, calculateQuizXp, calculateLevel, updateCombo, getComboMultiplier, checkAchievements, defaultUserProgress } from './gamification';
 
 // Full sanitizer - runs ONLY at load time (not on mutations = no perf impact)
 // Ensures EVERY field that React might render is the correct primitive type
@@ -32,28 +31,6 @@ function sanitizeLoadedData(data: AppData): AppData {
     const sn = (v: unknown): string | null => typeof v === 'string' ? v : null;
 
     const d = (data || {}) as any;
-
-    // userProgress
-    const rp = o(d.userProgress, {});
-    const userProgress = {
-      ...defaultUserProgress,
-      ...rp,
-      xp: n(rp.xp, 0, 'userProgress.xp'),
-      level: n(rp.level, 1, 'userProgress.level'),
-      totalXpEarned: n(rp.totalXpEarned, 0, 'userProgress.totalXpEarned'),
-      achievements: a(rp.achievements, 'userProgress.achievements'),
-      combo: {
-        count: n(rp.combo?.count),
-        lastActionTime: sn(rp.combo?.lastActionTime),
-      },
-      stats: {
-        topicsCompleted: n(rp.stats?.topicsCompleted),
-        quizzesTaken: n(rp.stats?.quizzesTaken),
-        perfectQuizzes: n(rp.stats?.perfectQuizzes),
-        greenTopics: n(rp.stats?.greenTopics),
-        longestStreak: n(rp.stats?.longestStreak),
-      },
-    };
 
     // studyGoals
     const rg = o(d.studyGoals, {});
@@ -204,7 +181,6 @@ function sanitizeLoadedData(data: AppData): AppData {
       pomodoroSettings,
       studyGoals,
       academicPeriod,
-      userProgress,
       clinicalCaseSessions,
       orRoomSessions,
       developmentProjects: a(d.developmentProjects, 'developmentProjects'),
@@ -295,11 +271,6 @@ interface AppContextType {
 
   // Timer with distraction note
   stopTimerWithNote: (rating: number | null, distractionNote?: string) => void;
-
-  // Gamification
-  earnXp: (amount: number, reason: string) => void;
-  newAchievements: Achievement[];
-  clearNewAchievements: () => void;
 
   // UI State
   sidebarCollapsed: boolean;
@@ -447,7 +418,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     pomodoroSettings: defaultPomodoroSettings,
     studyGoals: defaultStudyGoals,
     academicPeriod: defaultAcademicPeriod,
-    userProgress: defaultUserProgress,
     clinicalCaseSessions: {
       activeCaseId: null,
       cases: [],
@@ -475,14 +445,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
-  const [newAchievements, setNewAchievements] = useState<Achievement[]>([]);
   const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
   const [storageError, setStorageError] = useState<{ error: StorageError; message?: string } | null>(null);
 
   // Refs for avoiding side effects inside setState updaters
   const dataRef = useRef(data);
-  const prevAchievementCountRef = useRef(0);
-
   // Keep dataRef in sync (used by syncNow to avoid stale closures)
   useEffect(() => { dataRef.current = data; }, [data]);
 
@@ -520,17 +487,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     debouncedSaveToCloud(data);
   }, [data, isLoading]);
 
-  // Detect newly unlocked achievements by comparing count with previous render
-  useEffect(() => {
-    if (isLoading) return;
-    const currentAchievements = data.userProgress?.achievements || [];
-    if (currentAchievements.length > prevAchievementCountRef.current) {
-      const newOnes = currentAchievements.slice(prevAchievementCountRef.current);
-      setNewAchievements(prev => [...prev, ...newOnes]);
-    }
-    prevAchievementCountRef.current = currentAchievements.length;
-  }, [data, isLoading]);
-
   useEffect(() => {
     const initData = async () => {
       if (process.env.NODE_ENV === 'development') console.log('[CONTEXT] Starting data initialization...');
@@ -565,7 +521,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       setData(sanitizeLoadedData(dataToUse));
-      prevAchievementCountRef.current = dataToUse.userProgress?.achievements?.length || 0;
 
       // Then try to load from cloud
       try {
@@ -608,7 +563,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }));
 
               setData(sanitizeLoadedData(migratedCloud));
-              prevAchievementCountRef.current = migratedCloud.userProgress?.achievements?.length || 0;
               saveData(migratedCloud);
             }
           }
@@ -685,27 +639,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const currentStats = prev.userProgress?.stats || {
-        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
-      };
-
       return {
         ...prev,
         subjects: prev.subjects.filter(s => s.id !== id),
         schedule: prev.schedule.filter(c => c.subjectId !== id),
-        // Cascade delete: remove orphaned academic events
         academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
-        // Cascade delete: remove orphaned question banks
         questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
-        userProgress: {
-          ...prev.userProgress,
-          stats: {
-            ...currentStats,
-            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
-            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
-            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
-          }
-        }
       };
     });
   }, [updateData]);
@@ -859,40 +798,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const permanentlyDeleteSubject = useCallback((id: string) => {
-    updateData(prev => {
-      // Find the subject to calculate stats to decrement
-      const subjectToDelete = prev.subjects.find(s => s.id === id);
-      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
-
-      if (subjectToDelete) {
-        subjectToDelete.topics.forEach(topic => {
-          if (topic.status !== 'gray') statsDecrements.topicsCompleted++;
-          if (topic.status === 'green') statsDecrements.greenTopics++;
-          statsDecrements.quizzesTaken += topic.quizCount || 0;
-        });
-      }
-
-      const currentStats = prev.userProgress?.stats || {
-        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
-      };
-
-      return {
-        ...prev,
-        subjects: prev.subjects.filter(s => s.id !== id),
-        schedule: prev.schedule.filter(c => c.subjectId !== id),
-        academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
-        questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
-        userProgress: {
-          ...prev.userProgress,
-          stats: {
-            ...currentStats,
-            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
-            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
-            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
-          }
-        }
-      };
-    });
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.filter(s => s.id !== id),
+      schedule: prev.schedule.filter(c => c.subjectId !== id),
+      academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
+      questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
+    }));
   }, [updateData]);
 
   const emptyTrash = useCallback(() => {
@@ -900,18 +812,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const trashedSubjects = prev.subjects.filter(s => s.deletedAt);
       let totalDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
 
-      trashedSubjects.forEach(subject => {
-        subject.topics.forEach(topic => {
-          if (topic.status !== 'gray') totalDecrements.topicsCompleted++;
-          if (topic.status === 'green') totalDecrements.greenTopics++;
-          totalDecrements.quizzesTaken += topic.quizCount || 0;
-        });
-      });
-
       const trashedIds = new Set(trashedSubjects.map(s => s.id));
-      const currentStats = prev.userProgress?.stats || {
-        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
-      };
 
       return {
         ...prev,
@@ -919,15 +820,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         schedule: prev.schedule.filter(c => !trashedIds.has(c.subjectId)),
         academicEvents: prev.academicEvents.filter(e => !trashedIds.has(e.subjectId)),
         questionBanks: prev.questionBanks.filter(b => !trashedIds.has(b.subjectId)),
-        userProgress: {
-          ...prev.userProgress,
-          stats: {
-            ...currentStats,
-            topicsCompleted: Math.max(0, currentStats.topicsCompleted - totalDecrements.topicsCompleted),
-            greenTopics: Math.max(0, currentStats.greenTopics - totalDecrements.greenTopics),
-            quizzesTaken: Math.max(0, currentStats.quizzesTaken - totalDecrements.quizzesTaken)
-          }
-        }
       };
     });
   }, [updateData]);
@@ -966,91 +858,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const deleteTopic = useCallback((subjectId: string, topicId: string) => {
-    updateData(prev => {
-      // Find the topic to calculate stats to decrement
-      const subject = prev.subjects.find(s => s.id === subjectId);
-      const topicToDelete = subject?.topics.find(t => t.id === topicId);
-      let statsDecrements = { topicsCompleted: 0, greenTopics: 0, quizzesTaken: 0 };
-
-      if (topicToDelete) {
-        if (topicToDelete.status !== 'gray') statsDecrements.topicsCompleted = 1;
-        if (topicToDelete.status === 'green') statsDecrements.greenTopics = 1;
-        statsDecrements.quizzesTaken = topicToDelete.quizCount || 0;
-      }
-
-      const currentStats = prev.userProgress?.stats || {
-        topicsCompleted: 0, quizzesTaken: 0, perfectQuizzes: 0, greenTopics: 0, longestStreak: 0
-      };
-
-      return {
-        ...prev,
-        subjects: prev.subjects.map(s => {
-          if (s.id !== subjectId) return s;
-          const filtered = s.topics.filter(t => t.id !== topicId);
-          return {
-            ...s,
-            topics: filtered.map((t, i) => ({ ...t, number: i + 1 }))
-          };
-        }),
-        userProgress: {
-          ...prev.userProgress,
-          stats: {
-            ...currentStats,
-            topicsCompleted: Math.max(0, currentStats.topicsCompleted - statsDecrements.topicsCompleted),
-            greenTopics: Math.max(0, currentStats.greenTopics - statsDecrements.greenTopics),
-            quizzesTaken: Math.max(0, currentStats.quizzesTaken - statsDecrements.quizzesTaken)
-          }
-        }
-      };
-    });
+    updateData(prev => ({
+      ...prev,
+      subjects: prev.subjects.map(s => {
+        if (s.id !== subjectId) return s;
+        const filtered = s.topics.filter(t => t.id !== topicId);
+        return { ...s, topics: filtered.map((t, i) => ({ ...t, number: i + 1 })) };
+      }),
+    }));
   }, [updateData]);
 
   const setTopicStatus = useCallback((subjectId: string, topicId: string, status: TopicStatus) => {
     updateData(prev => {
-      // Find old status for XP calculation
-      let oldStatus: TopicStatus = 'gray';
       const subject = prev.subjects.find(s => s.id === subjectId);
-      if (subject) {
-        const topic = subject.topics.find(t => t.id === topicId);
-        if (topic) oldStatus = topic.status;
-      }
-
-      // Update combo FIRST to get correct multiplier
-      const progress = prev.userProgress || defaultUserProgress;
-      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
-      // Use the NEW combo count for multiplier (after checking if it expired)
-      const comboMultiplier = getComboMultiplier(newCombo.count);
-      const xpEarned = calculateTopicXp(oldStatus, status, comboMultiplier);
-
-      // Keep original combo if no XP earned (status didn't improve)
-      const finalCombo = xpEarned > 0 ? newCombo : progress.combo;
-      const newXp = progress.xp + xpEarned;
-      const newLevel = calculateLevel(newXp);
-
-      // Update stats (both increment on upgrade and decrement on downgrade)
-      const newStats = { ...progress.stats };
-      if (status !== 'gray' && oldStatus === 'gray') {
-        newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
-      } else if (status === 'gray' && oldStatus !== 'gray') {
-        newStats.topicsCompleted = Math.max(0, (newStats.topicsCompleted || 0) - 1);
-      }
-      if (status === 'green' && oldStatus !== 'green') {
-        newStats.greenTopics = (newStats.greenTopics || 0) + 1;
-      } else if (oldStatus === 'green' && status !== 'green') {
-        newStats.greenTopics = Math.max(0, (newStats.greenTopics || 0) - 1);
-      }
-
-      const newProgress: UserProgress = {
-        ...progress,
-        xp: newXp,
-        level: newLevel,
-        totalXpEarned: progress.totalXpEarned + xpEarned,
-        combo: finalCombo,
-        stats: newStats
-      };
-
-      // Check achievements
-      const streak = calculateStudyStreak(prev.timerSessions);
       // Find linked topic IDs for cross-subject sync
       const sourceTopic = subject?.topics.find(t => t.id === topicId);
       const linkedIds = new Set(sourceTopic?.linkedTopicIds || []);
@@ -1071,23 +891,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let changed = false;
         const newTopics = s.topics.map(t => {
           if (!linkedIds.has(t.id)) return t;
-          if (t.status === status) return t; // already same status
+          if (t.status === status) return t;
           changed = true;
           return { ...t, status, lastReview: status !== 'gray' ? now : t.lastReview };
         });
         return changed ? { ...s, topics: newTopics } : s;
       });
 
-      const unlocked = checkAchievements(newProgress, newSubjects, streak);
-      if (unlocked.length > 0) {
-        newProgress.achievements = [...newProgress.achievements, ...unlocked];
-      }
-
-      return {
-        ...prev,
-        subjects: newSubjects,
-        userProgress: newProgress
-      };
+      return { ...prev, subjects: newSubjects };
     });
   }, [updateData]);
 
@@ -1117,12 +928,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Update combo FIRST to get correct multiplier
-      const progress = prev.userProgress || defaultUserProgress;
-      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
-      const comboMultiplier = getComboMultiplier(newCombo.count);
-
-      // Calculate quiz XP (convert grade 2-6 to score 0-100)
+      // Convert grade 2-6 to score 0-100
       const score = Math.round(((validGrade - 2) / 4) * 100);
 
       // Create quiz result for history
@@ -1134,7 +940,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         correctAnswers: quizMeta?.correctAnswers || Math.round(score / 20),
         weight: quizMeta?.weight || 1.0
       };
-      const quizXp = calculateQuizXp(score, comboMultiplier);
 
       // Find linked topic IDs for cross-subject sync
       const sourceTopic = subject?.topics.find(t => t.id === topicId);
@@ -1208,54 +1013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Calculate topic status change XP
-      const newStatus = newTopic?.status || oldStatus;
-      const topicXp = calculateTopicXp(oldStatus, newStatus, comboMultiplier);
-
-      const totalXp = quizXp + topicXp;
-
-      // XP calculation (combo already updated at top of function)
-      const newXp = progress.xp + totalXp;
-      const newLevel = calculateLevel(newXp);
-
-      // Update stats
-      const newStats = { ...progress.stats };
-      newStats.quizzesTaken = (newStats.quizzesTaken || 0) + 1;
-      if (score === 100) {
-        newStats.perfectQuizzes = (newStats.perfectQuizzes || 0) + 1;
-      }
-      if (newStatus !== 'gray' && oldStatus === 'gray') {
-        newStats.topicsCompleted = (newStats.topicsCompleted || 0) + 1;
-      } else if (newStatus === 'gray' && oldStatus !== 'gray') {
-        newStats.topicsCompleted = Math.max(0, (newStats.topicsCompleted || 0) - 1);
-      }
-      if (newStatus === 'green' && oldStatus !== 'green') {
-        newStats.greenTopics = (newStats.greenTopics || 0) + 1;
-      } else if (oldStatus === 'green' && newStatus !== 'green') {
-        newStats.greenTopics = Math.max(0, (newStats.greenTopics || 0) - 1);
-      }
-
-      const newProgress: UserProgress = {
-        ...progress,
-        xp: newXp,
-        level: newLevel,
-        totalXpEarned: progress.totalXpEarned + totalXp,
-        combo: newCombo,
-        stats: newStats
-      };
-
-      // Check achievements
-      const streak = calculateStudyStreak(prev.timerSessions);
-      const unlocked = checkAchievements(newProgress, newSubjects, streak);
-      if (unlocked.length > 0) {
-        newProgress.achievements = [...newProgress.achievements, ...unlocked];
-      }
-
-      return {
-        ...prev,
-        subjects: newSubjects,
-        userProgress: newProgress
-      };
+      return { ...prev, subjects: newSubjects };
     });
   }, [updateData]);
 
@@ -1847,41 +1605,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? Math.round((completedCount / newModules.length) * 100)
         : 0;
 
-      // Update combo FIRST to get correct multiplier (check if expired)
-      const progress = prev.userProgress || defaultUserProgress;
-      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
-      const comboMultiplier = getComboMultiplier(newCombo.count);
-
-      // Calculate XP (same as quiz XP)
-      const xpEarned = calculateQuizXp(score, comboMultiplier);
-      const newXp = progress.xp + xpEarned;
-
-      const newProgress: UserProgress = {
-        ...progress,
-        xp: newXp,
-        level: calculateLevel(newXp),
-        totalXpEarned: progress.totalXpEarned + xpEarned,
-        combo: newCombo,
-        stats: {
-          ...progress.stats,
-          quizzesTaken: progress.stats.quizzesTaken + 1
-        }
-      };
-
-      // Check achievements
-      const streak = calculateStudyStreak(prev.timerSessions);
-      const unlocked = checkAchievements(newProgress, prev.subjects, streak);
-      if (unlocked.length > 0) {
-        newProgress.achievements = [...newProgress.achievements, ...unlocked];
-      }
-
       return {
         ...prev,
         developmentProjects: prev.developmentProjects.map(p => {
           if (p.id !== projectId) return p;
           return { ...p, modules: newModules, progressPercent, updatedAt: new Date().toISOString() };
         }),
-        userProgress: newProgress
       };
     });
   }, [updateData]);
@@ -2075,47 +1804,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
-  // Calculate streak for achievement checking (uses helper function)
-  const calculateStreak = useCallback((sessions: TimerSession[]) => {
-    return calculateStudyStreak(sessions);
-  }, []);
-
-  // Gamification: Earn XP
-  const earnXp = useCallback((amount: number, _reason: string) => {
-    updateData(prev => {
-      const progress = prev.userProgress || defaultUserProgress;
-      const newCombo = updateCombo(progress.combo.lastActionTime, progress.combo.count);
-      const newXp = progress.xp + amount;
-      const newLevel = calculateLevel(newXp);
-
-      // Update user progress (always copy stats to avoid shared reference mutation)
-      const newProgress: UserProgress = {
-        ...progress,
-        xp: newXp,
-        level: newLevel,
-        totalXpEarned: progress.totalXpEarned + amount,
-        combo: newCombo,
-        stats: { ...progress.stats }
-      };
-
-      // Check for new achievements
-      const streak = calculateStreak(prev.timerSessions);
-      const unlocked = checkAchievements(newProgress, prev.subjects, streak);
-      if (unlocked.length > 0) {
-        newProgress.achievements = [...newProgress.achievements, ...unlocked];
-        if (streak > newProgress.stats.longestStreak) {
-          newProgress.stats.longestStreak = streak;
-        }
-      }
-
-      return { ...prev, userProgress: newProgress };
-    });
-  }, [updateData, calculateStreak]);
-
-  const clearNewAchievements = useCallback(() => {
-    setNewAchievements([]);
-  }, []);
-
   // ================ Study Techniques (IcanStudy HUDLE Framework) ================
 
   const addTechnique = useCallback((technique: Omit<StudyTechnique, 'id' | 'createdAt' | 'practiceCount' | 'lastPracticedAt'>) => {
@@ -2232,9 +1920,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateAcademicPeriod,
     cleanOldTimerSessions,
     stopTimerWithNote,
-    earnXp,
-    newAchievements,
-    clearNewAchievements,
     sidebarCollapsed,
     setSidebarCollapsed,
     storageError,
@@ -2269,7 +1954,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addTechniquePractice,
     rateTechniquePractice
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [data, isLoading, isSyncing, lastSynced, newAchievements, sidebarCollapsed, storageError]);
+  }), [data, isLoading, isSyncing, lastSynced, sidebarCollapsed, storageError]);
 
   return (
     <AppContext.Provider value={contextValue}>

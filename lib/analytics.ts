@@ -1,4 +1,4 @@
-import { Subject, TimerSession, UserProgress, QuestionBank } from './types';
+import { Subject, TimerSession, QuestionBank } from './types';
 import { calculateRetrievability, getDaysUntilReview, toLocalDateStr } from './algorithms';
 
 // Helper to extract local date string from TimerSession
@@ -457,14 +457,11 @@ export interface AnalyticsSummary {
   newTopics: number;
   totalQuizzes: number;
   averageQuizScore: number;
-  xpTotal: number;
-  level: number;
 }
 
 export function getAnalyticsSummary(
   sessions: TimerSession[],
   subjects: Subject[],
-  userProgress: UserProgress
 ): AnalyticsSummary {
   const totalStudyMinutes = sessions.reduce((sum, s) => sum + s.duration, 0);
   const totalSessions = sessions.length;
@@ -493,8 +490,6 @@ export function getAnalyticsSummary(
     newTopics: allTopics.filter(t => t.status === 'gray').length,
     totalQuizzes,
     averageQuizScore: quizCount > 0 ? Math.round(totalScore / quizCount) : 0,
-    xpTotal: userProgress.xp,
-    level: userProgress.level
   };
 }
 

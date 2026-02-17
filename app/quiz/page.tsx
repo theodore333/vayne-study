@@ -1341,12 +1341,18 @@ function QuizContent() {
         }
         // Deduplicate: skip questions whose text already exists in the bank
         const existingTexts = new Set((aiBank.questions || []).map(q => q.text.toLowerCase().trim()));
+        const mapToBankType = (t: string): 'mcq' | 'open' | 'case_study' => {
+          if (t === 'multiple_choice') return 'mcq';
+          if (t === 'case_study') return 'case_study';
+          // fill_blank, short_answer, open → all map to 'open'
+          return 'open';
+        };
         const newBankQuestions = quizState.questions
           .filter(q => !existingTexts.has(q.question.toLowerCase().trim()))
           .map(q => ({
-            type: (q.type === 'multiple_choice' ? 'mcq' : q.type) as 'mcq' | 'open' | 'case_study',
+            type: mapToBankType(q.type),
             text: q.question,
-            options: q.options,
+            options: q.type === 'multiple_choice' || q.type === 'case_study' ? q.options : undefined,
             correctAnswer: q.correctAnswer,
             explanation: q.explanation,
             linkedTopicIds: topicId ? [topicId] : [],

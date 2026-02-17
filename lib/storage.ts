@@ -473,6 +473,25 @@ export function migrateData(rawData: any): AppData {
     }
   }
 
+  // Migrate question bank: fix invalid question types from removed matching/ordering
+  const validBankTypes = new Set(['mcq', 'open', 'case_study']);
+  if (Array.isArray(data.questionBanks)) {
+    data.questionBanks = data.questionBanks.map((bank: any) => ({
+      ...bank,
+      questions: (bank.questions || []).map((q: any) => {
+        if (validBankTypes.has(q.type)) return q;
+        // matching/ordering/fill_blank/short_answer → open (they have text + correctAnswer)
+        return {
+          ...q,
+          type: q.options && q.options.length > 0 ? 'mcq' : 'open',
+          pairs: undefined,
+          items: undefined,
+          acceptableAnswers: undefined,
+        };
+      })
+    }));
+  }
+
   return data as AppData;
 }
 

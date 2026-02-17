@@ -24,6 +24,7 @@ export default function QuestionBankPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTopicId, setFilterTopicId] = useState<string>('all');
   const [deletingQuestion, setDeletingQuestion] = useState<{ bankId: string; questionId: string; text: string } | null>(null);
+  const [viewMode, setViewMode] = useState<'banks' | 'topics'>('topics');
 
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   const selectedSubject = data.subjects.find(s => s.id === selectedSubjectId);
@@ -120,6 +121,33 @@ export default function QuestionBankPage() {
       accDelta: recent7Acc !== null && prev7Acc !== null ? recent7Acc - prev7Acc : null
     };
   }, [subjectBanks, topicNameMap]);
+
+  // Group questions by topic for "По теми" view
+  const topicGroups = useMemo(() => {
+    const allQs = subjectBanks.flatMap(b => b.questions.map(q => ({ ...q, bankId: b.id })));
+    const groups = new Map<string, { topicId: string; name: string; questions: typeof allQs }>();
+    const unlinked: typeof allQs = [];
+
+    allQs.forEach(q => {
+      if (!q.linkedTopicIds?.length) {
+        unlinked.push(q);
+        return;
+      }
+      // Use first linked topic as primary group
+      const tid = q.linkedTopicIds[0];
+      const name = topicNameMap.get(tid);
+      if (!name) { unlinked.push(q); return; }
+      if (!groups.has(tid)) groups.set(tid, { topicId: tid, name, questions: [] });
+      groups.get(tid)!.questions.push(q);
+    });
+
+    // Sort by topic name
+    const sorted = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'bg'));
+    if (unlinked.length > 0) sorted.push({ topicId: '__unlinked', name: 'Несвързани', questions: unlinked });
+    return sorted;
+  }, [subjectBanks, topicNameMap]);
+
+  const [expandedTopicId, setExpandedTopicId] = useState<string | null>(null);
 
   const handleAutoLink = useCallback(async (bankId: string) => {
     if (!selectedSubject || linkingBankId) return;
@@ -492,13 +520,141 @@ export default function QuestionBankPage() {
                 )}
               </div>
 
-              {/* Banks List */}
+              {/* Banks/Topics List */}
               <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl">
-                <div className="p-4 border-b border-slate-800">
-                  <h3 className="text-sm font-semibold text-slate-400 font-mono uppercase">
-                    Сборници ({subjectBanks.length})
-                  </h3>
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                  <div className="flex items-center gap-1 bg-slate-800/50 rounded-lg p-0.5">
+                    <button
+                      onClick={() => setViewMode('topics')}
+                      className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors ${
+                        viewMode === 'topics' ? 'bg-purple-600/40 text-purple-300' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      По теми
+                    </button>
+                    <button
+                      onClick={() => setViewMode('banks')}
+                      className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors ${
+                        viewMode === 'banks' ? 'bg-purple-600/40 text-purple-300' : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      По сборници ({subjectBanks.length})
+                    </button>
+                  </div>
                 </div>
+
+                {/* Topics View */}
+                {viewMode === 'topics' && topicGroups.length > 0 && (
+                  <div className="divide-y divide-slate-800">
+                    {topicGroups.map(group => {
+                      const att = group.questions.reduce((s, q) => s + q.stats.attempts, 0);
+                      const cor = group.questions.reduce((s, q) => s + q.stats.correct, 0);
+                      const acc = att > 0 ? Math.round((cor / att) * 100) : null;
+                      const isExpanded = expandedTopicId === group.topicId;
+                      const mcq = group.questions.filter(q => q.type === 'mcq').length;
+                      const open = group.questions.filter(q => q.type === 'open' || q.type === 'case_study').length;
+
+                      return (
+                        <div key={group.topicId}>
+                          <button
+                            onClick={() => setExpandedTopicId(isExpanded ? null : group.topicId)}
+                            className="w-full p-4 hover:bg-slate-800/30 transition-colors text-left"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium text-slate-200 truncate">{group.name}</h4>
+                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 font-mono">
+                                  <span>{group.questions.length} въпроса</span>
+                                  {mcq > 0 && <span>{mcq} MCQ</span>}
+                                  {open > 0 && <span>{open} отворени</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {acc !== null && (
+                                  <span className={`text-sm font-mono font-bold ${
+                                    acc >= 80 ? 'text-green-400' : acc >= 60 ? 'text-yellow-400' : 'text-red-400'
+                                  }`}>
+                                    {acc}%
+                                  </span>
+                                )}
+                                {group.topicId !== '__unlinked' && (
+                                  <Link
+                                    href={`/question-bank/practice?subject=${selectedSubjectId}&topic=${group.topicId}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="p-2 hover:bg-green-500/20 text-green-400 rounded-lg transition-colors"
+                                    title="Практика по тема"
+                                  >
+                                    <Play size={16} />
+                                  </Link>
+                                )}
+                                <ChevronDown size={16} className={`text-slate-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                              </div>
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="border-t border-slate-800/50 bg-slate-900/30 max-h-[400px] overflow-y-auto">
+                              <div className="divide-y divide-slate-800/50">
+                                {group.questions.map((question, idx) => (
+                                  <div key={question.id} className="px-4 py-3 hover:bg-slate-800/20 transition-colors group">
+                                    <div className="flex gap-3">
+                                      <span className="text-xs text-slate-600 font-mono mt-0.5 w-6 text-right shrink-0">
+                                        {idx + 1}.
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-start gap-2">
+                                          {typeBadge(question.type)}
+                                          <p className="text-sm text-slate-300 leading-relaxed break-words">
+                                            {question.text.length > 200 ? question.text.substring(0, 200) + '...' : question.text}
+                                          </p>
+                                        </div>
+                                        {question.type === 'mcq' && question.options && question.options.length > 0 && (
+                                          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                                            {question.options.map((opt, oi) => (
+                                              <span key={oi} className={`text-xs font-mono ${
+                                                opt.startsWith(question.correctAnswer + '.') || opt.startsWith(question.correctAnswer + ' ') || question.correctAnswer === opt.charAt(0)
+                                                  ? 'text-green-400' : 'text-slate-500'
+                                              }`}>
+                                                {opt.length > 60 ? opt.substring(0, 60) + '...' : opt}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        <div className="mt-2 flex items-center gap-3">
+                                          {question.bloomLevel && (
+                                            <span className="text-[10px] text-indigo-400/70 font-mono">B{question.bloomLevel}</span>
+                                          )}
+                                          {question.stats.attempts > 0 && (
+                                            <span className="text-[10px] text-slate-600 font-mono">
+                                              {question.stats.correct}/{question.stats.attempts} верни
+                                            </span>
+                                          )}
+                                          <button
+                                            onClick={() => setDeletingQuestion({ bankId: question.bankId, questionId: question.id, text: question.text.substring(0, 80) })}
+                                            className="ml-auto opacity-0 group-hover:opacity-100 p-1 text-red-400/50 hover:text-red-400 hover:bg-red-500/10 rounded transition-all"
+                                            title="Изтрий въпроса"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {viewMode === 'topics' && topicGroups.length === 0 && subjectBanks.length > 0 && (
+                  <div className="p-8 text-center text-slate-500 font-mono text-sm">
+                    Въпросите не са свързани с теми. Свържи ги от изглед &ldquo;По сборници&rdquo;.
+                  </div>
+                )}
 
                 {subjectBanks.length === 0 ? (
                   <div className="p-12 text-center">
@@ -514,7 +670,7 @@ export default function QuestionBankPage() {
                       Качи първия сборник
                     </button>
                   </div>
-                ) : (
+                ) : viewMode === 'banks' ? (
                   <div className="divide-y divide-slate-800">
                     {subjectBanks.map(bank => {
                       const bankAttempts = bank.questions.reduce((s, q) => s + q.stats.attempts, 0);
@@ -801,7 +957,7 @@ export default function QuestionBankPage() {
                       );
                     })}
                   </div>
-                )}
+                ) : null}
               </div>
             </div>
           ) : (

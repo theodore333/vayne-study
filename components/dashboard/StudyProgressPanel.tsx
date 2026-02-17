@@ -2,22 +2,20 @@
 
 import { Flame, Trophy } from 'lucide-react';
 import GoalProgressRings from './GoalProgressRings';
-import { TimerSession } from '@/lib/types';
+import { Subject, QuestionBank } from '@/lib/types';
 
 interface StudyProgressPanelProps {
-  timerSessions: TimerSession[];
-  studyGoals: {
-    dailyMinutes: number;
-    weeklyMinutes: number;
-    monthlyMinutes: number;
-  };
+  subjects: Subject[];
+  questionBanks: QuestionBank[];
+  dailyTopicGoal: number;
   currentStreak: number;
   longestStreak: number;
 }
 
 export default function StudyProgressPanel({
-  timerSessions,
-  studyGoals,
+  subjects,
+  questionBanks,
+  dailyTopicGoal,
   currentStreak,
   longestStreak,
 }: StudyProgressPanelProps) {
@@ -26,8 +24,9 @@ export default function StudyProgressPanel({
   return (
     <div className="rounded-xl p-5 border bg-[rgba(20,20,35,0.8)] border-[#1e293b] h-full">
       <GoalProgressRings
-        timerSessions={timerSessions}
-        studyGoals={studyGoals}
+        subjects={subjects}
+        questionBanks={questionBanks}
+        dailyTopicGoal={dailyTopicGoal}
         compact
       />
       <div className="border-t border-slate-700/50 my-4" />

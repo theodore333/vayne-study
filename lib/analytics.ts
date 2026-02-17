@@ -1,5 +1,5 @@
-import { Subject, TimerSession, UserProgress } from './types';
-import { calculateRetrievability, getDaysUntilReview, toLocalDateStr } from './algorithms';
+import { Subject, TimerSession, UserProgress, QuestionBank } from './types';
+import { calculateRetrievability, getDaysUntilReview, toLocalDateStr, getTodayString } from './algorithms';
 
 // Helper to extract local date string from TimerSession
 function getSessionDate(session: TimerSession): string {
@@ -328,6 +328,88 @@ export function getCurrentStreak(sessions: TimerSession[]): number {
       streak++;
     } else if (i > 0) {
       // Allow today to not be studied yet
+      break;
+    }
+  }
+
+  return streak;
+}
+
+// Build a Set of all dates with any study activity (timer, reviews, quizzes, QB, Anki)
+export function getActivityDays(
+  sessions: TimerSession[],
+  subjects: Subject[],
+  questionBanks?: QuestionBank[]
+): Set<string> {
+  const days = new Set<string>();
+
+  // Timer sessions
+  for (const s of sessions) {
+    const d = getSessionDate(s);
+    if (d) days.add(d);
+  }
+
+  // Topic reviews + quiz history
+  for (const subj of subjects) {
+    for (const topic of subj.topics) {
+      if (topic.lastReview) {
+        const d = toLocalDateStr(topic.lastReview);
+        if (d) days.add(d);
+      }
+      for (const q of topic.quizHistory || []) {
+        if (q.date) {
+          const d = toLocalDateStr(q.date);
+          if (d) days.add(d);
+        }
+      }
+    }
+  }
+
+  // Question bank attempts
+  if (questionBanks) {
+    for (const bank of questionBanks) {
+      for (const q of bank.questions) {
+        if (q.stats.lastAttempt) {
+          const d = toLocalDateStr(q.stats.lastAttempt);
+          if (d) days.add(d);
+        }
+      }
+    }
+  }
+
+  // Anki daily review cache (localStorage keys: anki-reviews-YYYY-MM-DD)
+  if (typeof window !== 'undefined') {
+    for (let i = 0; i < 365; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = toLocalDateStr(date);
+      const cached = localStorage.getItem('anki-reviews-' + dateStr);
+      if (cached && parseInt(cached) > 0) {
+        days.add(dateStr);
+      }
+    }
+  }
+
+  return days;
+}
+
+export function getActivityStreak(
+  sessions: TimerSession[],
+  subjects: Subject[],
+  questionBanks?: QuestionBank[]
+): number {
+  const activityDays = getActivityDays(sessions, subjects, questionBanks);
+  let streak = 0;
+  const now = new Date();
+
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(now);
+    date.setDate(date.getDate() - i);
+    const dateStr = toLocalDateStr(date);
+
+    if (activityDays.has(dateStr)) {
+      streak++;
+    } else if (i > 0) {
       break;
     }
   }

@@ -13,6 +13,7 @@ import { DailyTask, ProjectModule, DevelopmentProject } from '@/lib/types';
 import ModuleDetailModal from '@/components/modals/ModuleDetailModal';
 import { checkAnkiConnect, getCollectionStats, CollectionStats, getSelectedDecks } from '@/lib/anki';
 import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
+import { getActivityStreak } from '@/lib/analytics';
 
 export default function TodayPage() {
   const { data, isLoading, incrementApiCalls, updateProjectModule, addTechniquePractice } = useApp();
@@ -115,6 +116,12 @@ export default function TodayPage() {
         const selectedDecks = getSelectedDecks();
         const stats = await getCollectionStats(selectedDecks.length > 0 ? selectedDecks : undefined);
         setAnkiStats(stats);
+        // Cache today's Anki reviews for activity streak
+        try {
+          const { getTodayStats } = await import('@/lib/anki');
+          const todayStats = await getTodayStats();
+          localStorage.setItem('anki-reviews-' + getTodayString(), String(todayStats.reviewed));
+        } catch { /* ignore */ }
       } else {
         setAnkiStats(null);
       }
@@ -232,30 +239,11 @@ export default function TodayPage() {
     [activeSubjects, data.studyGoals]
   );
 
-  // Calculate study streak
-  const streak = useMemo(() => {
-    const dates = new Set(
-      data.timerSessions.filter(s => s.endTime !== null).map(s => toLocalDateStr(s.startTime))
-    );
-    let count = 0;
-    const checkDate = new Date();
-    while (true) {
-      const dateStr = toLocalDateStr(checkDate);
-      if (dates.has(dateStr)) {
-        count++;
-        checkDate.setDate(checkDate.getDate() - 1);
-      } else if (count === 0) {
-        checkDate.setDate(checkDate.getDate() - 1);
-        if (dates.has(toLocalDateStr(checkDate))) {
-          count++;
-          checkDate.setDate(checkDate.getDate() - 1);
-          continue;
-        }
-        break;
-      } else break;
-    }
-    return count;
-  }, [data.timerSessions]);
+  // Calculate activity streak (timer + reviews + quizzes + QB + Anki)
+  const streak = useMemo(() =>
+    getActivityStreak(data.timerSessions, data.subjects, data.questionBanks),
+    [data.timerSessions, data.subjects, data.questionBanks]
+  );
 
   if (isLoading) {
     return (

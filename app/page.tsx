@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { Plus, BookOpen, Calendar, Flame, GraduationCap, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { getSubjectProgress, getDaysUntil, getNextExamReadiness, getOverallOnTrackStatus } from '@/lib/algorithms';
-import { getCurrentStreak } from '@/lib/analytics';
+import { getSubjectProgress, getDaysUntil, getNextExamReadiness, getOverallOnTrackStatus, calculateDailyTopics } from '@/lib/algorithms';
+import { getActivityStreak } from '@/lib/analytics';
 import { Subject } from '@/lib/types';
 import AddSubjectModal from '@/components/modals/AddSubjectModal';
 import Link from 'next/link';
@@ -21,8 +21,15 @@ export default function Dashboard() {
   const { data, isLoading } = useApp();
   const [showAddSubject, setShowAddSubject] = useState(false);
 
+  const [ankiStats, setAnkiStats] = useState<{ dueToday: number; newToday: number; totalCards: number } | null>(null);
   const activeSubjects = useMemo(() => data.subjects.filter(s => !s.archived && !s.deletedAt), [data.subjects]);
-  const currentStreak = useMemo(() => getCurrentStreak(data.timerSessions), [data.timerSessions]);
+  const currentStreak = useMemo(() => getActivityStreak(data.timerSessions, data.subjects, data.questionBanks), [data.timerSessions, data.subjects, data.questionBanks]);
+  const dailyTopicGoal = useMemo(() => {
+    try {
+      const result = calculateDailyTopics(activeSubjects, data.dailyStatus, data.studyGoals);
+      return result.total || 5;
+    } catch { return 5; }
+  }, [activeSubjects, data.dailyStatus, data.studyGoals]);
   const nextExamReadiness = useMemo(() => {
     try { return getNextExamReadiness(activeSubjects, data.questionBanks || []); }
     catch (e) { console.error('getNextExamReadiness error:', e); return null; }
@@ -31,6 +38,20 @@ export default function Dashboard() {
     try { return getOverallOnTrackStatus(activeSubjects, data.questionBanks || []); }
     catch (e) { console.error('getOverallOnTrackStatus error:', e); return null; }
   }, [activeSubjects, data.questionBanks]);
+
+  // Fetch Anki stats for WeeklyBarChart footer
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (localStorage.getItem('anki-enabled') !== 'true') return;
+    (async () => {
+      try {
+        const { getCollectionStats, getSelectedDecks } = await import('@/lib/anki');
+        const selectedDecks = getSelectedDecks();
+        const stats = await getCollectionStats(selectedDecks.length > 0 ? selectedDecks : undefined);
+        setAnkiStats({ dueToday: stats.dueToday, newToday: stats.newToday, totalCards: stats.totalCards });
+      } catch { /* AnkiConnect not available */ }
+    })();
+  }, []);
 
   if (isLoading) {
     return (
@@ -89,8 +110,9 @@ export default function Dashboard() {
               )}
             </div>
             <GoalProgressRings
-              timerSessions={data.timerSessions}
-              studyGoals={data.studyGoals}
+              subjects={activeSubjects}
+              questionBanks={data.questionBanks || []}
+              dailyTopicGoal={dailyTopicGoal}
               inline
             />
           </div>
@@ -148,9 +170,9 @@ export default function Dashboard() {
 
       {/* ROW 2: Weekly Chart (full width) */}
       <WeeklyBarChart
-        timerSessions={data.timerSessions}
-        dailyGoal={data.studyGoals.dailyMinutes}
-        ankiStats={null}
+        subjects={activeSubjects}
+        dailyGoal={dailyTopicGoal}
+        ankiStats={ankiStats}
       />
 
       {showAddSubject && <AddSubjectModal onClose={() => setShowAddSubject(false)} />}

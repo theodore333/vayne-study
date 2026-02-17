@@ -369,7 +369,7 @@ ${techniqueContext}
     }
 
     const message = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       messages: [{ role: 'user', content: prompt }],
     });

@@ -1631,7 +1631,7 @@ async function handleAnalyzeOverlap(
   }
 
   const response = await anthropic.messages.create({
-    model: 'claude-opus-4-0-20250514',
+    model: 'claude-opus-4-6',
     max_tokens: 4000,
     messages: [{
       role: 'user',

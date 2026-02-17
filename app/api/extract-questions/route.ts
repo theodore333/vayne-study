@@ -267,7 +267,7 @@ linkedTopicIndex = 1-based или null. ПРОПУСКАЙ казуси (кли�
   let outputTokens = 0;
 
   const stream = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5-20250929',
+    model: 'claude-sonnet-4-6',
     max_tokens: 32000,
     messages: [{ role: 'user', content: prompt }],
     stream: true
@@ -831,7 +831,7 @@ ${topicListForPrompt}
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5 - good for extraction
+      model: 'claude-sonnet-4-6', // Claude Sonnet 4.5 - good for extraction
       max_tokens: 64000, // More tokens for large question banks
       messages: [{ role: 'user', content }],
       stream: true

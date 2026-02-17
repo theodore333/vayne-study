@@ -125,7 +125,7 @@ RULES:
     let outputTokens = 0;
 
     const stream = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5-20250929', // Claude Sonnet 4.5
+      model: 'claude-sonnet-4-6',
       max_tokens: 16384,
       messages: [{ role: 'user', content }],
       stream: true

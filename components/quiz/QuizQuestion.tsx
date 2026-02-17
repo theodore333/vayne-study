@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, Pencil, Trash2, Save, X, MessageSquare, Send } from 'lucide-react';
+import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, Pencil, Trash2, Save, X, MessageSquare, Send, Plus, Check } from 'lucide-react';
 import { Question, OpenAnswerEvaluation, isAnswerCorrect } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
@@ -61,6 +61,7 @@ interface QuizQuestionProps {
   onEditQuestion?: (index: number, updated: Question) => void;
   onDeleteQuestion?: (index: number) => void;
   onReEvaluate?: (index: number, feedback: string) => void;
+  onAddQuestion?: (question: { type: 'mcq' | 'open'; text: string; options?: string[]; correctAnswer: string; explanation?: string }) => void;
 }
 
 export function QuizQuestion({
@@ -76,7 +77,7 @@ export function QuizQuestion({
   elapsedTime, formatTime,
   onAnswer, onNext, onEarlyStop, onBack,
   fillBlankAnswer, setFillBlankAnswer,
-  onEditQuestion, onDeleteQuestion, onReEvaluate
+  onEditQuestion, onDeleteQuestion, onReEvaluate, onAddQuestion
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
   const [isEditing, setIsEditing] = useState(false);
@@ -86,6 +87,14 @@ export function QuizQuestion({
   const [editOptions, setEditOptions] = useState<string[]>([]);
   const [showFeedback, setShowFeedback] = useState(false);
   const [feedbackText, setFeedbackText] = useState('');
+  const [isAddingQuestion, setIsAddingQuestion] = useState(false);
+  const [addedConfirm, setAddedConfirm] = useState(false);
+  const [newQType, setNewQType] = useState<'mcq' | 'open'>('open');
+  const [newQText, setNewQText] = useState('');
+  const [newQAnswer, setNewQAnswer] = useState('');
+  const [newQExplanation, setNewQExplanation] = useState('');
+  const [newQOptions, setNewQOptions] = useState(['', '', '', '']);
+  const [newQCorrectIdx, setNewQCorrectIdx] = useState(0);
   const openEval = openEvaluations[currentIndex];
   const currentAnswer = answers[currentIndex];
   const isCorrect = isAnswerCorrect(currentQuestion, currentAnswer, openEval);
@@ -604,8 +613,140 @@ export function QuizQuestion({
           </div>
         )}
 
+        {/* Inline add question form */}
+        {showExplanation && isAddingQuestion && onAddQuestion && (
+          <div className="mt-4 p-4 bg-emerald-900/10 border border-emerald-700/30 rounded-xl space-y-3">
+            <p className="text-sm font-mono text-emerald-400 font-semibold">Добави свой въпрос</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setNewQType('open')}
+                className={`px-3 py-1.5 text-xs font-mono rounded-lg border transition-colors ${
+                  newQType === 'open'
+                    ? 'bg-purple-500/20 border-purple-500 text-purple-300'
+                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Отворен
+              </button>
+              <button
+                onClick={() => setNewQType('mcq')}
+                className={`px-3 py-1.5 text-xs font-mono rounded-lg border transition-colors ${
+                  newQType === 'mcq'
+                    ? 'bg-blue-500/20 border-blue-500 text-blue-300'
+                    : 'bg-slate-800/50 border-slate-700 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                С избор
+              </button>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 font-mono mb-1 block">Въпрос</label>
+              <textarea
+                value={newQText}
+                onChange={(e) => setNewQText(e.target.value)}
+                rows={2}
+                placeholder="Напиши въпроса тук..."
+                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-emerald-500 focus:outline-none resize-none placeholder:text-slate-600"
+                autoFocus
+              />
+            </div>
+            {newQType === 'mcq' && (
+              <div>
+                <label className="text-xs text-slate-500 font-mono mb-1 block">Опции (избери верния)</label>
+                {newQOptions.map((opt, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-1">
+                    <button
+                      onClick={() => setNewQCorrectIdx(i)}
+                      className={`w-6 h-6 rounded text-xs font-mono flex items-center justify-center shrink-0 transition-colors ${
+                        newQCorrectIdx === i
+                          ? 'bg-green-500/30 text-green-300 border border-green-500'
+                          : 'bg-slate-700 text-slate-400 border border-slate-600 hover:border-slate-500'
+                      }`}
+                    >
+                      {String.fromCharCode(1040 + i)}
+                    </button>
+                    <input
+                      value={opt}
+                      onChange={(e) => {
+                        const upd = [...newQOptions];
+                        upd[i] = e.target.value;
+                        setNewQOptions(upd);
+                      }}
+                      placeholder={`Опция ${String.fromCharCode(1040 + i)}`}
+                      className="flex-1 px-3 py-1.5 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {newQType === 'open' && (
+              <div>
+                <label className="text-xs text-slate-500 font-mono mb-1 block">Верен отговор</label>
+                <textarea
+                  value={newQAnswer}
+                  onChange={(e) => setNewQAnswer(e.target.value)}
+                  rows={2}
+                  placeholder="Напиши верния отговор..."
+                  className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-emerald-500 focus:outline-none resize-none placeholder:text-slate-600"
+                />
+              </div>
+            )}
+            <div>
+              <label className="text-xs text-slate-500 font-mono mb-1 block">Обяснение (по избор)</label>
+              <input
+                value={newQExplanation}
+                onChange={(e) => setNewQExplanation(e.target.value)}
+                placeholder="Кратко обяснение..."
+                className="w-full px-3 py-1.5 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-emerald-500 focus:outline-none placeholder:text-slate-600"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setIsAddingQuestion(false); setNewQText(''); setNewQAnswer(''); setNewQExplanation(''); setNewQOptions(['', '', '', '']); setNewQCorrectIdx(0); }}
+                className="px-3 py-1.5 text-sm font-mono text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+              >
+                <X size={14} /> Отказ
+              </button>
+              <button
+                onClick={() => {
+                  if (!newQText.trim()) return;
+                  if (newQType === 'mcq') {
+                    const filledOptions = newQOptions.filter(o => o.trim());
+                    if (filledOptions.length < 2) return;
+                    const opts = filledOptions.map((o, i) => `${String.fromCharCode(1040 + i)}. ${o}`);
+                    onAddQuestion({
+                      type: 'mcq',
+                      text: newQText.trim(),
+                      options: opts,
+                      correctAnswer: opts[newQCorrectIdx] || opts[0],
+                      explanation: newQExplanation.trim() || undefined
+                    });
+                  } else {
+                    if (!newQAnswer.trim()) return;
+                    onAddQuestion({
+                      type: 'open',
+                      text: newQText.trim(),
+                      correctAnswer: newQAnswer.trim(),
+                      explanation: newQExplanation.trim() || undefined
+                    });
+                  }
+                  setIsAddingQuestion(false);
+                  setNewQText(''); setNewQAnswer(''); setNewQExplanation('');
+                  setNewQOptions(['', '', '', '']); setNewQCorrectIdx(0);
+                  setAddedConfirm(true);
+                  setTimeout(() => setAddedConfirm(false), 2000);
+                }}
+                disabled={!newQText.trim() || (newQType === 'open' && !newQAnswer.trim()) || (newQType === 'mcq' && newQOptions.filter(o => o.trim()).length < 2)}
+                className="px-3 py-1.5 text-sm font-mono bg-emerald-600/30 text-emerald-400 hover:bg-emerald-600/50 rounded-lg transition-colors flex items-center gap-1 disabled:opacity-50"
+              >
+                <Save size={14} /> Запази
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6 flex items-center justify-between">
-          {/* Edit/Delete buttons — only after answering */}
+          {/* Edit/Delete/Add buttons — only after answering */}
           {showExplanation && (onEditQuestion || onDeleteQuestion) ? (
             <div className="flex items-center gap-2">
               {onEditQuestion && !isEditing && (
@@ -629,6 +770,19 @@ export function QuizQuestion({
                 >
                   <Trash2 size={13} /> Изтрий
                 </button>
+              )}
+              {onAddQuestion && !isAddingQuestion && !addedConfirm && (
+                <button
+                  onClick={() => setIsAddingQuestion(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-emerald-400/70 hover:text-emerald-400 bg-slate-800/50 hover:bg-emerald-900/20 border border-slate-700 hover:border-emerald-700/50 rounded-lg transition-colors"
+                >
+                  <Plus size={13} /> Добави
+                </button>
+              )}
+              {addedConfirm && (
+                <span className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono text-emerald-400">
+                  <Check size={13} /> Добавен!
+                </span>
               )}
             </div>
           ) : <div />}

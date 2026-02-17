@@ -880,6 +880,24 @@ function QuizContent() {
     setDeleteQuestionIndex(null);
   };
 
+  // Add a custom question to the question bank during quiz
+  const handleAddQuestion = (question: { type: 'mcq' | 'open'; text: string; options?: string[]; correctAnswer: string; explanation?: string }) => {
+    if (!subjectId) return;
+    const existingBanks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+    let aiBank = existingBanks.find(b => b.name === 'AI Quiz');
+    let bankId: string;
+    if (aiBank) {
+      bankId = aiBank.id;
+    } else {
+      bankId = addQuestionBank(subjectId, 'AI Quiz');
+    }
+    addQuestionsToBank(bankId, [{
+      ...question,
+      linkedTopicIds: topicId ? [topicId] : [],
+      stats: { attempts: 0, correct: 0 }
+    }], []);
+  };
+
   // Re-evaluate open answer with student feedback
   const handleReEvaluate = async (index: number, feedback: string) => {
     const question = quizState.questions[index];
@@ -1049,8 +1067,7 @@ function QuizContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey, wrongAnswers, topicName }),
-        signal: gen.abortControllerRef.current?.signal,
-        timeout: 30000
+        timeout: 60000
       });
 
       const result = await response.json();
@@ -1060,9 +1077,7 @@ function QuizContent() {
         setClozeCards(result.cards);
       }
     } catch (err) {
-      if (!isAbortOrTimeoutError(err)) {
-        setClozeError(getFetchErrorMessage(err));
-      }
+      setClozeError(getFetchErrorMessage(err));
     }
     setIsGeneratingCloze(false);
   };
@@ -1589,11 +1604,12 @@ function QuizContent() {
         onSaveGrade={handleSaveGrade}
         onReset={() => { handleSaveGrade(); resetQuiz(); }}
         onDrillWeakness={() => {
+          const drillCount = Math.min(10, quizState.questions.length - Math.round(score));
           handleSaveGrade();
+          resetQuiz();
           setMode('drill_weakness');
           setShowPreview(true);
-          setPreviewQuestionCount(Math.min(10, quizState.questions.length - Math.round(score)));
-          setQuizState({ questions: [], currentIndex: 0, answers: [], showResult: false, isGenerating: false, error: null });
+          setPreviewQuestionCount(drillCount);
         }}
         clozeCards={clozeCards}
         isGeneratingCloze={isGeneratingCloze}
@@ -1653,6 +1669,7 @@ function QuizContent() {
         onEditQuestion={handleEditQuestion}
         onDeleteQuestion={(idx) => setDeleteQuestionIndex(idx)}
         onReEvaluate={handleReEvaluate}
+        onAddQuestion={handleAddQuestion}
       />
       {/* Cognitive offloading warning (must render in quiz view) */}
       <ConfirmDialog

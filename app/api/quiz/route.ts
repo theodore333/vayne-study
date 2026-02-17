@@ -1219,7 +1219,9 @@ ${studyTechniques && studyTechniques.length > 0 ? `
 
   let analysis;
   try {
-    analysis = JSON.parse(responseText);
+    // Extract JSON object from response (handles markdown wrapping, explanatory text)
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
     // Validate required fields exist
     if (!analysis.summary || !analysis.weakConcepts) {
       throw new Error('Missing required fields');

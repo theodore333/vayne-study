@@ -1119,11 +1119,30 @@ function filterUsedTopics(topics: Topic[], usedTopicIds: Set<string>): Topic[] {
   return topics.filter(t => !usedTopicIds.has(t.id));
 }
 
-/** Add all topic IDs from a task's topics to the used set */
+/** Add all topic IDs from a task's topics to the used set (including linked topics) */
 function markTopicsUsed(topics: Topic[], usedTopicIds: Set<string>): void {
   for (const topic of topics) {
     usedTopicIds.add(topic.id);
+    // Also mark cross-subject linked topics as used to avoid scheduling overlapping content
+    for (const linkedId of topic.linkedTopicIds || []) {
+      usedTopicIds.add(linkedId);
+    }
   }
+}
+
+/** Estimate study minutes for a set of topics, accounting for overlap analysis. */
+function estimateMinutes(topics: Topic[], basePerTopic: number): number {
+  let total = 0;
+  for (const t of topics) {
+    if (t.overlapAnalysis && t.overlapAnalysis.overlapPercent > 0) {
+      // Reduce time proportionally — e.g., 80% overlap → only 20% of base time (minimum 5 min)
+      const uniqueFraction = (100 - t.overlapAnalysis.overlapPercent) / 100;
+      total += Math.max(5, Math.round(basePerTopic * uniqueFraction));
+    } else {
+      total += basePerTopic;
+    }
+  }
+  return total;
 }
 
 /**
@@ -1376,7 +1395,7 @@ export function generateDailyPlan(
         typeLabel: `${CLASS_TYPES[exercise.type].icon} ${CLASS_TYPES[exercise.type].label} утре`,
         description: `Подготовка за ${CLASS_TYPES[exercise.type].label.toLowerCase()}`,
         topics: weakTopics,
-        estimatedMinutes: weakTopics.length * 20, // ~20 min per topic
+        estimatedMinutes: estimateMinutes(weakTopics, 20), // ~20 min per topic
         completed: false
       });
       markTopicsUsed(weakTopics, usedTopicIds);
@@ -1427,7 +1446,7 @@ export function generateDailyPlan(
         typeLabel: `📝 Изпит след ${subjectWork.daysLeft} ${subjectWork.daysLeft === 1 ? 'ден' : 'дни'}`,
         description,
         topics: weakTopics,
-        estimatedMinutes: weakTopics.length * 20,
+        estimatedMinutes: estimateMinutes(weakTopics, 20),
         completed: false
       });
       markTopicsUsed(weakTopics, usedTopicIds);
@@ -1519,7 +1538,7 @@ export function generateDailyPlan(
         typeLabel: '🟠 Укрепване',
         description: `Теми за ~3.5 - нужен е преговор`,
         topics: selectedTopics,
-        estimatedMinutes: selectedTopics.length * 20,
+        estimatedMinutes: estimateMinutes(selectedTopics, 20),
         completed: false
       });
       markTopicsUsed(selectedTopics, usedTopicIds);
@@ -1728,7 +1747,7 @@ export function generateDailyPlan(
         typeLabel: 'Higher Order',
         description: `Bloom ${bl} \u2192 опитай Higher Order quiz (${names})`,
         topics: bloomTopics,
-        estimatedMinutes: bloomTopics.length * 20,
+        estimatedMinutes: estimateMinutes(bloomTopics, 20),
         completed: false
       });
       markTopicsUsed(bloomTopics, usedTopicIds);
@@ -1781,7 +1800,7 @@ export function generateDailyPlan(
             // Add to existing task (filter duplicates first)
             const newTopics = filterUsedTopics(selectedTopics, usedTopicIds);
             existingTask.topics.push(...newTopics);
-            existingTask.estimatedMinutes += newTopics.length * 20;
+            existingTask.estimatedMinutes += estimateMinutes(newTopics, 20);
             existingTask.description += ' + нов материал';
             markTopicsUsed(newTopics, usedTopicIds);
           } else {
@@ -1795,7 +1814,7 @@ export function generateDailyPlan(
               typeLabel: `📚 Нов материал (${Math.round(newMaterialQuota * 100)}%)`,
               description: `Покрий нови теми - ${Math.round(grayPercentage * 100)}% непокрити`,
               topics: selectedTopics,
-              estimatedMinutes: selectedTopics.length * 20,
+              estimatedMinutes: estimateMinutes(selectedTopics, 20),
               completed: false
             });
             markTopicsUsed(selectedTopics, usedTopicIds);
@@ -1838,7 +1857,7 @@ export function generateDailyPlan(
         typeLabel: '⚠️ Преговор',
         description: `Теми без review ${avgWarningDays}+ дни`,
         topics: selectedTopics,
-        estimatedMinutes: selectedTopics.length * 20,
+        estimatedMinutes: estimateMinutes(selectedTopics, 20),
         completed: false
       });
       markTopicsUsed(selectedTopics, usedTopicIds);

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles } from 'lucide-react';
+import { ArrowLeft, Star, BookOpen, Trash2, FileText, Save, Brain, Upload, Loader2, AlertTriangle, Repeat, ChevronDown, ChevronUp, Maximize2, X, Pencil, Check, MessageSquarePlus, Trash, Sparkles, Link2 } from 'lucide-react';
+import LinkTopicModal from '@/components/modals/LinkTopicModal';
 import ReaderMode from '@/components/ReaderMode';
 const MaterialEditor = dynamic(() => import('@/components/MaterialEditor'), {
   ssr: false,
@@ -62,6 +63,8 @@ export default function TopicDetailPage() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [enrichError, setEnrichError] = useState<string | null>(null);
   const [expandedQuestion, setExpandedQuestion] = useState<number | null>(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [analyzingOverlapId, setAnalyzingOverlapId] = useState<string | null>(null);
 
   // Inline topic name editing
   const [isEditingName, setIsEditingName] = useState(false);
@@ -978,6 +981,165 @@ export default function TopicDetailPage() {
             </button>
           </div>
 
+          {/* Linked Topics Section */}
+          {(() => {
+            const linkedIds = topic.linkedTopicIds || [];
+            // Resolve linked topics to their names and subjects
+            const linkedTopics = linkedIds.map(lid => {
+              for (const s of data.subjects) {
+                const t = s.topics.find(t => t.id === lid);
+                if (t) return { topic: t, subject: s };
+              }
+              return null;
+            }).filter(Boolean) as { topic: typeof topic; subject: typeof subject }[];
+
+            const handleUnlink = (targetTopicId: string) => {
+              // Remove from source
+              updateTopic(subjectId, topicId, {
+                linkedTopicIds: linkedIds.filter(id => id !== targetTopicId)
+              });
+              // Remove from target (bidirectional)
+              for (const s of data.subjects) {
+                const t = s.topics.find(t => t.id === targetTopicId);
+                if (t) {
+                  updateTopic(s.id, targetTopicId, {
+                    linkedTopicIds: (t.linkedTopicIds || []).filter(id => id !== topicId)
+                  });
+                  break;
+                }
+              }
+            };
+
+            return (
+              <div className="bg-gradient-to-br from-blue-900/20 to-indigo-900/20 border border-blue-700/30 rounded-xl p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 size={16} className="text-blue-400" />
+                    <span className="text-sm font-medium text-blue-400 font-mono">
+                      Свързани теми ({linkedTopics.length})
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowLinkModal(true)}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-mono px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 transition-all"
+                  >
+                    + Свържи
+                  </button>
+                </div>
+
+                {linkedTopics.length > 0 ? (
+                  <div className="space-y-2">
+                    {linkedTopics.map(({ topic: lt, subject: ls }) => {
+                      // Check if we have overlap analysis for this pair
+                      const analysis = topic.overlapAnalysis?.linkedTopicId === lt.id ? topic.overlapAnalysis : null;
+                      const bothHaveMaterial = hasMaterial && (lt.material?.trim() || (() => { try { return localStorage.getItem(`material-${lt.id}`)?.trim(); } catch { return ''; } })());
+                      const isAnalyzing = analyzingOverlapId === lt.id;
+
+                      const handleAnalyze = async () => {
+                        if (!apiKey) return;
+                        setAnalyzingOverlapId(lt.id);
+                        try {
+                          // Get target material
+                          let targetMaterial = lt.material || '';
+                          try {
+                            const stored = localStorage.getItem(`material-${lt.id}`);
+                            if (stored && stored.length > 0) targetMaterial = stored;
+                          } catch {}
+
+                          const res = await fetchWithTimeout('/api/quiz', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              apiKey,
+                              mode: 'analyze_overlap',
+                              materialA: material,
+                              materialB: targetMaterial,
+                              topicNameA: topic.name,
+                              topicNameB: lt.name,
+                              subjectNameA: subject.name,
+                              subjectNameB: ls.name,
+                            }),
+                          });
+                          const result = await res.json();
+                          if (res.ok) {
+                            updateTopic(subjectId, topicId, {
+                              overlapAnalysis: {
+                                linkedTopicId: lt.id,
+                                overlapPercent: result.overlapPercent,
+                                sharedConcepts: result.sharedConcepts || [],
+                                uniqueConcepts: result.uniqueToA || [],
+                              }
+                            });
+                          }
+                        } catch {} finally {
+                          setAnalyzingOverlapId(null);
+                        }
+                      };
+
+                      return (
+                        <div key={lt.id} className="rounded-lg bg-slate-800/40 border border-slate-700/30 group">
+                          <div className="flex items-center justify-between p-2.5">
+                            <Link
+                              href={`/subjects/${ls.id}/topics/${lt.id}`}
+                              className="flex items-center gap-2 min-w-0 flex-1 hover:opacity-80 transition-opacity"
+                            >
+                              <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: ls.color }} />
+                              <div className="min-w-0">
+                                <p className="text-sm text-slate-200 font-mono truncate">{lt.name}</p>
+                                <p className="text-[10px] text-slate-500 font-mono">{ls.name}</p>
+                              </div>
+                            </Link>
+                            <div className="flex items-center gap-1 shrink-0 ml-2">
+                              {bothHaveMaterial && !analysis && (
+                                <button
+                                  onClick={handleAnalyze}
+                                  disabled={isAnalyzing}
+                                  className="p-1 text-purple-400 hover:text-purple-300 transition-all text-[10px] font-mono"
+                                  title="Анализирай припокриването"
+                                >
+                                  {isAnalyzing ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleUnlink(lt.id)}
+                                className="p-1 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                title="Премахни връзка"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Overlap analysis results */}
+                          {analysis && (
+                            <div className="px-2.5 pb-2.5 border-t border-slate-700/20 pt-2">
+                              <div className="flex items-center gap-2 mb-1.5">
+                                <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                  <div className="h-full bg-blue-500 rounded-full" style={{ width: `${analysis.overlapPercent}%` }} />
+                                </div>
+                                <span className="text-[10px] text-blue-400 font-mono shrink-0">{analysis.overlapPercent}% общо</span>
+                              </div>
+                              {analysis.uniqueConcepts.length > 0 && (
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  <span className="text-emerald-400">Уникално:</span>{' '}
+                                  {analysis.uniqueConcepts.slice(0, 3).join(', ')}
+                                  {analysis.uniqueConcepts.length > 3 && ` +${analysis.uniqueConcepts.length - 3}`}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500 font-mono">
+                    Няма свързани теми. Свържи припокриващи се теми от други предмети.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Wrong Answers Section - Grouped by Concept */}
           {topic.wrongAnswers && topic.wrongAnswers.length > 0 && (() => {
             // Group wrong answers by concept
@@ -1283,6 +1445,17 @@ export default function TopicDetailPage() {
         </div>
       </div>
     </div>
+
+    {/* Link Topic Modal */}
+    {showLinkModal && topic && (
+      <LinkTopicModal
+        subjectId={subjectId}
+        topicId={topicId}
+        topicName={topic.name}
+        existingLinkedIds={topic.linkedTopicIds || []}
+        onClose={() => setShowLinkModal(false)}
+      />
+    )}
 
     {/* Zoomed Image Modal */}
     {zoomedImage && (

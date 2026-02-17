@@ -160,6 +160,11 @@ export async function POST(request: Request) {
       return handleEnrichCustomQuestions(anthropic, questions, tName || topicName, sName || subjectName, mat || material || '');
     }
 
+    if (mode === 'analyze_overlap') {
+      const { materialA, materialB, topicNameA, topicNameB, subjectNameA, subjectNameB } = body;
+      return handleAnalyzeOverlap(anthropic, materialA, materialB, topicNameA, topicNameB, subjectNameA, subjectNameB);
+    }
+
     // Standard quiz generation (assessment, mid_order, higher_order, custom)
     // material can be empty — generates from general medical knowledge
     return handleStandardQuiz(anthropic, {
@@ -175,7 +180,8 @@ export async function POST(request: Request) {
       matchExamFormat,
       model,
       masteryContext,
-      customQuestions
+      customQuestions,
+      overlapContext: body.overlapContext
     });
 
   } catch (error: unknown) {
@@ -685,9 +691,15 @@ async function handleStandardQuiz(
       weakConcepts: Array<{ concept: string; drillCount: number }>;
     };
     customQuestions?: Array<{ question: string; answer: string }>;
+    overlapContext?: {
+      sharedConcepts: string[];
+      uniqueConcepts: string[];
+      overlapPercent: number;
+      linkedTopicName: string;
+    };
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -811,6 +823,16 @@ The student is a Bulgarian medical student testing their general knowledge of "$
 Use established medical textbook knowledge. Focus on core concepts, key mechanisms, clinical relevance.
 Questions should be appropriate for a university-level medical education exam.`;
 
+  // Overlap context — when linked topics exist, focus on unique content
+  const overlapSection = overlapContext && overlapContext.uniqueConcepts.length > 0
+    ? `\n\nOVERLAP CONTEXT — FOCUS ON UNIQUE CONTENT:
+This topic overlaps ${overlapContext.overlapPercent}% with "${overlapContext.linkedTopicName}".
+The student has already studied the shared concepts. Focus your questions PRIMARILY on the unique concepts below:
+UNIQUE to this topic: ${overlapContext.uniqueConcepts.join(', ')}
+Shared (student already knows): ${overlapContext.sharedConcepts.slice(0, 10).join(', ')}
+Generate mostly questions about the UNIQUE concepts. You may include 1-2 questions about shared concepts for reinforcement.`
+    : '';
+
   // Custom questions added by the student
   const customQuestionsSection = customQuestions && customQuestions.length > 0
     ? `\n\nCUSTOM QUESTIONS (added by student — MUST BE INCLUDED):
@@ -833,6 +855,7 @@ ${bloomInstructions}
 ${masteryInstructions}
 
 ${materialSection}
+${overlapSection}
 ${customQuestionsSection}
 
 Generate ${targetQuestionCount}.
@@ -1445,6 +1468,82 @@ ${qaPairs}
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
+}
+
+// Analyze overlap between two linked topics' materials
+async function handleAnalyzeOverlap(
+  anthropic: Anthropic,
+  materialA: string,
+  materialB: string,
+  topicNameA: string,
+  topicNameB: string,
+  subjectNameA: string,
+  subjectNameB: string
+) {
+  if (!materialA || !materialB) {
+    return NextResponse.json({ error: 'И двете теми трябва да имат материал за анализ.' }, { status: 400 });
+  }
+
+  const response = await anthropic.messages.create({
+    model: 'claude-opus-4-0-20250514',
+    max_tokens: 4000,
+    messages: [{
+      role: 'user',
+      content: `Анализирай припокриването между тези две теми от различни предмети.
+
+## Тема А: "${topicNameA}" (${subjectNameA})
+${materialA.substring(0, 6000)}
+
+## Тема Б: "${topicNameB}" (${subjectNameB})
+${materialB.substring(0, 6000)}
+
+Анализирай подробно:
+1. Кои концепции са ОБЩИ (припокриващи се)?
+2. Кои концепции са УНИКАЛНИ за тема А?
+3. Кои концепции са УНИКАЛНИ за тема Б?
+4. Какъв процент от съдържанието се припокрива?
+
+Върни САМО валиден JSON:
+{
+  "overlapPercent": <число 0-100>,
+  "sharedConcepts": ["концепция 1", "концепция 2", ...],
+  "uniqueToA": ["уникална за А 1", ...],
+  "uniqueToB": ["уникална за Б 1", ...],
+  "summary": "Кратко обяснение на припокриването на български"
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let result;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    result = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    return NextResponse.json({ error: 'Failed to parse overlap analysis', raw: responseText.substring(0, 500) }, { status: 500 });
+  }
+
+  const overlapCost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    overlapPercent: result.overlapPercent || 0,
+    sharedConcepts: result.sharedConcepts || [],
+    uniqueToA: result.uniqueToA || [],
+    uniqueToB: result.uniqueToB || [],
+    summary: result.summary || '',
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(overlapCost * 1000000) / 1000000
     }
   });
 }

@@ -213,6 +213,13 @@ export interface Topic {
   }>;
   ankiCards?: string[];  // Cloze cards generated from material (Bloom L1 - Remember)
   ankiCardsSourceLength?: number; // Length of material when cards were generated
+  linkedTopicIds?: string[]; // IDs of overlapping topics in other subjects
+  overlapAnalysis?: {
+    linkedTopicId: string;
+    overlapPercent: number;
+    sharedConcepts: string[];
+    uniqueConcepts: string[];
+  };
 }
 
 // Text highlight for reader mode

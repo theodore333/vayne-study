@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, Suspense, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore, Copy, FileDown, FileUp, CalendarDays, CloudUpload, Check, ChevronUp } from 'lucide-react';
+import { Plus, Upload, Search, Trash2, Edit2, Calendar, Sparkles, Brain, Loader2, PanelLeftClose, PanelLeft, ArrowUpDown, Download, Archive, ArchiveRestore, Copy, FileDown, FileUp, CalendarDays, CloudUpload, Check, ChevronUp, Link2, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { getSubjectProgress, getDaysUntil, getDaysSince } from '@/lib/algorithms';
 import { STATUS_CONFIG, PRESET_COLORS, TOPIC_SIZE_CONFIG } from '@/lib/constants';
@@ -12,6 +12,7 @@ import ImportFileModal from '@/components/modals/ImportFileModal';
 import ConfirmDialog from '@/components/modals/ConfirmDialog';
 import Link from 'next/link';
 import { checkAnkiConnect, exportSubjectToAnki } from '@/lib/anki';
+import { fetchWithTimeout } from '@/lib/fetch-utils';
 
 function LoadingFallback() {
   return (
@@ -90,6 +91,18 @@ function SubjectsContent() {
 
   // Scroll to top button
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Overlap detection
+  const [showOverlaps, setShowOverlaps] = useState(false);
+  const [isSearchingOverlaps, setIsSearchingOverlaps] = useState(false);
+  const [overlapPairs, setOverlapPairs] = useState<Array<{
+    topicA: { id: string; name: string; subjectName: string };
+    topicB: { id: string; name: string; subjectName: string };
+    confidence: number;
+    reason: string;
+  }>>([]);
+  const [selectedOverlaps, setSelectedOverlaps] = useState<Set<number>>(new Set());
+  const [overlapError, setOverlapError] = useState<string | null>(null);
 
   // Track if initial subject selection has been done
   const initialSelectionDone = useRef(false);
@@ -201,6 +214,110 @@ function SubjectsContent() {
     } finally {
       setIsExportingAnki(false);
     }
+  };
+
+  // Find overlapping topics across subjects
+  const handleFindOverlaps = async () => {
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) {
+      setOverlapError('Добави API ключ в настройки.');
+      return;
+    }
+
+    const subjectsWithTopics = data.subjects
+      .filter(s => !s.archived && !s.deletedAt && s.topics.length > 0)
+      .map(s => ({
+        id: s.id,
+        name: s.name,
+        topics: s.topics.map(t => ({ id: t.id, name: t.name })),
+      }));
+
+    if (subjectsWithTopics.length < 2) {
+      setOverlapError('Нужни са поне 2 предмета с теми.');
+      return;
+    }
+
+    setIsSearchingOverlaps(true);
+    setOverlapError(null);
+    setOverlapPairs([]);
+    setSelectedOverlaps(new Set());
+    setShowOverlaps(true);
+
+    try {
+      const res = await fetchWithTimeout('/api/find-overlaps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, subjects: subjectsWithTopics }),
+        timeout: 30000,
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Грешка');
+
+      // Filter out pairs that are already linked
+      const alreadyLinked = new Set<string>();
+      for (const s of data.subjects) {
+        for (const t of s.topics) {
+          for (const lid of t.linkedTopicIds || []) {
+            alreadyLinked.add(`${t.id}:${lid}`);
+            alreadyLinked.add(`${lid}:${t.id}`);
+          }
+        }
+      }
+
+      const filtered = (result.pairs || []).filter((p: { topicA: { id: string }; topicB: { id: string } }) =>
+        !alreadyLinked.has(`${p.topicA.id}:${p.topicB.id}`)
+      );
+
+      setOverlapPairs(filtered);
+      if (filtered.length === 0 && (result.pairs || []).length > 0) {
+        setOverlapError('Всички намерени припокривания вече са свързани!');
+      }
+    } catch (err) {
+      setOverlapError(err instanceof Error ? err.message : 'Грешка при търсене');
+    } finally {
+      setIsSearchingOverlaps(false);
+    }
+  };
+
+  // Apply selected overlap links
+  const handleApplyOverlaps = () => {
+    for (const idx of selectedOverlaps) {
+      const pair = overlapPairs[idx];
+      if (!pair) continue;
+
+      // Find the topics
+      let topicA = null as { topic: any; subjectId: string } | null;
+      let topicB = null as { topic: any; subjectId: string } | null;
+
+      for (const s of data.subjects) {
+        for (const t of s.topics) {
+          if (t.id === pair.topicA.id) topicA = { topic: t, subjectId: s.id };
+          if (t.id === pair.topicB.id) topicB = { topic: t, subjectId: s.id };
+        }
+      }
+
+      if (!topicA || !topicB) continue;
+
+      // Add bidirectional links
+      const aLinked = topicA.topic.linkedTopicIds || [];
+      if (!aLinked.includes(pair.topicB.id)) {
+        updateTopic(topicA.subjectId, pair.topicA.id, {
+          linkedTopicIds: [...aLinked, pair.topicB.id]
+        });
+      }
+
+      const bLinked = topicB.topic.linkedTopicIds || [];
+      if (!bLinked.includes(pair.topicA.id)) {
+        updateTopic(topicB.subjectId, pair.topicB.id, {
+          linkedTopicIds: [...bLinked, pair.topicA.id]
+        });
+      }
+    }
+
+    // Remove applied pairs from list
+    setOverlapPairs(prev => prev.filter((_, i) => !selectedOverlaps.has(i)));
+    setSelectedOverlaps(new Set());
   };
 
   // Sort subjects
@@ -688,6 +805,18 @@ function SubjectsContent() {
                 }}
               />
             </label>
+            {/* Find Overlapping Topics */}
+            <button
+              onClick={handleFindOverlaps}
+              disabled={isSearchingOverlaps}
+              className="w-full mt-2 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 rounded-lg transition-colors font-mono text-xs disabled:opacity-50"
+            >
+              {isSearchingOverlaps ? (
+                <><Loader2 size={14} className="animate-spin" /> Търсене...</>
+              ) : (
+                <><Link2 size={14} /> Намери припокривания</>
+              )}
+            </button>
           </div>
         </div>
         ) : (
@@ -1490,6 +1619,121 @@ function SubjectsContent() {
           confirmText="Изтрий"
           variant="danger"
         />
+      )}
+
+      {/* Overlap Suggestions Modal */}
+      {showOverlaps && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowOverlaps(false)}>
+          <div className="bg-[#0f1729] border border-[#1e293b] rounded-xl w-full max-w-xl max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-slate-700/50">
+              <div className="flex items-center gap-2">
+                <Link2 size={16} className="text-blue-400" />
+                <h2 className="text-sm font-semibold text-slate-200 font-mono">Припокриващи се теми</h2>
+              </div>
+              <button onClick={() => setShowOverlaps(false)} className="text-slate-500 hover:text-slate-300">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {isSearchingOverlaps && (
+                <div className="flex items-center justify-center py-8 gap-2">
+                  <Loader2 size={18} className="animate-spin text-blue-400" />
+                  <span className="text-sm text-slate-400 font-mono">AI анализира темите...</span>
+                </div>
+              )}
+
+              {overlapError && (
+                <p className="text-sm text-red-400 font-mono text-center py-4">{overlapError}</p>
+              )}
+
+              {!isSearchingOverlaps && overlapPairs.length === 0 && !overlapError && (
+                <p className="text-sm text-slate-500 font-mono text-center py-8">Не са намерени припокривания.</p>
+              )}
+
+              {overlapPairs.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-slate-400 font-mono">
+                      Намерени: {overlapPairs.length} двойки
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (selectedOverlaps.size === overlapPairs.length) {
+                          setSelectedOverlaps(new Set());
+                        } else {
+                          setSelectedOverlaps(new Set(overlapPairs.map((_, i) => i)));
+                        }
+                      }}
+                      className="text-xs text-blue-400 hover:text-blue-300 font-mono"
+                    >
+                      {selectedOverlaps.size === overlapPairs.length ? 'Премахни всички' : 'Избери всички'}
+                    </button>
+                  </div>
+
+                  {overlapPairs.map((pair, idx) => (
+                    <label
+                      key={idx}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                        selectedOverlaps.has(idx)
+                          ? 'bg-blue-500/10 border-blue-500/30'
+                          : 'bg-slate-800/30 border-slate-700/30 hover:border-slate-600/50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedOverlaps.has(idx)}
+                        onChange={() => {
+                          setSelectedOverlaps(prev => {
+                            const next = new Set(prev);
+                            if (next.has(idx)) next.delete(idx);
+                            else next.add(idx);
+                            return next;
+                          });
+                        }}
+                        className="mt-1 accent-blue-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-mono">
+                          <span className="text-slate-200 truncate">{pair.topicA.name}</span>
+                          <span className="text-slate-500 shrink-0">↔</span>
+                          <span className="text-slate-200 truncate">{pair.topicB.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] text-slate-500 font-mono">{pair.topicA.subjectName}</span>
+                          <span className="text-[10px] text-slate-600">|</span>
+                          <span className="text-[10px] text-slate-500 font-mono">{pair.topicB.subjectName}</span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                            pair.confidence >= 80 ? 'bg-green-500/20 text-green-400' :
+                            pair.confidence >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-orange-500/20 text-orange-400'
+                          }`}>
+                            {pair.confidence}%
+                          </span>
+                        </div>
+                        {pair.reason && (
+                          <p className="text-[11px] text-slate-500 font-mono mt-1">{pair.reason}</p>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {overlapPairs.length > 0 && selectedOverlaps.size > 0 && (
+              <div className="p-4 border-t border-slate-700/50">
+                <button
+                  onClick={handleApplyOverlaps}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-mono text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                >
+                  <Link2 size={14} />
+                  Свържи {selectedOverlaps.size} {selectedOverlaps.size === 1 ? 'двойка' : 'двойки'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Scroll to top button */}

@@ -454,6 +454,22 @@ function QuizContent() {
         currentBloomLevel: avgBloom, isMultiTopic: true, topicsList: topicNames, model: selectedModel
       };
     } else {
+      // Build overlap context if this topic has overlap analysis
+      const topicOverlapCtx = topic?.overlapAnalysis?.uniqueConcepts?.length
+        ? {
+            sharedConcepts: topic.overlapAnalysis.sharedConcepts || [],
+            uniqueConcepts: topic.overlapAnalysis.uniqueConcepts,
+            overlapPercent: topic.overlapAnalysis.overlapPercent,
+            linkedTopicName: (() => {
+              for (const s of data.subjects) {
+                const t = s.topics.find(t => t.id === topic.overlapAnalysis?.linkedTopicId);
+                if (t) return t.name;
+              }
+              return '';
+            })(),
+          }
+        : undefined;
+
       requestBody = {
         apiKey, material: topic?.material, topicName: topic?.name,
         subjectName: subject?.name || '',
@@ -467,7 +483,8 @@ function QuizContent() {
           : undefined,
         model: selectedModel,
         masteryContext: topic ? buildMasteryContext(topic) : undefined,
-        customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined
+        customQuestions: topic?.customQuestions?.length ? topic.customQuestions : undefined,
+        overlapContext: topicOverlapCtx
       };
     }
 

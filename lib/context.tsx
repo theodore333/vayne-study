@@ -182,6 +182,8 @@ function sanitizeLoadedData(data: AppData): AppData {
         ankiCards: Array.isArray(t.ankiCards) ? t.ankiCards.filter((c: unknown) => typeof c === 'string') : undefined,
         ankiCardsSourceLength: typeof t.ankiCardsSourceLength === 'number' ? t.ankiCardsSourceLength : undefined,
         fsrs: (t.fsrs && typeof t.fsrs === 'object' && typeof t.fsrs.stability === 'number' && typeof t.fsrs.difficulty === 'number') ? t.fsrs : undefined,
+        linkedTopicIds: Array.isArray(t.linkedTopicIds) ? t.linkedTopicIds.filter((id: unknown) => typeof id === 'string') : undefined,
+        overlapAnalysis: (t.overlapAnalysis && typeof t.overlapAnalysis === 'object' && typeof t.overlapAnalysis.linkedTopicId === 'string') ? t.overlapAnalysis : undefined,
       })),
     }));
 
@@ -1049,19 +1051,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Check achievements
       const streak = calculateStudyStreak(prev.timerSessions);
+      // Find linked topic IDs for cross-subject sync
+      const sourceTopic = subject?.topics.find(t => t.id === topicId);
+      const linkedIds = new Set(sourceTopic?.linkedTopicIds || []);
+      const now = new Date().toISOString();
+
       const newSubjects = prev.subjects.map(s => {
-        if (s.id !== subjectId) return s;
-        return {
-          ...s,
-          topics: s.topics.map(t => {
-            if (t.id !== topicId) return t;
-            return {
-              ...t,
-              status,
-              lastReview: status !== 'gray' ? new Date().toISOString() : t.lastReview
-            };
-          })
-        };
+        if (s.id === subjectId) {
+          return {
+            ...s,
+            topics: s.topics.map(t => {
+              if (t.id !== topicId) return t;
+              return { ...t, status, lastReview: status !== 'gray' ? now : t.lastReview };
+            })
+          };
+        }
+        // Sync linked topics in other subjects
+        if (linkedIds.size === 0) return s;
+        let changed = false;
+        const newTopics = s.topics.map(t => {
+          if (!linkedIds.has(t.id)) return t;
+          if (t.status === status) return t; // already same status
+          changed = true;
+          return { ...t, status, lastReview: status !== 'gray' ? now : t.lastReview };
+        });
+        return changed ? { ...s, topics: newTopics } : s;
       });
 
       const unlocked = checkAchievements(newProgress, newSubjects, streak);
@@ -1122,6 +1136,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       const quizXp = calculateQuizXp(score, comboMultiplier);
 
+      // Find linked topic IDs for cross-subject sync
+      const sourceTopic = subject?.topics.find(t => t.id === topicId);
+      const linkedIds = new Set(sourceTopic?.linkedTopicIds || []);
+      const now = new Date().toISOString();
+
       // Update subjects
       const newSubjects = prev.subjects.map(s => {
         if (s.id !== subjectId) return s;
@@ -1174,8 +1193,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      // Calculate topic status change XP
+      // Sync linked topics: update lastReview and status
       const newTopic = newSubjects.find(s => s.id === subjectId)?.topics.find(t => t.id === topicId);
+      if (linkedIds.size > 0 && newTopic) {
+        for (let i = 0; i < newSubjects.length; i++) {
+          if (newSubjects[i].id === subjectId) continue;
+          let changed = false;
+          const syncedTopics = newSubjects[i].topics.map(t => {
+            if (!linkedIds.has(t.id)) return t;
+            changed = true;
+            return { ...t, status: newTopic.status, lastReview: now };
+          });
+          if (changed) newSubjects[i] = { ...newSubjects[i], topics: syncedTopics };
+        }
+      }
+
+      // Calculate topic status change XP
       const newStatus = newTopic?.status || oldStatus;
       const topicXp = calculateTopicXp(oldStatus, newStatus, comboMultiplier);
 

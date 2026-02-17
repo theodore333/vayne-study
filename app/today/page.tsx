@@ -918,6 +918,11 @@ export default function TodayPage() {
                                   <span className="group-hover:underline">
                                     #{topic.number} {topic.name.length > 45 ? topic.name.slice(0, 45) + '...' : topic.name}
                                   </span>
+                                  {topic.overlapAnalysis && (
+                                    <span className="ml-1 text-[9px] text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded" title={`${100 - topic.overlapAnalysis.overlapPercent}% уникално съдържание`}>
+                                      {100 - topic.overlapAnalysis.overlapPercent}% ново
+                                    </span>
+                                  )}
                                 </Link>
                               </div>
                             );

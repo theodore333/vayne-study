@@ -534,6 +534,7 @@ export function QuizQuestion({
 
             {/* Standard result for MCQ, fill_blank */}
             {(['multiple_choice', 'case_study', 'fill_blank'].includes(currentQuestion.type)) && (
+              <>
               <div className={`p-4 rounded-lg border ${
                 isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
               }`}>
@@ -545,6 +546,58 @@ export function QuizQuestion({
                 </div>
                 <p className="text-sm text-slate-300 font-mono">{currentQuestion.explanation}</p>
               </div>
+
+              {/* Dispute button for fill_blank / MCQ when marked wrong */}
+              {!isCorrect && onReEvaluate && (
+                <div className="mt-2">
+                  {isEvaluatingOpen ? (
+                    <div className="flex items-center gap-2 text-xs font-mono text-amber-400/70">
+                      <div className="w-3 h-3 border-2 border-amber-400/50 border-t-amber-400 rounded-full animate-spin" />
+                      Преоценяване...
+                    </div>
+                  ) : !showFeedback ? (
+                    <button
+                      onClick={() => setShowFeedback(true)}
+                      className="flex items-center gap-1.5 text-xs font-mono text-amber-400/70 hover:text-amber-400 transition-colors"
+                    >
+                      <MessageSquare size={13} /> Не съм съгласен с оценката
+                    </button>
+                  ) : (
+                    <div className="p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg space-y-2">
+                      <p className="text-xs text-amber-400 font-mono">Обясни защо отговорът ти е верен:</p>
+                      <textarea
+                        value={feedbackText}
+                        onChange={(e) => setFeedbackText(e.target.value)}
+                        rows={2}
+                        placeholder='Напр. "Мезотел е синоним на еднослоен плосък епител..."'
+                        className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-amber-500 focus:outline-none resize-none placeholder:text-slate-600"
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => { setShowFeedback(false); setFeedbackText(''); }}
+                          className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors"
+                        >
+                          Отказ
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (feedbackText.trim()) {
+                              onReEvaluate(currentIndex, feedbackText.trim());
+                              setShowFeedback(false);
+                              setFeedbackText('');
+                            }
+                          }}
+                          disabled={!feedbackText.trim()}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-amber-600/30 text-amber-400 hover:bg-amber-600/50 rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          <Send size={12} /> Преоцени
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              </>
             )}
 
             {/* Model answer for open/short_answer questions */}

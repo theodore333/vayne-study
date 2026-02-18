@@ -1041,9 +1041,8 @@ function QuizContent() {
   const handleReEvaluate = async (index: number, feedback: string) => {
     const question = quizState.questions[index];
     const userAnswer = quizState.answers[index];
-    const prevEval = openEvaluations[index];
-    if (!question || !userAnswer || !prevEval) {
-      console.error('Re-evaluate: missing data', { question: !!question, userAnswer: !!userAnswer, prevEval: !!prevEval, index });
+    if (!question || !userAnswer) {
+      console.error('Re-evaluate: missing data', { question: !!question, userAnswer: !!userAnswer, index });
       return;
     }
 
@@ -1053,29 +1052,38 @@ function QuizContent() {
       return;
     }
 
-    // Ensure arrays for API compatibility
-    const safeEval = {
-      score: prevEval.score,
-      feedback: prevEval.feedback,
-      keyPointsCovered: Array.isArray(prevEval.keyPointsCovered) ? prevEval.keyPointsCovered : [],
-      keyPointsMissed: Array.isArray(prevEval.keyPointsMissed) ? prevEval.keyPointsMissed : []
-    };
+    const prevEval = openEvaluations[index];
 
     setIsEvaluatingOpen(true);
     try {
+      // If no previous AI evaluation (fill_blank/MCQ), use evaluate_open with feedback context
+      const requestBody = prevEval ? {
+        apiKey,
+        mode: 're_evaluate_open' as const,
+        question: question.question,
+        userAnswer,
+        correctAnswer: question.correctAnswer,
+        bloomLevel: question.bloomLevel || 3,
+        previousEvaluation: {
+          score: prevEval.score,
+          feedback: prevEval.feedback,
+          keyPointsCovered: Array.isArray(prevEval.keyPointsCovered) ? prevEval.keyPointsCovered : [],
+          keyPointsMissed: Array.isArray(prevEval.keyPointsMissed) ? prevEval.keyPointsMissed : []
+        },
+        studentFeedback: feedback
+      } : {
+        apiKey,
+        mode: 'evaluate_open' as const,
+        question: `${question.question}\n\n[Студентът оспорва оценката: ${feedback}]`,
+        userAnswer,
+        correctAnswer: question.correctAnswer,
+        bloomLevel: question.bloomLevel || 3
+      };
+
       const response = await fetchWithTimeout('/api/quiz', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          apiKey,
-          mode: 're_evaluate_open',
-          question: question.question,
-          userAnswer,
-          correctAnswer: question.correctAnswer,
-          bloomLevel: question.bloomLevel || 3,
-          previousEvaluation: safeEval,
-          studentFeedback: feedback
-        }),
+        body: JSON.stringify(requestBody),
         timeout: 120000
       });
 

@@ -871,6 +871,7 @@ export interface DevelopmentProject {
   modules: ProjectModule[];
   progressPercent: number;
   timeInvested: number;  // minutes
+  weeklyGoalMinutes?: number;  // weekly time goal (e.g. 120 = 2h/week)
   insights: ProjectInsight[];
   createdAt: string;
   updatedAt: string;

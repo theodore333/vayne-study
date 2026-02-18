@@ -22,6 +22,7 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
   const [priority, setPriority] = useState<ProjectPriority>(editProject?.priority || 'medium');
   const [startDate, setStartDate] = useState(editProject?.startDate?.split('T')[0] || '');
   const [targetDate, setTargetDate] = useState(editProject?.targetDate?.split('T')[0] || '');
+  const [weeklyGoalMinutes, setWeeklyGoalMinutes] = useState<number | ''>(editProject?.weeklyGoalMinutes || '');
 
   // Module management (for new projects)
   const [newModules, setNewModules] = useState<Array<{ title: string; order: number }>>([]);
@@ -50,7 +51,8 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
         category,
         priority,
         startDate: startDate || undefined,
-        targetDate: targetDate || undefined
+        targetDate: targetDate || undefined,
+        weeklyGoalMinutes: weeklyGoalMinutes || undefined
       });
     } else {
       // Create new project
@@ -63,6 +65,7 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
         status: 'active',
         startDate: startDate || new Date().toISOString(),
         targetDate: targetDate || undefined,
+        weeklyGoalMinutes: weeklyGoalMinutes || undefined,
         modules: newModules.map((m, i) => ({
           id: `temp-${i}`,
           title: m.title,
@@ -238,6 +241,43 @@ export default function AddProjectModal({ onClose, editProject }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Weekly Goal */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
+              Седмична цел (минути)
+            </label>
+            <div className="flex gap-2 items-center">
+              <input
+                type="number"
+                value={weeklyGoalMinutes}
+                onChange={(e) => setWeeklyGoalMinutes(e.target.value ? Math.max(0, parseInt(e.target.value)) : '')}
+                placeholder="напр. 120"
+                min={0}
+                max={1200}
+                className="flex-1 px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 font-mono text-sm"
+              />
+              {[30, 60, 120, 180].map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setWeeklyGoalMinutes(m)}
+                  className={`px-2 py-2 rounded-lg font-mono text-xs transition-colors ${
+                    weeklyGoalMinutes === m
+                      ? 'bg-cyan-600/30 text-cyan-300 border border-cyan-500/50'
+                      : 'bg-slate-800/50 text-slate-400 border border-transparent hover:bg-slate-700/50'
+                  }`}
+                >
+                  {m >= 60 ? `${m / 60}ч` : `${m}м`}
+                </button>
+              ))}
+            </div>
+            {weeklyGoalMinutes && (
+              <p className="text-xs text-slate-500 font-mono mt-1">
+                ~{Math.round(Number(weeklyGoalMinutes) / 7)} мин/ден в дневния план
+              </p>
+            )}
           </div>
 
           {/* Dates */}

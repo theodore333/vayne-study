@@ -400,6 +400,7 @@ export function migrateData(rawData: any): AppData {
   if (data.developmentProjects && data.developmentProjects.length > 0) {
     data.developmentProjects = data.developmentProjects.map((project: DevelopmentProject) => ({
       ...project,
+      weeklyGoalMinutes: project.weeklyGoalMinutes ?? undefined,
       modules: (project.modules || []).map((module: ProjectModule) => ({
         ...module,
         material: module.material ?? '',

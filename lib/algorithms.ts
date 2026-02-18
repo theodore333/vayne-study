@@ -1,5 +1,5 @@
 import { Subject, Topic, TopicStatus, DailyStatus, PredictedGrade, DailyTask, ScheduleClass, GradeFactor, parseExamFormat, QuestionBank, CrunchModeStatus, StudyGoals, FSRSState, DevelopmentProject, ProjectModule, AcademicEvent, AcademicPeriod, StudyTechnique, TechniquePractice } from './types';
-import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, NEW_MATERIAL_QUOTA, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
+import { DECAY_RULES, STATUS_CONFIG, MOTIVATIONAL_MESSAGES, CLASS_TYPES, CRUNCH_MODE_THRESHOLDS, TOPIC_SIZE_CONFIG, DECAY_THRESHOLDS, ACADEMIC_EVENT_CONFIG } from './constants';
 
 // ============================================================================
 // FSRS (Free Spaced Repetition Scheduler) for Topics
@@ -20,7 +20,7 @@ const FSRS_DEFAULTS = {
   minD: 0.1,
   maxD: 1.0,
   // Retrievability threshold for scheduling
-  targetR: 0.85,            // Schedule review when R drops to 85% (vs 90% for cards)
+  targetR: 0.75,            // Schedule review when R drops to 75% (topics survive longer than cards)
   // Anti-review-hell settings
   maxDailyReviews: 8,       // Cap reviews per day
   minInterval: 1,           // Minimum 1 day between reviews
@@ -130,9 +130,9 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
     const retrievabilityBonus = 1 + (1 - R) * 0.5; // Bonus for reviewing when R is lower
     const ratingBonus = 1 + (rating - 1) * 0.15; // Easy = more growth
 
-    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus;
-    // Cap growth to max 3.5x per review to prevent jumping from 1 day to 180 days in 3 quizzes
-    newS = Math.min(currentFsrs.stability * 3.5, newS);
+    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS_PARAMS.topicMultiplier;
+    // Cap growth to max 4.5x per review (higher than cards — topics are bigger units)
+    newS = Math.min(currentFsrs.stability * 4.5, newS);
     newS = Math.min(FSRS_PARAMS.maxInterval, Math.max(FSRS_PARAMS.minInterval, newS));
 
     // Difficulty decreases slightly on success
@@ -151,11 +151,11 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
 
 /**
  * Get topics that need review today, sorted by urgency
- * Includes anti-review-hell protection
+ * Exam-aware: includes topics whose next review is scheduled AFTER the exam
  */
 export function getTopicsNeedingFSRSReview(
   subjects: Subject[],
-  maxReviews: number = FSRS_PARAMS.maxDailyReviews,
+  maxReviews: number = Infinity,
   studyGoals?: StudyGoals
 ): Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> {
   const FSRS = getFSRSParams(studyGoals);
@@ -163,16 +163,28 @@ export function getTopicsNeedingFSRSReview(
 
   for (const subject of subjects) {
     if (subject.archived) continue;
+    const daysUntilExam = getDaysUntil(subject.examDate);
 
     for (const topic of subject.topics) {
       if (!topic.fsrs) continue;
 
       const R = calculateRetrievability(topic.fsrs);
+      const daysUntilNextReview = getDaysUntilReview(topic.fsrs, studyGoals);
 
-      // Include if below threshold (uses user-configured retention target)
-      if (R <= FSRS.targetR) {
-        // Urgency: how far below threshold (lower R = more urgent)
-        const urgency = (FSRS.targetR - R) / FSRS.targetR;
+      // Include if:
+      // 1. Below retention threshold (standard FSRS), OR
+      // 2. Next review would be AFTER the exam (no point reviewing after exam)
+      const belowThreshold = R <= FSRS.targetR;
+      const reviewAfterExam = daysUntilExam !== Infinity && daysUntilExam > 0
+        && daysUntilNextReview > daysUntilExam;
+
+      if (belowThreshold || reviewAfterExam) {
+        // Urgency: combine threshold distance + exam pressure
+        let urgency = (FSRS.targetR - R) / FSRS.targetR;
+        if (reviewAfterExam && !belowThreshold) {
+          // Not technically due yet, but needs pre-exam review — moderate urgency
+          urgency = Math.max(urgency, 0.1);
+        }
         needsReview.push({ topic, subject, urgency, retrievability: R });
       }
     }
@@ -181,8 +193,7 @@ export function getTopicsNeedingFSRSReview(
   // Sort by urgency (most urgent first)
   needsReview.sort((a, b) => b.urgency - a.urgency);
 
-  // Anti-review-hell: cap daily reviews
-  return needsReview.slice(0, maxReviews);
+  return maxReviews === Infinity ? needsReview : needsReview.slice(0, maxReviews);
 }
 
 /**
@@ -703,6 +714,84 @@ export function calculateEffectiveHours(status: DailyStatus): number {
   if (status.sick && status.holiday) return 0.25;
   if (status.sick || status.holiday) return 0.5;
   return 1.0;
+}
+
+// ============================================================================
+// Session Classification — Smart exam session grouping
+// ============================================================================
+
+export type SessionCategory = 'active' | 'future' | 'no-exam';
+
+export interface SessionClassification {
+  category: SessionCategory;
+  subject: Subject;
+  daysUntilExam: number;
+  examDifficulty: 'easy' | 'medium' | 'hard';
+}
+
+/**
+ * Classify subjects into exam sessions:
+ * - Active: subjects with exams in the nearest session (earliest exam + 30 days)
+ * - Future: subjects with exams beyond the active session
+ * - No-exam: subjects without exam date or with past exams
+ */
+export function classifySubjectSessions(subjects: Subject[]): {
+  active: SessionClassification[];
+  future: SessionClassification[];
+  noExam: SessionClassification[];
+} {
+  const withExam: { subject: Subject; days: number }[] = [];
+  const noExam: SessionClassification[] = [];
+
+  for (const subject of subjects) {
+    if (subject.archived || subject.deletedAt) continue;
+    const days = getDaysUntil(subject.examDate);
+    if (days === Infinity || days <= 0) {
+      noExam.push({ category: 'no-exam', subject, daysUntilExam: Infinity, examDifficulty: subject.examDifficulty ?? 'medium' });
+    } else {
+      withExam.push({ subject, days });
+    }
+  }
+
+  if (withExam.length === 0) {
+    return { active: [], future: [], noExam };
+  }
+
+  // Find earliest exam → active session window = earliest + 30 days
+  withExam.sort((a, b) => a.days - b.days);
+  const earliestDays = withExam[0].days;
+  const activeWindowEnd = earliestDays + 30;
+
+  const active: SessionClassification[] = [];
+  const future: SessionClassification[] = [];
+
+  for (const { subject, days } of withExam) {
+    const classification: SessionClassification = {
+      category: days <= activeWindowEnd ? 'active' : 'future',
+      subject,
+      daysUntilExam: days,
+      examDifficulty: subject.examDifficulty ?? 'medium',
+    };
+    if (classification.category === 'active') {
+      active.push(classification);
+    } else {
+      future.push(classification);
+    }
+  }
+
+  return { active, future, noExam };
+}
+
+/**
+ * Deterministic trickle day check for future subjects.
+ * Uses day-of-year + subject ID hash to spread different subjects across different days.
+ */
+export function isTrickleDayForSubject(subjectId: string, intervalDays: number): boolean {
+  const now = new Date();
+  const startOfYear = new Date(now.getFullYear(), 0, 0);
+  const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+  const hash = subjectId.split('').reduce((sum, c) => sum + c.charCodeAt(0), 0);
+  return (dayOfYear + hash) % intervalDays === 0;
 }
 
 // Calculate daily topic workload based on exam dates
@@ -1305,59 +1394,11 @@ export function generateDailyPlan(
   const crunchStatus = detectCrunchMode(subjects);
   const inCrunchMode = studyGoals?.vacationMode === true ? false : crunchStatus.isActive;
 
-  // Get topic-based workload from calculateDailyTopics (vacation mode applied inside)
+  // Session classification: active (nearest exam session), future (later exams), no-exam
+  const sessions = classifySubjectSessions(subjects);
+
+  // Get per-subject workload from calculateDailyTopics (for active session new material)
   const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals);
-  let remainingTopics = workload.total;
-
-  // Adjust for Anki workload if provided
-  // ~0.5 min per Anki card, average topic ~25 min
-  // So ankiDueCards / 50 = topic equivalents
-  if (ankiDueCards && ankiDueCards > 0) {
-    const ankiTimeMinutes = ankiDueCards * 0.5;
-    const ankiTopicEquivalent = Math.ceil(ankiTimeMinutes / 25);
-    remainingTopics = Math.max(1, remainingTopics - ankiTopicEquivalent);
-  }
-
-  if (remainingTopics === 0) return tasks;
-
-  // DYNAMIC QUOTA for new material based on urgency
-  // More gray topics + closer exam = higher quota for new material
-  const totalTopics = subjects.reduce((sum, s) => sum + s.topics.length, 0);
-  const totalGrayTopics = subjects.reduce((sum, s) =>
-    sum + s.topics.filter(t => t.status === 'gray').length, 0);
-  const grayPercentage = totalTopics > 0 ? totalGrayTopics / totalTopics : 0;
-
-  // Find closest exam
-  const closestExamDays = Math.min(
-    ...subjects
-      .filter(s => s.examDate)
-      .map(s => getDaysUntil(s.examDate))
-      .filter(d => d > 0),
-    Infinity
-  );
-
-  // Calculate dynamic quota (30-50%)
-  let newMaterialQuota = NEW_MATERIAL_QUOTA; // base 25%
-  if (grayPercentage > 0.6) {
-    newMaterialQuota = 0.45; // 60%+ gray → 45% quota
-  } else if (grayPercentage > 0.4 && closestExamDays < 14) {
-    newMaterialQuota = 0.50; // 40%+ gray AND exam <14 days → 50% quota
-  } else if (grayPercentage > 0.4) {
-    newMaterialQuota = 0.40; // 40%+ gray → 40% quota
-  } else if (closestExamDays < 7 && grayPercentage > 0.2) {
-    newMaterialQuota = 0.40; // Exam <7 days AND 20%+ gray → 40%
-  } else {
-    newMaterialQuota = 0.30; // Default 30%
-  }
-
-  const reservedForNew = Math.min(
-    Math.ceil(remainingTopics * newMaterialQuota),
-    totalGrayTopics
-  );
-
-  // Capacity for Tier 1-2 (critical exams, exercises)
-  // New material is now Tier 3, FSRS is Tier 4
-  let capacityForPriority = Math.max(0, remainingTopics - reservedForNew);
 
   const today = new Date();
   const tomorrow = new Date(today);
@@ -1384,10 +1425,11 @@ export function generateDailyPlan(
     if (!subject || subject.topics.length === 0) continue;
 
     const subjectWork = subjectWorkload.get(subject.id);
-    const topicsToTake = subjectWork ? Math.min(subjectWork.topics, capacityForPriority) : Math.min(5, capacityForPriority);
+    const topicsToTake = subjectWork ? subjectWork.topics : 5;
 
     // Select topics with related grouping (filter already-used topics)
-    const candidates = filterUsedTopics(subject.topics.filter(t => t.status !== 'green'), usedTopicIds);
+    // Only review known-but-weak topics (orange/yellow) — gray topics go to "Нов материал" tier
+    const candidates = filterUsedTopics(subject.topics.filter(t => t.status === 'orange' || t.status === 'yellow'), usedTopicIds);
     const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode, qbWeaknessMap);
 
     if (weakTopics.length > 0) {
@@ -1404,74 +1446,60 @@ export function generateDailyPlan(
         completed: false
       });
       markTopicsUsed(weakTopics, usedTopicIds);
-      capacityForPriority -= weakTopics.length;
     }
   }
 
-  // 2. HIGH: Subjects with exams - use their calculated daily workload
+  // 2. CRITICAL EXAM PREP — Only for exams ≤ 3 days (crisis mode)
+  // Non-critical exam subjects get reviews via FSRS/orange tiers + new material via session tiers
   for (const subjectWork of workload.bySubject) {
-    if (capacityForPriority <= 0) break;
+    if (subjectWork.urgency !== 'critical') continue;
 
     const subject = subjects.find(s => s.id === subjectWork.subjectId);
     if (!subject) continue;
-
-    // Skip if already added as critical
     if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
 
-    const topicsToTake = Math.min(subjectWork.topics, capacityForPriority);
-
-    // Check exam format for special recommendations
-    const examFormat = parseExamFormat(subject.examFormat);
-    const formatGaps = analyzeFormatGaps(subject);
-
-    // Select topics with related grouping (filter already-used topics)
+    // Critical: include ALL non-green topics (gray too — no time to separate)
     const candidates = filterUsedTopics(subject.topics.filter(t => t.status !== 'green'), usedTopicIds);
-    const weakTopics = selectTopicsWithRelations(candidates, topicsToTake, inCrunchMode, qbWeaknessMap);
+    const selected = selectTopicsWithRelations(candidates, subjectWork.topics, inCrunchMode, qbWeaknessMap);
 
-    if (weakTopics.length > 0) {
-      // Format-aware description
+    if (selected.length > 0) {
+      const examFormat = parseExamFormat(subject.examFormat);
+      const formatGaps = analyzeFormatGaps(subject);
       let description = 'Интензивна подготовка за изпит';
       if (formatGaps.caseWeakness && examFormat?.cases) {
-        description = `Фокус върху казуси (${examFormat.cases} на изпита) + слаби теми`;
+        description = `Фокус върху казуси (${examFormat.cases} на изпита)`;
       } else if (formatGaps.hasOpenQuestions && examFormat?.openQuestions) {
         description = `Упражнявай писмени отговори (${examFormat.openQuestions} на изпита)`;
       } else if (examFormat?.mcq) {
-        description = `MCQ практика (${examFormat.mcq} на изпита) - покрий повече теми`;
+        description = `MCQ практика (${examFormat.mcq} на изпита)`;
       }
-
-      const taskType = subjectWork.urgency === 'critical' ? 'critical' :
-                       subjectWork.urgency === 'high' ? 'high' : 'medium';
 
       tasks.push({
         id: generateId(),
         subjectId: subject.id,
         subjectName: subject.name,
         subjectColor: subject.color,
-        type: taskType,
+        type: 'critical',
         typeLabel: `📝 Изпит след ${subjectWork.daysLeft} ${subjectWork.daysLeft === 1 ? 'ден' : 'дни'}`,
         description,
-        topics: weakTopics,
-        estimatedMinutes: estimateMinutes(weakTopics, 20),
+        topics: selected,
+        estimatedMinutes: estimateMinutes(selected, 20),
         completed: false
       });
-      markTopicsUsed(weakTopics, usedTopicIds);
-      capacityForPriority -= weakTopics.length;
+      markTopicsUsed(selected, usedTopicIds);
     }
   }
 
-  // 2.5 ACADEMIC EVENTS - Колоквиуми, контролни, etc. (medium priority)
-  // Between exams and FSRS reviews - user specified "среден приоритет"
-  if (academicEvents && academicEvents.length > 0 && capacityForPriority > 0) {
+  // 3. ACADEMIC EVENTS - Колоквиуми, контролни, etc.
+  if (academicEvents && academicEvents.length > 0) {
     const upcomingEvents = getUpcomingAcademicEvents(academicEvents, subjects);
 
     for (const { event, subject, daysUntil, urgency } of upcomingEvents) {
-      if (capacityForPriority <= 0) break;
-
       // Skip if subject already has a critical task (exercises tomorrow)
       if (tasks.some(t => t.subjectId === subject.id && t.type === 'critical')) continue;
 
       const config = ACADEMIC_EVENT_CONFIG[event.type];
-      const topicsToReview = Math.min(3, capacityForPriority);
+      const topicsToReview = 3; // max 3 per event (pedagogical limit)
 
       // If event has specific topicIds, use only those topics
       // Otherwise fall back to yellow/orange from the whole subject
@@ -1512,25 +1540,88 @@ export function generateDailyPlan(
           completed: false
         });
         markTopicsUsed(selectedTopics, usedTopicIds);
-        capacityForPriority -= selectedTopics.length;
       }
     }
   }
 
-  // 3. ORANGE REINFORCEMENT - Topics known but weak (3-3.5 grade level)
-  // High priority because they're partially learned but need strengthening
-  let capacityForOrange = Math.ceil(capacityForPriority * 0.3); // 30% for orange reinforcement
+  // 4. ALL FSRS REVIEWS — Spaced repetition, ALL subjects, no daily cap
+  // Exam-aware: includes topics whose next review would be after the exam
+  const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
 
+  {
+    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Infinity, studyGoals);
+    const filteredFsrsReviews = fsrsReviews.filter(item => !usedTopicIds.has(item.topic.id));
+
+    // Group by subject
+    const fsrsBySubject = new Map<string, typeof fsrsReviews>();
+    for (const item of filteredFsrsReviews) {
+      const existing = fsrsBySubject.get(item.subject.id) || [];
+      existing.push(item);
+      fsrsBySubject.set(item.subject.id, existing);
+    }
+
+    for (const [subjectId, items] of fsrsBySubject) {
+      const subject = subjects.find(s => s.id === subjectId);
+      if (!subject) continue;
+
+      const selectedTopics = items.map(i => i.topic);
+      const avgR = Math.round(items.reduce((s, i) => s + i.retrievability, 0) / items.length * 100);
+
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'medium',
+        typeLabel: '🧠 FSRS Review',
+        description: `Spaced repetition (${avgR}% памет, ${selectedTopics.length} ${selectedTopics.length === 1 ? 'тема' : 'теми'})`,
+        topics: selectedTopics,
+        estimatedMinutes: selectedTopics.length * 25,
+        completed: false
+      });
+      markTopicsUsed(selectedTopics, usedTopicIds);
+    }
+  }
+
+  // 5. ALL LEGACY DECAY REVIEWS — Topics without FSRS state past warning threshold
   for (const subject of subjects) {
-    if (capacityForOrange <= 0) break;
+    const decayingTopics = filterUsedTopics(subject.topics.filter(t => {
+      if (t.status === 'gray') return false;
+      if (t.fsrs) return false; // Skip FSRS topics, already handled
+      const days = getDaysSince(t.lastReview);
+      const baseWarningDays = getDecayWarningDays(t);
+      const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
+      return days >= warningDays;
+    }), usedTopicIds);
 
-    // Skip subjects already covered
-    if (tasks.some(t => t.subjectId === subject.id)) continue;
+    if (decayingTopics.length > 0) {
+      const selectedTopics = selectTopicsWithRelations(decayingTopics, decayingTopics.length, inCrunchMode, qbWeaknessMap);
+      if (selectedTopics.length === 0) continue;
+      const avgWarningDays = Math.round(
+        selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
+      );
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'normal',
+        typeLabel: '⚠️ Преговор',
+        description: `Теми без review ${avgWarningDays}+ дни`,
+        topics: selectedTopics,
+        estimatedMinutes: estimateMinutes(selectedTopics, 20),
+        completed: false
+      });
+      markTopicsUsed(selectedTopics, usedTopicIds);
+    }
+  }
 
+  // 6. ALL ORANGE REINFORCEMENT — Topics known but weak (grade ~3-3.5), all subjects
+  for (const subject of subjects) {
     const orangeTopics = filterUsedTopics(subject.topics.filter(t => t.status === 'orange'), usedTopicIds);
     if (orangeTopics.length === 0) continue;
 
-    const topicsToTake = Math.min(orangeTopics.length, capacityForOrange, 3);
+    const topicsToTake = orangeTopics.length; // Take ALL orange (uncapped)
     const selectedTopics = selectTopicsWithRelations(orangeTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
 
     if (selectedTopics.length > 0) {
@@ -1547,64 +1638,13 @@ export function generateDailyPlan(
         completed: false
       });
       markTopicsUsed(selectedTopics, usedTopicIds);
-      capacityForOrange -= selectedTopics.length;
-      capacityForPriority -= selectedTopics.length;
     }
   }
 
-  // 4. FSRS Reviews - Spaced repetition maintains long-term memory
-  // Forgetting curve is real - delayed review = more relearning time
-  const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
-  const fsrsParams = getFSRSParams(studyGoals);
-
-  let capacityAfterFsrs = capacityForPriority;
-
-  if (capacityForPriority > 0) {
-    const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Math.min(capacityForPriority, fsrsParams.maxDailyReviews), studyGoals);
-
-    if (fsrsReviews.length > 0) {
-      // Filter out already-used topics from FSRS candidates
-      const filteredFsrsReviews = fsrsReviews.filter(item => !usedTopicIds.has(item.topic.id));
-
-      // Group by subject
-      const bySubject = new Map<string, typeof fsrsReviews>();
-      for (const item of filteredFsrsReviews) {
-        const existing = bySubject.get(item.subject.id) || [];
-        existing.push(item);
-        bySubject.set(item.subject.id, existing);
-      }
-
-      for (const [subjectId, items] of bySubject) {
-        if (capacityAfterFsrs <= 0) break;
-        const subject = subjects.find(s => s.id === subjectId);
-        if (!subject) continue;
-
-        const topicsToTake = Math.min(items.length, capacityAfterFsrs, 4);
-        const selectedTopics = items.slice(0, topicsToTake).map(i => i.topic);
-        const avgR = Math.round(items.slice(0, topicsToTake).reduce((s, i) => s + i.retrievability, 0) / topicsToTake * 100);
-
-        tasks.push({
-          id: generateId(),
-          subjectId: subject.id,
-          subjectName: subject.name,
-          subjectColor: subject.color,
-          type: 'medium',
-          typeLabel: '🧠 FSRS Review',
-          description: `Spaced repetition (${avgR}% памет)`,
-          topics: selectedTopics,
-          estimatedMinutes: selectedTopics.length * 25, // Reviews - realistic for medical topics
-          completed: false
-        });
-        markTopicsUsed(selectedTopics, usedTopicIds);
-        capacityAfterFsrs -= selectedTopics.length;
-      }
-    }
-  }
-
-  // 4a. YESTERDAY'S CONSOLIDATION - Brief review of newly learned material
+  // 7. YESTERDAY'S CONSOLIDATION - Brief review of newly learned material
   // Science: 24-hour review of new material improves retention by 40%+
   // Targets topics studied yesterday that are still fragile (orange/yellow, low mastery)
-  if (yesterdayCompletedTopicIds && yesterdayCompletedTopicIds.length > 0 && capacityAfterFsrs > 0) {
+  if (yesterdayCompletedTopicIds && yesterdayCompletedTopicIds.length > 0) {
     const yesterdaySet = new Set(yesterdayCompletedTopicIds.filter(Boolean));
     const consolidationCandidates: { topic: Topic; subject: Subject }[] = [];
 
@@ -1613,10 +1653,6 @@ export function generateDailyPlan(
         if (!yesterdaySet.has(topic.id)) continue;
         if (usedTopicIds.has(topic.id)) continue;
 
-        // Only consolidate topics that are still fragile:
-        // - Orange (just learned, grade ~3-3.5)
-        // - Yellow with quiz count ≤ 1 (learned but not yet tested)
-        // - Any status with low mastery score
         const isNewlyLearned = topic.status === 'orange' ||
           (topic.status === 'yellow' && (topic.quizCount || 0) <= 1);
         const hasLowMastery = getWeightedMasteryScore(topic) < 60;
@@ -1628,13 +1664,12 @@ export function generateDailyPlan(
     }
 
     if (consolidationCandidates.length > 0) {
-      // Sort by mastery (lowest first = most needs consolidation)
       consolidationCandidates.sort((a, b) =>
         getWeightedMasteryScore(a.topic) - getWeightedMasteryScore(b.topic)
       );
 
-      // Group by subject, max 3 total consolidation topics
-      const maxConsolidation = Math.min(3, capacityAfterFsrs);
+      // Max 6 consolidation topics (pedagogical limit)
+      const maxConsolidation = 6;
       const consolidationBySubject = new Map<string, { topics: Topic[]; subject: Subject }>();
       let consolidationCount = 0;
 
@@ -1661,20 +1696,15 @@ export function generateDailyPlan(
           typeLabel: '🔄 Затвърждаване',
           description: `Бърз преговор на вчерашен материал (${consTopics.length} ${consTopics.length === 1 ? 'тема' : 'теми'})`,
           topics: consTopics,
-          estimatedMinutes: consTopics.length * 10, // Quick review: 10 min each
+          estimatedMinutes: consTopics.length * 10,
           completed: false
         });
-        capacityAfterFsrs -= consTopics.length;
       }
     }
   }
 
-  // 4b. DRILL WEAKNESS - Target accumulated wrong answers before exams
-  // Only for subjects with upcoming exams (≤7 days) and significant unmastered wrong answers
+  // 8. DRILL WEAKNESS - Target accumulated wrong answers before exams
   for (const subject of subjects) {
-    if (capacityAfterFsrs <= 0) break;
-    // Skip if already has a task
-    if (tasks.some(t => t.subjectId === subject.id && t.type !== 'medium')) continue;
 
     const daysUntilExam = getDaysUntil(subject.examDate);
     if (daysUntilExam > 7 || daysUntilExam <= 0) continue;
@@ -1697,12 +1727,10 @@ export function generateDailyPlan(
       estimatedMinutes: Math.min(unmastered.length * 2, 30),
       completed: false
     });
-    capacityAfterFsrs -= 1;
   }
 
-  // 4c. BLOOM PROGRESSION - Push green/yellow topics toward higher-order thinking
-  // Topics stuck at Bloom 1-2 (Remember/Understand) with 3+ quizzes should be challenged
-  if (capacityAfterFsrs > 0) {
+  // 9. BLOOM PROGRESSION - Push green/yellow topics toward higher-order thinking
+  {
     const bloomCandidates: { topic: Topic; subject: Subject }[] = [];
     for (const subject of subjects) {
       for (const topic of subject.topics) {
@@ -1756,127 +1784,129 @@ export function generateDailyPlan(
         completed: false
       });
       markTopicsUsed(bloomTopics, usedTopicIds);
-      capacityAfterFsrs -= bloomTopics.length;
     }
   }
 
-  // 5. NEW MATERIAL - Cover gray topics after reviews
-  // Uses dynamic quota (30-50%) based on gray% and exam proximity
-  const availableForNew = reservedForNew + Math.max(0, capacityAfterFsrs);
-  let capacityAfterNew = capacityAfterFsrs;
+  // 10. NEW MATERIAL — Active session (math-driven: gray topics / days until exam)
+  // Track new material topics for the evening review task
+  const newMaterialTopicsBySubject: { subjectId: string; subjectName: string; subjectColor: string; topics: Topic[] }[] = [];
 
-  if (availableForNew > 0) {
-    // Collect all gray topics from subjects with exams, sorted by urgency
-    const subjectsWithGray = subjects
-      .filter(s => {
-        const daysUntilExam = getDaysUntil(s.examDate);
-        return daysUntilExam !== Infinity && s.topics.some(t => t.status === 'gray' && !usedTopicIds.has(t.id));
-      })
-      .map(s => ({
-        subject: s,
-        grayTopics: filterUsedTopics(s.topics.filter(t => t.status === 'gray'), usedTopicIds),
-        daysUntilExam: getDaysUntil(s.examDate),
-        priority: s.topics.filter(t => t.status === 'gray' && !usedTopicIds.has(t.id)).length / Math.max(1, getDaysUntil(s.examDate))
-      }))
-      .sort((a, b) => b.priority - a.priority);
+  for (const classification of sessions.active) {
+    const subject = classification.subject;
+    const sw = subjectWorkload.get(subject.id);
+    if (!sw) continue;
 
-    let newMaterialBudget = availableForNew;
+    const grayTopics = filterUsedTopics(
+      subject.topics.filter(t => t.status === 'gray'),
+      usedTopicIds
+    );
+    if (grayTopics.length === 0) continue;
 
-    for (const { subject, grayTopics, daysUntilExam } of subjectsWithGray) {
-      if (newMaterialBudget <= 0) break;
+    // Use calculateDailyTopics result — already accounts for examDifficulty, daysLeft, sick/holiday
+    const topicsToTake = Math.min(sw.topics, grayTopics.length);
+    if (topicsToTake <= 0) continue;
 
-      // Calculate how many topics to take from this subject
-      // Prioritize subjects with more gray topics relative to time
-      const topicsToTake = Math.min(
-        newMaterialBudget,
-        Math.ceil(grayTopics.length / Math.max(1, daysUntilExam) * 2), // Scale by urgency
-        grayTopics.length,
-        5 // Max 5 per subject
-      );
+    const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
 
-      if (topicsToTake > 0) {
-        const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
+    if (selectedTopics.length > 0) {
+      const grayCount = subject.topics.filter(t => t.status === 'gray').length;
+      const grayPct = subject.topics.length > 0 ? Math.round((grayCount / subject.topics.length) * 100) : 0;
 
-        if (selectedTopics.length > 0) {
-          // Check if there's already a task for this subject
-          const existingTask = tasks.find(t => t.subjectId === subject.id);
-
-          if (existingTask && existingTask.type !== 'critical') {
-            // Add to existing task (filter duplicates first)
-            const newTopics = filterUsedTopics(selectedTopics, usedTopicIds);
-            existingTask.topics.push(...newTopics);
-            existingTask.estimatedMinutes += estimateMinutes(newTopics, 20);
-            existingTask.description += ' + нов материал';
-            markTopicsUsed(newTopics, usedTopicIds);
-          } else {
-            // Create new task - NORMAL PRIORITY (tier 4)
-            tasks.push({
-              id: generateId(),
-              subjectId: subject.id,
-              subjectName: subject.name,
-              subjectColor: subject.color,
-              type: 'normal',
-              typeLabel: `📚 Нов материал (${Math.round(newMaterialQuota * 100)}%)`,
-              description: `Покрий нови теми - ${Math.round(grayPercentage * 100)}% непокрити`,
-              topics: selectedTopics,
-              estimatedMinutes: estimateMinutes(selectedTopics, 20),
-              completed: false
-            });
-            markTopicsUsed(selectedTopics, usedTopicIds);
-          }
-
-          newMaterialBudget -= selectedTopics.length;
-          capacityAfterNew -= selectedTopics.length;
-        }
-      }
-    }
-  }
-
-  // 5. Legacy decay-based reviews (for topics without FSRS state)
-  for (const subject of subjects) {
-    if (capacityAfterNew <= 0) break;
-
-    // Only consider topics WITHOUT fsrs state (legacy), filter already-used
-    const decayingTopics = filterUsedTopics(subject.topics.filter(t => {
-      if (t.status === 'gray') return false;
-      if (t.fsrs) return false; // Skip FSRS topics, already handled
-      const days = getDaysSince(t.lastReview);
-      const baseWarningDays = getDecayWarningDays(t);
-      const warningDays = Math.round(baseWarningDays * vacationDecayMultiplier);
-      return days >= warningDays;
-    }), usedTopicIds);
-
-    if (decayingTopics.length > 0 && capacityAfterNew > 0) {
-      const topicsToTake = Math.min(Math.ceil(capacityAfterNew * 0.3), decayingTopics.length, 5);
-      const selectedTopics = selectTopicsWithRelations(decayingTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
-      if (selectedTopics.length === 0) continue;
-      const avgWarningDays = Math.round(
-        selectedTopics.reduce((sum, t) => sum + getDecayWarningDays(t), 0) / selectedTopics.length
-      );
       tasks.push({
         id: generateId(),
         subjectId: subject.id,
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'normal',
-        typeLabel: '⚠️ Преговор',
-        description: `Теми без review ${avgWarningDays}+ дни`,
+        typeLabel: '📚 Нов материал',
+        description: `${grayPct}% непокрити, изпит след ${classification.daysUntilExam}д`,
         topics: selectedTopics,
         estimatedMinutes: estimateMinutes(selectedTopics, 20),
         completed: false
       });
       markTopicsUsed(selectedTopics, usedTopicIds);
-      capacityAfterNew -= selectedTopics.length;
+      newMaterialTopicsBySubject.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        topics: selectedTopics
+      });
     }
   }
 
-  // 6. PROJECTS - Development projects (lowest priority, no exam pressure)
-  // Only show if there's remaining capacity and active projects exist
-  if (developmentProjects && developmentProjects.length > 0 && capacityAfterNew > 0) {
+  // 11. NEW MATERIAL — Future session trickle (hard: 1/day, medium: 1/2 days, easy: 0)
+  for (const classification of sessions.future) {
+    const subject = classification.subject;
+    const difficulty = classification.examDifficulty;
+
+    // easy: wait until session becomes active
+    if (difficulty === 'easy') continue;
+
+    // medium: 1 topic every 2 days (deterministic parity)
+    if (difficulty === 'medium' && !isTrickleDayForSubject(subject.id, 2)) continue;
+
+    // hard: 1 topic/day (always), medium on trickle day: 1 topic
+    const grayTopics = filterUsedTopics(
+      subject.topics.filter(t => t.status === 'gray'),
+      usedTopicIds
+    );
+    if (grayTopics.length === 0) continue;
+
+    const selectedTopics = selectTopicsWithRelations(grayTopics, 1, inCrunchMode, qbWeaknessMap);
+
+    if (selectedTopics.length > 0) {
+      const totalGray = subject.topics.filter(t => t.status === 'gray').length;
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'normal',
+        typeLabel: difficulty === 'hard' ? '📖 Предв. подготовка' : '📖 Нов материал',
+        description: `Бъдещ изпит след ${classification.daysUntilExam}д (${difficulty === 'hard' ? 'труден' : 'среден'}) — ${totalGray} оставащи`,
+        topics: selectedTopics,
+        estimatedMinutes: estimateMinutes(selectedTopics, 25),
+        completed: false
+      });
+      markTopicsUsed(selectedTopics, usedTopicIds);
+      newMaterialTopicsBySubject.push({
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        topics: selectedTopics
+      });
+    }
+  }
+
+  // 12. EVENING REVIEW — Quick recap of today's new material (same-day consolidation)
+  if (newMaterialTopicsBySubject.length > 0) {
+    const allNewTopics = newMaterialTopicsBySubject.flatMap(s => s.topics);
+    const subjectNames = [...new Set(newMaterialTopicsBySubject.map(s => s.subjectName))].join(', ');
+
+    tasks.push({
+      id: generateId(),
+      subjectId: newMaterialTopicsBySubject[0].subjectId,
+      subjectName: subjectNames,
+      subjectColor: '#64748b', // slate — neutral color for cross-subject task
+      type: 'normal',
+      typeLabel: '🌙 Вечерен преговор',
+      description: `Прегледай накратко ${allNewTopics.length} ${allNewTopics.length === 1 ? 'нова тема' : 'нови теми'} от днес`,
+      topics: allNewTopics,
+      estimatedMinutes: Math.max(10, allNewTopics.length * 5), // ~5 min per topic quick glance
+      completed: false
+    });
+  }
+
+  // 13. PROJECTS — Development projects
+  if (developmentProjects && developmentProjects.length > 0) {
     const activeProjects = developmentProjects
       .filter(p => p.status === 'active')
       .sort((a, b) => {
-        // Sort by priority (high first), then by progress (less complete first)
+        // Projects with weekly goals come first
+        const aHasGoal = a.weeklyGoalMinutes ? 1 : 0;
+        const bHasGoal = b.weeklyGoalMinutes ? 1 : 0;
+        if (aHasGoal !== bHasGoal) return bHasGoal - aHasGoal;
+        // Then by priority (high first), then by progress (less complete first)
         const priorityOrder = { high: 0, medium: 1, low: 2 };
         if (priorityOrder[a.priority] !== priorityOrder[b.priority]) {
           return priorityOrder[a.priority] - priorityOrder[b.priority];
@@ -1884,11 +1914,11 @@ export function generateDailyPlan(
         return a.progressPercent - b.progressPercent;
       });
 
-    // Take max 2 projects per day to avoid overwhelm
-    const projectsToShow = activeProjects.slice(0, 2);
+    // Take max 3 projects per day (projects with goals always appear)
+    const projectsToShow = activeProjects.slice(0, 3);
 
     for (const project of projectsToShow) {
-      if (capacityAfterNew <= 0) break;
+      // All active projects are shown (no capacity gate)
 
       // Get incomplete modules
       const incompleteModules = project.modules
@@ -1897,9 +1927,20 @@ export function generateDailyPlan(
         .slice(0, 3); // Max 3 modules per project
 
       if (incompleteModules.length > 0 || project.modules.length === 0) {
-        const estimatedMinutes = incompleteModules.length > 0
-          ? incompleteModules.length * 30 // ~30 min per module
-          : 30; // Default 30 min if no modules
+        // Use weekly goal for time estimate, or default to module count
+        const dailyMinutes = project.weeklyGoalMinutes
+          ? Math.round(project.weeklyGoalMinutes / 7)
+          : (incompleteModules.length > 0 ? incompleteModules.length * 30 : 30);
+
+        const goalLabel = project.weeklyGoalMinutes
+          ? (project.weeklyGoalMinutes >= 60
+            ? `${Math.round(project.weeklyGoalMinutes / 60)}ч/седмица`
+            : `${project.weeklyGoalMinutes}м/седмица`)
+          : '';
+
+        const moduleLabel = incompleteModules.length > 0
+          ? `${incompleteModules.length} модула`
+          : (project.description || 'Продължи');
 
         tasks.push({
           id: generateId(),
@@ -1908,28 +1949,25 @@ export function generateDailyPlan(
           subjectColor: '#06b6d4', // Cyan for projects
           type: 'project',
           typeLabel: `🚀 Проект`,
-          description: incompleteModules.length > 0
-            ? `${incompleteModules.length} модула за изпълнение`
-            : project.description || 'Продължи с проекта',
+          description: goalLabel ? `${goalLabel} — ${moduleLabel}` : moduleLabel,
           topics: [], // No topics
-          estimatedMinutes,
+          estimatedMinutes: dailyMinutes,
           completed: false,
           projectId: project.id,
           projectName: project.name,
           projectModules: incompleteModules
         });
 
-        capacityAfterNew -= 1; // Count as 1 task slot
+        // No capacity tracking — projects always appear
       }
     }
   }
 
-  // 6b. MODULE FSRS REVIEWS - Lowest priority (only after ALL university work)
-  // Reviews for project modules that have FSRS state and need review
-  if (developmentProjects && developmentProjects.length > 0 && capacityAfterNew > 0) {
+  // 14. MODULE FSRS REVIEWS — Project module spaced repetition
+  if (developmentProjects && developmentProjects.length > 0) {
     const moduleReviews = getModulesNeedingFSRSReview(
       developmentProjects,
-      Math.min(4, capacityAfterNew), // Max 4 module reviews per day
+      4, // Max 4 module reviews per day (pedagogical limit)
       studyGoals
     );
 
@@ -1945,8 +1983,6 @@ export function generateDailyPlan(
       }
 
       for (const [projectId, reviews] of byProject) {
-        if (capacityAfterNew <= 0) break;
-
         const project = reviews[0].project;
         const modules = reviews.map(r => r.module);
         const avgRetrievability = reviews.reduce((sum, r) => sum + r.retrievability, 0) / reviews.length;
@@ -1968,7 +2004,7 @@ export function generateDailyPlan(
           isModuleReview: true
         });
 
-        capacityAfterNew -= 1;
+        // No capacity tracking
       }
     }
   }
@@ -2115,10 +2151,55 @@ export function generateDailyPlan(
 
   }
 
+  // ================ STANDALONE TECHNIQUE TASK ================
+  // Add a dedicated technique practice task (IcanStudy) if active techniques exist
+  // Shows every 2 days if the user has active techniques with low practice count
+  if (studyTechniques && studyTechniques.length > 0) {
+    const activeTechniques = studyTechniques.filter(t => t.isActive);
+    if (activeTechniques.length > 0) {
+      // Find the technique most in need of practice
+      const now = Date.now();
+      const needsPractice = activeTechniques
+        .filter(t => t.slug !== 'spacing') // Spacing is automatic via FSRS
+        .map(t => {
+          const daysSince = t.lastPracticedAt
+            ? (now - new Date(t.lastPracticedAt).getTime()) / (1000 * 60 * 60 * 24)
+            : 999;
+          return { technique: t, daysSince };
+        })
+        .filter(t => t.daysSince >= 2) // Only if not practiced in last 2 days
+        .sort((a, b) => b.daysSince - a.daysSince);
+
+      if (needsPractice.length > 0) {
+        const best = needsPractice[0].technique;
+        tasks.push({
+          id: generateId(),
+          subjectId: '',
+          subjectName: 'IcanStudy',
+          subjectColor: '#8b5cf6', // violet
+          type: 'technique',
+          typeLabel: `${best.icon} Техника`,
+          description: `Практикувай: ${best.name}`,
+          topics: [],
+          estimatedMinutes: 10,
+          completed: false,
+          techniqueId: best.id,
+          techniqueName: best.name,
+          techniqueIcon: best.icon,
+          techniqueHowToApply: best.howToApply
+        });
+      }
+    }
+  }
+
   // ================ INTERLEAVE SUBJECTS ================
   // Round-robin by subject within priority tiers, then merge tiers in order.
-  // This ensures subjects alternate instead of clustering.
+  // Evening review always stays last.
   if (tasks.length > 2) {
+    // Pull out evening review to append at the very end
+    const eveningReviewIdx = tasks.findIndex(t => t.typeLabel.includes('Вечерен преговор'));
+    const eveningReview = eveningReviewIdx >= 0 ? tasks.splice(eveningReviewIdx, 1)[0] : null;
+
     const priorityValue = (type: string): number => {
       switch (type) {
         case 'critical': return 0;
@@ -2153,7 +2234,7 @@ export function generateDailyPlan(
       // Group by subject within this tier
       const bySubject = new Map<string, DailyTask[]>();
       for (const t of tierTasks) {
-        const key = t.subjectId || t.projectId || t.id; // unique key for non-subject tasks
+        const key = t.subjectId || t.projectId || t.id;
         if (!bySubject.has(key)) bySubject.set(key, []);
         bySubject.get(key)!.push(t);
       }
@@ -2170,7 +2251,6 @@ export function generateDailyPlan(
     // Final pass: if two consecutive tasks share a subject, try swapping with the next different one
     for (let i = 1; i < interleaved.length - 1; i++) {
       if (interleaved[i].subjectId && interleaved[i].subjectId === interleaved[i - 1].subjectId) {
-        // Look ahead for a different subject to swap with (within 3 positions)
         for (let j = i + 1; j < Math.min(i + 4, interleaved.length); j++) {
           if (interleaved[j].subjectId !== interleaved[i].subjectId) {
             [interleaved[i], interleaved[j]] = [interleaved[j], interleaved[i]];
@@ -2179,6 +2259,9 @@ export function generateDailyPlan(
         }
       }
     }
+
+    // Evening review always last
+    if (eveningReview) interleaved.push(eveningReview);
 
     return interleaved;
   }

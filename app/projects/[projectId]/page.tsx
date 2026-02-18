@@ -293,6 +293,13 @@ function ProjectDetailContent() {
                   />
                 </div>
                 <span className="text-sm font-mono text-slate-300">{project.progressPercent}%</span>
+                {project.weeklyGoalMinutes && (
+                  <span className="text-xs font-mono text-cyan-400/70 ml-2">
+                    {project.weeklyGoalMinutes >= 60
+                      ? `${Math.round(project.weeklyGoalMinutes / 60)}ч/седмица`
+                      : `${project.weeklyGoalMinutes}м/седмица`}
+                  </span>
+                )}
               </div>
             </div>
 

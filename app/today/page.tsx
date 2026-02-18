@@ -20,15 +20,19 @@ export default function TodayPage() {
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
-    const todayStr = getTodayString();
-    const stored = localStorage.getItem(`completed-tasks-${todayStr}`);
-    return stored ? new Set(JSON.parse(stored)) : new Set();
+    try {
+      const todayStr = getTodayString();
+      const stored = localStorage.getItem(`completed-tasks-${todayStr}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
   });
   const [completedTopics, setCompletedTopics] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
-    const todayStr = getTodayString();
-    const stored = localStorage.getItem(`completed-topics-${todayStr}`);
-    return stored ? new Set(JSON.parse(stored)) : new Set();
+    try {
+      const todayStr = getTodayString();
+      const stored = localStorage.getItem(`completed-topics-${todayStr}`);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
   });
 
   // API key state
@@ -176,7 +180,7 @@ export default function TodayPage() {
     const reviewedToday = new Set<string>();
     activeSubjects.forEach(subject => {
       subject.topics.forEach(topic => {
-        if (topic.lastReview && topic.lastReview.startsWith(today)) {
+        if (topic.lastReview && toLocalDateStr(topic.lastReview) === today) {
           reviewedToday.add(topic.id);
         }
       });
@@ -922,7 +926,7 @@ export default function TodayPage() {
               <div className="flex items-center gap-2">
                 <AlertTriangle size={14} className="text-amber-400" />
                 <span className="text-sm font-mono text-amber-300">
-                  {Math.round(prioritySummary.totalMinutes / 60)}ч план / {Math.round(availableMinutes / 60)}ч налично
+                  {(prioritySummary.totalMinutes / 60).toFixed(1)}ч план / {(availableMinutes / 60).toFixed(1)}ч налично
                 </span>
                 <span className="text-xs font-mono text-slate-500">— приоритети</span>
               </div>
@@ -968,10 +972,10 @@ export default function TodayPage() {
                   );
                 })}
                 <p className="text-xs font-mono text-slate-600 pt-1">
-                  Фокусирай се на 🔴 + 🔵 = ~{Math.round(
+                  Фокусирай се на 🔴 + 🔵 = ~{(
                     ((prioritySummary.buckets.find(b => b.bucket === 'must')?.totalMinutes || 0) +
-                    (prioritySummary.buckets.find(b => b.bucket === 'should')?.totalMinutes || 0)) / 6
-                  ) / 10}ч
+                    (prioritySummary.buckets.find(b => b.bucket === 'should')?.totalMinutes || 0)) / 60
+                  ).toFixed(1)}ч
                 </p>
               </div>
             )}
@@ -1592,7 +1596,7 @@ export default function TodayPage() {
                 autoFocus
                 className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-amber-500 font-mono text-sm resize-none"
                 onKeyDown={(e) => {
-                  if (e.key === 'Escape') setShowFeedbackModal(false);
+                  if (e.key === 'Escape' && !loadingFeedback) setShowFeedbackModal(false);
                 }}
               />
               <div className="flex items-center justify-between">

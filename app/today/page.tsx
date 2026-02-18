@@ -16,7 +16,7 @@ import { fetchWithTimeout, getFetchErrorMessage } from '@/lib/fetch-utils';
 import { getActivityStreak } from '@/lib/analytics';
 
 export default function TodayPage() {
-  const { data, isLoading, incrementApiCalls, updateProjectModule, addTechniquePractice } = useApp();
+  const { data, isLoading, incrementApiCalls, updateProjectModule, addTechniquePractice, addGrade } = useApp();
   const [showCheckin, setShowCheckin] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -316,6 +316,22 @@ export default function TodayPage() {
           aiPrompt: 'Auto-tracked: FSRS spaced repetition review',
           userReflection: null,
         });
+      }
+    }
+
+    // Update FSRS for completed review tasks (so next review is scheduled)
+    if (!wasCompleted && task && task.subjectId) {
+      const reviewTypes = ['FSRS Review', 'Преговор', 'Консолидация', 'Review', 'Decay', 'Reinforcement'];
+      const isReviewTask = reviewTypes.some(t => task.typeLabel.includes(t));
+      if (isReviewTask && task.topics.length > 0) {
+        for (const topic of task.topics) {
+          addGrade(task.subjectId, topic.id, 4.5, {
+            bloomLevel: topic.currentBloomLevel || 1,
+            questionsCount: 0,
+            correctAnswers: 0,
+            weight: 0.3
+          });
+        }
       }
     }
   };

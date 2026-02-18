@@ -59,13 +59,13 @@ export default function ModuleDetailModal({ module, project, onClose }: Props) {
     onClose();
   };
 
-  const handleStartQuiz = () => {
+  const handleStartQuiz = (quizMode?: string) => {
     if (!material.trim()) {
       alert('Добави материал преди да стартираш тест');
       return;
     }
-    // Navigate to quiz page with module params
-    router.push(`/quiz?project=${project.id}&module=${module.id}`);
+    const base = `/quiz?project=${project.id}&module=${module.id}`;
+    router.push(quizMode ? `${base}&mode=${quizMode}` : base);
     onClose();
   };
 
@@ -302,20 +302,34 @@ export default function ModuleDetailModal({ module, project, onClose }: Props) {
             </div>
           )}
 
-          {/* Start Quiz Button */}
-          <button
-            onClick={handleStartQuiz}
-            disabled={!material.trim()}
-            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all ${
-              material.trim()
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90'
-                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
-            }`}
-          >
-            <Play size={18} />
-            Започни тест
-            <ChevronRight size={18} />
-          </button>
+          {/* Start Quiz Buttons */}
+          <div className="space-y-2">
+            <button
+              onClick={() => handleStartQuiz()}
+              disabled={!material.trim()}
+              className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all ${
+                material.trim()
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white hover:opacity-90'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <Play size={18} />
+              Тест (всички режими)
+              <ChevronRight size={18} />
+            </button>
+            <button
+              onClick={() => handleStartQuiz('free_recall')}
+              disabled={!material.trim()}
+              className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-medium transition-all ${
+                material.trim()
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25'
+                  : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              <Brain size={16} />
+              Free Recall
+            </button>
+          </div>
 
           {/* Delete Section */}
           <div className="pt-4 border-t border-slate-800">

@@ -1940,10 +1940,38 @@ export function generateDailyPlan(
         .slice(0, 3); // Max 3 modules per project
 
       if (incompleteModules.length > 0 || project.modules.length === 0) {
-        // Use weekly goal for time estimate, or default to module count
-        const dailyMinutes = project.weeklyGoalMinutes
-          ? Math.round(project.weeklyGoalMinutes / 7)
-          : (incompleteModules.length > 0 ? incompleteModules.length * 30 : 30);
+        let dailyMinutes: number;
+
+        if (project.weeklyGoalMinutes) {
+          // Smart batching: batch into fewer, longer sessions instead of tiny daily slices
+          // ≤30min → 1 session, else ceil(goal/30) sessions (max 5)
+          const sessionsNeeded = project.weeklyGoalMinutes <= 30 ? 1
+            : Math.min(5, Math.ceil(project.weeklyGoalMinutes / 30));
+          const minutesPerSession = Math.round(project.weeklyGoalMinutes / sessionsNeeded);
+
+          // Deterministic day selection using project ID hash
+          const projectHash = project.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+          const dayOfWeek = (new Date(today).getDay() + 6) % 7; // Mon=0, Sun=6
+
+          const sessionDays: number[] = [];
+          if (sessionsNeeded === 1) {
+            sessionDays.push(5 + (projectHash % 2)); // Saturday(5) or Sunday(6)
+          } else if (sessionsNeeded === 2) {
+            sessionDays.push(2 + (projectHash % 2)); // Wed(2) or Thu(3)
+            sessionDays.push(5 + (projectHash % 2)); // Sat(5) or Sun(6)
+          } else {
+            // Spread evenly across the week
+            const interval = Math.floor(7 / sessionsNeeded);
+            for (let i = 0; i < sessionsNeeded; i++) {
+              sessionDays.push((projectHash + i * interval) % 7);
+            }
+          }
+
+          if (!sessionDays.includes(dayOfWeek)) continue; // Not a project day — skip
+          dailyMinutes = minutesPerSession;
+        } else {
+          dailyMinutes = incompleteModules.length > 0 ? incompleteModules.length * 30 : 30;
+        }
 
         const goalLabel = project.weeklyGoalMinutes
           ? (project.weeklyGoalMinutes >= 60
@@ -1971,8 +1999,6 @@ export function generateDailyPlan(
           projectName: project.name,
           projectModules: incompleteModules
         });
-
-        // No capacity tracking — projects always appear
       }
     }
   }

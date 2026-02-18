@@ -32,6 +32,7 @@ function QuizContent() {
   // Module quiz params (Projects 2.0)
   const projectId = searchParams.get('project');
   const moduleId = searchParams.get('module');
+  const initialMode = searchParams.get('mode') as QuizMode | null;
 
   const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule, addQuestionBank, addQuestionsToBank } = useApp();
 
@@ -62,7 +63,7 @@ function QuizContent() {
   }, [isMultiMode, topicsParam, data.subjects]);
 
   // Quiz settings
-  const [mode, setMode] = useState<QuizMode | null>(null); // null = no selection yet
+  const [mode, setMode] = useState<QuizMode | null>(initialMode); // null = no selection yet, or pre-selected via URL param
   const [forceNewQuestions, setForceNewQuestions] = useState(false);
   const [usedCache, setUsedCache] = useState(false);
   const [quizLength, setQuizLength] = useState<QuizLengthPreset>('standard');

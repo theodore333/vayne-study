@@ -436,9 +436,10 @@ function QuizContent() {
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
     setUsedCache(false);
 
-    // Cacheable modes (not dependent on wrong answers or unique recall; assessment excluded — AI decides count fresh)
-    const cacheableModes: Set<string> = new Set(['lower_order', 'mid_order', 'higher_order', 'custom']);
-    const isCacheable = !isMultiMode && !forceNewQuestions && topicId && mode && cacheableModes.has(mode);
+    // Cacheable modes (not dependent on wrong answers or unique recall)
+    const cacheableModes: Set<string> = new Set(['assessment', 'lower_order', 'mid_order', 'higher_order', 'custom']);
+    // Skip cache when AI decides count (previewQuestionCount === 0) — needs fresh generation
+    const isCacheable = !isMultiMode && !forceNewQuestions && topicId && mode && cacheableModes.has(mode) && previewQuestionCount > 0;
 
     // Valid question types (filter out removed types like 'matching')
     const validTypes = new Set(['multiple_choice', 'open', 'case_study', 'fill_blank', 'short_answer']);
@@ -460,8 +461,8 @@ function QuizContent() {
       } catch { /* cache miss */ }
     }
 
-    // If cache fully covers the requested count, use cache only
-    if (cachedQuestions.length >= previewQuestionCount) {
+    // If cache fully covers the requested count, use cache only (skip when AI decides count)
+    if (previewQuestionCount > 0 && cachedQuestions.length >= previewQuestionCount) {
       const selected = cachedQuestions.slice(0, previewQuestionCount);
       setUsedCache(true);
       setQuizState({
@@ -477,8 +478,8 @@ function QuizContent() {
 
     // Generate new questions (request only the missing count if cache has some)
     const newQuestionsNeeded = previewQuestionCount - cachedQuestions.length;
-    // Assessment mode: let AI decide the count based on topic complexity
-    const questionCount = mode === 'assessment' ? null : newQuestionsNeeded;
+    // When previewQuestionCount is 0 (AI decides), send null so API lets AI choose
+    const questionCount = previewQuestionCount === 0 ? null : newQuestionsNeeded;
     let requestBody;
 
     if (isMultiMode && multiTopics.length > 0) {

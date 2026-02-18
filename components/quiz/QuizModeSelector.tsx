@@ -48,7 +48,7 @@ export function QuizModeSelector({
         <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider">Избери режим</label>
 
         <div className="grid grid-cols-2 gap-3">
-          {/* Assess My Level */}
+          {/* Mix / Assess */}
           <button
             onClick={() => { setMode('assessment'); setShowCustomOptions(false); }}
             className={`p-4 rounded-xl border text-left transition-all ${
@@ -57,9 +57,9 @@ export function QuizModeSelector({
           >
             <TrendingUp size={20} className={mode === 'assessment' ? 'text-amber-400' : 'text-slate-400'} />
             <span className={`block font-mono text-sm font-semibold mt-2 ${mode === 'assessment' ? 'text-amber-400' : 'text-slate-300'}`}>
-              Assess My Level
+              Mix / Assess
             </span>
-            <span className="text-xs text-slate-500 font-mono">Всички Bloom нива</span>
+            <span className="text-xs text-slate-500 font-mono">Всички нива, за преговор или оценка</span>
           </button>
 
           {/* Free Recall - only for single topic */}

@@ -108,6 +108,11 @@ function QuizContent() {
   // Open answer AI evaluation
   const [openEvaluations, setOpenEvaluations] = useState<Record<number, OpenAnswerEvaluation>>({});
   const [isEvaluatingOpen, setIsEvaluatingOpen] = useState(false);
+  const [openEvalFailed, setOpenEvalFailed] = useState<Record<number, boolean>>({});
+
+  // Track submitted questions + saved partial answers for navigation
+  const [submittedQuestions, setSubmittedQuestions] = useState<Set<number>>(new Set());
+  const [savedInputs, setSavedInputs] = useState<Record<number, { selected?: string | null; open?: string; fillBlank?: string }>>({});
 
   // Timer (extracted hook)
   const timer = useQuizTimer(
@@ -808,48 +813,100 @@ function QuizContent() {
             }));
             if (result.usage) incrementApiCalls(result.usage.cost);
           }
-        } catch {
-          // Fallback - show explanation without AI feedback
+        } catch (e) {
+          console.error('AI eval failed:', e);
+          setOpenEvalFailed(prev => ({ ...prev, [questionIndex]: true }));
         }
         setIsEvaluatingOpen(false);
       }
     }
 
+    setSubmittedQuestions(prev => new Set(prev).add(questionIndex));
     setShowExplanation(true);
   };
 
-  // Initialize type-specific state for a question
-  const initQuestionState = (question: Question) => {
-    setSelectedAnswer(null);
-    setOpenAnswer('');
+  // Retry AI evaluation for a specific question
+  const retryEvaluation = async (questionIndex: number) => {
+    const question = quizState.questions[questionIndex];
+    const answer = quizState.answers[questionIndex];
+    if (!question || !answer) return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return;
+
+    setIsEvaluatingOpen(true);
+    setOpenEvalFailed(prev => ({ ...prev, [questionIndex]: false }));
+    try {
+      const response = await fetchWithTimeout('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 'evaluate_open',
+          question: question.question,
+          userAnswer: answer,
+          correctAnswer: question.correctAnswer,
+          bloomLevel: question.bloomLevel || 3
+        }),
+        timeout: 60000
+      });
+      const result = await response.json();
+      if (result.evaluation) {
+        setOpenEvaluations(prev => ({ ...prev, [questionIndex]: result.evaluation }));
+        if (result.usage) incrementApiCalls(result.usage.cost);
+      }
+    } catch {
+      setOpenEvalFailed(prev => ({ ...prev, [questionIndex]: true }));
+    }
+    setIsEvaluatingOpen(false);
+  };
+
+  // Save current input state before navigating away
+  const saveCurrentInput = () => {
+    const idx = quizState.currentIndex;
+    setSavedInputs(prev => ({
+      ...prev,
+      [idx]: { selected: selectedAnswer, open: openAnswer, fillBlank: fillBlankAnswer }
+    }));
+  };
+
+  // Initialize type-specific state for a question (restore saved inputs if any)
+  const initQuestionState = (question: Question, targetIndex?: number) => {
+    const saved = targetIndex !== undefined ? savedInputs[targetIndex] : undefined;
+    setSelectedAnswer(saved?.selected ?? null);
+    setOpenAnswer(saved?.open ?? '');
     setOpenHint(null);
-    setFillBlankAnswer('');
+    setFillBlankAnswer(saved?.fillBlank ?? '');
+  };
+
+  // Navigate to a specific question index
+  const navigateToQuestion = (targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= quizState.questions.length) return;
+    saveCurrentInput();
+    const targetQuestion = quizState.questions[targetIndex];
+    setQuizState(prev => ({ ...prev, currentIndex: targetIndex }));
+    initQuestionState(targetQuestion, targetIndex);
+    setShowExplanation(submittedQuestions.has(targetIndex));
   };
 
   const handleNext = () => {
-    const currentQuestion = quizState.questions[quizState.currentIndex];
-    // Get stored answer (already saved by handleAnswer)
-    const answer = quizState.answers[quizState.currentIndex];
-
-    const newAnswers = [...quizState.answers];
-    if (answer !== null) newAnswers[quizState.currentIndex] = answer;
-
     if (quizState.currentIndex < quizState.questions.length - 1) {
-      const nextQuestion = quizState.questions[quizState.currentIndex + 1];
-      setQuizState(prev => ({
-        ...prev,
-        currentIndex: prev.currentIndex + 1,
-        answers: newAnswers
-      }));
-      initQuestionState(nextQuestion);
-      setShowExplanation(false);
+      navigateToQuestion(quizState.currentIndex + 1);
     } else {
-      setQuizState(prev => ({
-        ...prev,
-        answers: newAnswers,
-        showResult: true
-      }));
+      // Last question — show results
+      saveCurrentInput();
+      setQuizState(prev => ({ ...prev, showResult: true }));
     }
+  };
+
+  const handlePrev = () => {
+    if (quizState.currentIndex > 0) {
+      navigateToQuestion(quizState.currentIndex - 1);
+    }
+  };
+
+  const handleSkip = () => {
+    handleNext();
   };
 
   // Early quiz termination - finish with answered questions only
@@ -916,8 +973,32 @@ function QuizContent() {
         else if (k > idx) newEvals[k - 1] = val;
         // k === idx is deleted
       });
-      // We'll update openEvaluations via setOpenEvaluations after
-      setTimeout(() => setOpenEvaluations(newEvals), 0);
+      // Shift openEvalFailed, submittedQuestions, savedInputs
+      const newFailed: Record<number, boolean> = {};
+      Object.entries(openEvalFailed).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < idx) newFailed[k] = val;
+        else if (k > idx) newFailed[k - 1] = val;
+      });
+      const newSubmitted = new Set<number>();
+      submittedQuestions.forEach(k => {
+        if (k < idx) newSubmitted.add(k);
+        else if (k > idx) newSubmitted.add(k - 1);
+      });
+      const newSaved: typeof savedInputs = {};
+      Object.entries(savedInputs).forEach(([key, val]) => {
+        const k = Number(key);
+        if (k < idx) newSaved[k] = val;
+        else if (k > idx) newSaved[k - 1] = val;
+      });
+
+      // We'll update these via setTimeout after setState returns
+      setTimeout(() => {
+        setOpenEvaluations(newEvals);
+        setOpenEvalFailed(newFailed);
+        setSubmittedQuestions(newSubmitted);
+        setSavedInputs(newSaved);
+      }, 0);
 
       if (newQuestions.length === 0) {
         return { ...prev, questions: newQuestions, answers: newAnswers, showResult: true };
@@ -1777,6 +1858,11 @@ function QuizContent() {
         onDeleteQuestion={(idx) => setDeleteQuestionIndex(idx)}
         onReEvaluate={handleReEvaluate}
         onAddQuestion={handleAddQuestion}
+        openEvalFailed={openEvalFailed}
+        onRetryEval={retryEvaluation}
+        onSkip={handleSkip}
+        onPrev={handlePrev}
+        canGoBack={quizState.currentIndex > 0}
       />
       {/* Cognitive offloading warning (must render in quiz view) */}
       <ConfirmDialog

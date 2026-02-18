@@ -62,6 +62,11 @@ interface QuizQuestionProps {
   onDeleteQuestion?: (index: number) => void;
   onReEvaluate?: (index: number, feedback: string) => void;
   onAddQuestion?: (question: { type: 'mcq' | 'open'; text: string; options?: string[]; correctAnswer: string; explanation?: string }) => void;
+  openEvalFailed?: Record<number, boolean>;
+  onRetryEval?: (index: number) => void;
+  onSkip?: () => void;
+  onPrev?: () => void;
+  canGoBack?: boolean;
 }
 
 export function QuizQuestion({
@@ -77,7 +82,8 @@ export function QuizQuestion({
   elapsedTime, formatTime,
   onAnswer, onNext, onEarlyStop, onBack,
   fillBlankAnswer, setFillBlankAnswer,
-  onEditQuestion, onDeleteQuestion, onReEvaluate, onAddQuestion
+  onEditQuestion, onDeleteQuestion, onReEvaluate, onAddQuestion,
+  openEvalFailed, onRetryEval, onSkip, onPrev, canGoBack
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
   const [isEditing, setIsEditing] = useState(false);
@@ -399,6 +405,28 @@ export function QuizQuestion({
 
         {showExplanation && (
           <div className="mt-6 space-y-4">
+            {/* AI Evaluation failed — show error + retry */}
+            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && !openEval && openEvalFailed?.[currentIndex] && (
+              <div className="p-4 rounded-lg border bg-orange-500/10 border-orange-500/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={18} className="text-orange-400" />
+                    <span className="text-sm text-orange-300 font-mono">AI оценката не успя</span>
+                  </div>
+                  {onRetryEval && (
+                    <button
+                      onClick={() => onRetryEval(currentIndex)}
+                      disabled={isEvaluatingOpen}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-orange-600/30 text-orange-400 hover:bg-orange-600/50 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={12} className={isEvaluatingOpen ? 'animate-spin' : ''} />
+                      Опитай пак
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* AI Evaluation for open/short_answer questions */}
             {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && openEval && (<>
               <div className={`p-4 rounded-lg border ${
@@ -792,27 +820,50 @@ export function QuizQuestion({
             </div>
           ) : <div />}
 
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+          <div>
+            {canGoBack && onPrev && (
+              <button
+                onClick={onPrev}
+                disabled={isEvaluatingOpen}
+                className="flex items-center gap-1.5 px-4 py-3 text-sm font-mono text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+              >
+                <ArrowLeft size={18} /> Назад
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
           {!showExplanation ? (
-            <button
-              onClick={onAnswer}
-              disabled={
-                isEvaluatingOpen ||
-                (['multiple_choice', 'case_study'].includes(currentQuestion.type) ? !selectedAnswer :
-                 currentQuestion.type === 'fill_blank' ? !fillBlankAnswer.trim() :
-                 !openAnswer.trim())
-              }
-              className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center gap-2"
-            >
-              {isEvaluatingOpen ? (
-                <>
-                  <RefreshCw size={18} className="animate-spin" />
-                  AI оценява...
-                </>
-              ) : (
-                'Провери'
+            <>
+              {onSkip && (
+                <button
+                  onClick={onSkip}
+                  disabled={isEvaluatingOpen}
+                  className="px-4 py-3 text-sm font-mono text-slate-500 hover:text-slate-300 transition-colors disabled:opacity-50"
+                >
+                  Пропусни
+                </button>
               )}
-            </button>
+              <button
+                onClick={onAnswer}
+                disabled={
+                  isEvaluatingOpen ||
+                  (['multiple_choice', 'case_study'].includes(currentQuestion.type) ? !selectedAnswer :
+                   currentQuestion.type === 'fill_blank' ? !fillBlankAnswer.trim() :
+                   !openAnswer.trim())
+                }
+                className="px-6 py-3 bg-gradient-to-r from-pink-600 to-purple-600 text-white font-semibold rounded-lg font-mono disabled:opacity-50 flex items-center gap-2"
+              >
+                {isEvaluatingOpen ? (
+                  <>
+                    <RefreshCw size={18} className="animate-spin" />
+                    AI оценява...
+                  </>
+                ) : (
+                  'Провери'
+                )}
+              </button>
+            </>
           ) : (
             <button
               onClick={onNext}
@@ -823,6 +874,7 @@ export function QuizQuestion({
               ) : 'Резултат'}
             </button>
           )}
+          </div>
           </div>
         </div>
       </div>

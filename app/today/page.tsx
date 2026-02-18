@@ -1473,7 +1473,7 @@ export default function TodayPage() {
               {/* Overall status */}
               <div className="pt-3 border-t border-slate-700/50">
                 {(() => {
-                  const avgTopicsPerDay = syllabusProgress.bySubject.reduce((sum, s) => sum + s.topics, 0) / Math.max(1, syllabusProgress.bySubject.length);
+                  const totalTopicsPerDay = syllabusProgress.bySubject.reduce((sum, s) => sum + s.topics, 0);
                   const hasCritical = syllabusProgress.bySubject.some(s => s.urgency === 'critical');
                   const hasWarnings = syllabusProgress.bySubject.some(s => s.warning);
 
@@ -1491,18 +1491,18 @@ export default function TodayPage() {
                         <span>Критични изпити наближават - фокусирай се!</span>
                       </div>
                     );
-                  } else if (avgTopicsPerDay <= 3) {
+                  } else if (totalTopicsPerDay <= 8) {
                     return (
                       <div className="flex items-center gap-2 text-emerald-400 text-sm font-mono">
                         <CheckCircle2 size={16} />
-                        <span>По график си! Средно {avgTopicsPerDay.toFixed(1)} теми/ден.</span>
+                        <span>По график си! Общо ~{totalTopicsPerDay.toFixed(1)} теми/ден за {syllabusProgress.bySubject.length} предмета.</span>
                       </div>
                     );
                   } else {
                     return (
                       <div className="flex items-center gap-2 text-yellow-400 text-sm font-mono">
                         <TrendingUp size={16} />
-                        <span>Малко натоварено ({avgTopicsPerDay.toFixed(1)} теми/ден), но изпълнимо.</span>
+                        <span>Натоварено (~{totalTopicsPerDay.toFixed(1)} теми/ден общо), но изпълнимо.</span>
                       </div>
                     );
                   }

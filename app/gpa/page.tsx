@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { GraduationCap, Plus, Trash2, Target, Award, BookOpen } from 'lucide-react';
+import { GraduationCap, Plus, Trash2, Target, Award, BookOpen, TrendingUp, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { useApp } from '@/lib/context';
 
 // МУ София формула: Семестър = средна аритметична от всички оценки
@@ -16,6 +16,8 @@ export default function GPAPage() {
   const { data, addSemesterGrade, deleteSemesterGrade, setTargetGPA, addStateExam, deleteStateExam } = useApp();
   const { grades, targetGPA, stateExams = [] } = data.gpaData;
 
+  const [totalSemesters, setTotalSemesters] = useState(12);
+  const [assumedStateExamCount, setAssumedStateExamCount] = useState(3);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showStateExamModal, setShowStateExamModal] = useState(false);
   const [newGrade, setNewGrade] = useState({
@@ -59,6 +61,111 @@ export default function GPAPage() {
     if (stateExamAverage === 0) return overallSemesterAverage; // Ако няма държавни изпити
     return (overallSemesterAverage + stateExamAverage) / 2;
   }, [overallSemesterAverage, stateExamAverage]);
+
+  // === GOAL ANALYSIS ===
+  const goalAnalysis = useMemo(() => {
+    const completedCount = semesterAverages.length;
+    const remaining = Math.max(0, totalSemesters - completedCount);
+    const sumCompleted = semesterAverages.reduce((a, b) => a + b, 0);
+
+    // Determine state exam situation
+    const hasStateExams = stateExams.length > 0;
+    const stateExamsComplete = hasStateExams && stateExams.length >= assumedStateExamCount;
+    const currentStateAvg = stateExamAverage;
+
+    // Best possible diploma: all remaining semesters = 6, all remaining state exams = 6
+    const bestPossibleSemAvg = completedCount === 0 ? 6 :
+      (sumCompleted + remaining * 6) / totalSemesters;
+    const bestPossibleStateAvg = stateExamsComplete ? currentStateAvg :
+      hasStateExams
+        ? (stateExams.reduce((a, e) => a + e.grade, 0) + (assumedStateExamCount - stateExams.length) * 6) / assumedStateExamCount
+        : 6;
+    const bestPossibleDiploma = (bestPossibleSemAvg + bestPossibleStateAvg) / 2;
+
+    // Worst possible diploma: all remaining = 3.00 (pass minimum)
+    const worstPassSemAvg = completedCount === 0 ? 3 :
+      (sumCompleted + remaining * 3) / totalSemesters;
+    const worstPassStateAvg = stateExamsComplete ? currentStateAvg :
+      hasStateExams
+        ? (stateExams.reduce((a, e) => a + e.grade, 0) + (assumedStateExamCount - stateExams.length) * 3) / assumedStateExamCount
+        : 3;
+    const worstPassDiploma = (worstPassSemAvg + worstPassStateAvg) / 2;
+
+    // === SCENARIO 1: What semester avg needed if state exams = 6.00 ===
+    // diploma = (semAvg + stateAvg) / 2 = target => semAvg = 2*target - stateAvg
+    const stateAvgForCalc = stateExamsComplete ? currentStateAvg : 6;
+    const neededSemAvg = 2 * targetGPA - stateAvgForCalc;
+    // semAvg = (sumCompleted + sumRemaining) / totalSemesters
+    // sumRemaining = neededSemAvg * totalSemesters - sumCompleted
+    const sumRemainingNeeded = neededSemAvg * totalSemesters - sumCompleted;
+    const avgRemainingNeeded = remaining > 0 ? sumRemainingNeeded / remaining : neededSemAvg;
+    const scenario1Possible = avgRemainingNeeded <= 6.00;
+    const scenario1RoomForError = 6.00 - avgRemainingNeeded;
+
+    // === SCENARIO 2: What state exam avg needed if remaining semesters = 6.00 ===
+    const bestSemAvgWithPerfectRemaining = completedCount === 0 ? 6 :
+      (sumCompleted + remaining * 6) / totalSemesters;
+    const neededStateAvg = 2 * targetGPA - bestSemAvgWithPerfectRemaining;
+    const scenario2Possible = neededStateAvg <= 6.00 && neededStateAvg >= 2.00;
+
+    // === "ROOM FOR ERROR" — how much can remaining grades average drop below 6 ===
+    // Assuming state exams = 6.00 (best case support)
+    const roomPerSubject = scenario1Possible ? scenario1RoomForError : 0;
+
+    // Goal feasibility
+    const isImpossible = bestPossibleDiploma < targetGPA;
+    const isGuaranteed = worstPassDiploma >= targetGPA;
+
+    return {
+      completedCount,
+      remaining,
+      sumCompleted,
+      bestPossibleDiploma,
+      worstPassDiploma,
+      // Scenario 1
+      avgRemainingNeeded,
+      scenario1Possible,
+      scenario1RoomForError,
+      stateAvgForCalc,
+      // Scenario 2
+      neededStateAvg,
+      scenario2Possible,
+      bestSemAvgWithPerfectRemaining,
+      // Overall
+      roomPerSubject,
+      isImpossible,
+      isGuaranteed,
+    };
+  }, [semesterAverages, totalSemesters, targetGPA, stateExams, stateExamAverage, assumedStateExamCount]);
+
+  // === RETAKE RECOMMENDATIONS (повишителни изпити) ===
+  const retakeRecommendations = useMemo(() => {
+    if (grades.length === 0) return [];
+
+    // For each grade, calculate diploma impact if improved to 6.00
+    return grades
+      .filter(g => g.grade < 5.50) // Only recommend for grades below 5.50
+      .map(g => {
+        const semKey = `${g.year}-${g.semester}`;
+        const semGrades = semesters[semKey] || [];
+        const subjectCount = semGrades.length;
+        const delta = 6.00 - g.grade;
+        // Impact: improving this grade changes semester avg by delta/subjectCount
+        // That changes overall semAvg by (delta/subjectCount) / totalSemesters
+        // That changes diploma by that / 2
+        const diplomaImpact = subjectCount > 0
+          ? (delta / subjectCount) / totalSemesters / 2
+          : 0;
+        return {
+          ...g,
+          delta,
+          diplomaImpact,
+          semKey,
+        };
+      })
+      .sort((a, b) => b.diplomaImpact - a.diplomaImpact)
+      .slice(0, 5);
+  }, [grades, semesters, totalSemesters]);
 
   const handleAddGrade = () => {
     if (!newGrade.subjectName.trim()) return;
@@ -216,6 +323,266 @@ export default function GPAPage() {
           </div>
         </div>
       </div>
+
+      {/* === GOAL ANALYSIS SECTION === */}
+      {grades.length > 0 && (
+        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl overflow-hidden">
+          <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp size={20} className="text-cyan-400" />
+              <h3 className="text-lg font-semibold text-slate-100 font-mono">
+                Анализ на целта
+              </h3>
+            </div>
+            {/* Settings */}
+            <div className="flex items-center gap-4 text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Семестри:</span>
+                <select
+                  value={totalSemesters}
+                  onChange={(e) => setTotalSemesters(parseInt(e.target.value, 10))}
+                  className="bg-slate-800/50 border border-slate-700 rounded px-2 py-1 text-slate-300"
+                >
+                  {[8, 10, 12].map(n => (
+                    <option key={n} value={n}>{n} ({n / 2} г.)</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">Държавни:</span>
+                <select
+                  value={assumedStateExamCount}
+                  onChange={(e) => setAssumedStateExamCount(parseInt(e.target.value, 10))}
+                  className="bg-slate-800/50 border border-slate-700 rounded px-2 py-1 text-slate-300"
+                >
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 space-y-4">
+            {/* Progress bar */}
+            <div>
+              <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1">
+                <span>Прогрес: {goalAnalysis.completedCount}/{totalSemesters} семестъра</span>
+                <span>{Math.round((goalAnalysis.completedCount / totalSemesters) * 100)}%</span>
+              </div>
+              <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all"
+                  style={{ width: `${(goalAnalysis.completedCount / totalSemesters) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Main verdict */}
+            <div className={`p-4 rounded-xl border ${
+              goalAnalysis.isImpossible
+                ? 'bg-red-500/10 border-red-500/30'
+                : goalAnalysis.isGuaranteed
+                  ? 'bg-green-500/10 border-green-500/30'
+                  : goalAnalysis.scenario1Possible
+                    ? 'bg-yellow-500/10 border-yellow-500/30'
+                    : 'bg-red-500/10 border-red-500/30'
+            }`}>
+              <div className="flex items-start gap-3">
+                {goalAnalysis.isImpossible ? (
+                  <XCircle size={24} className="text-red-400 mt-0.5 shrink-0" />
+                ) : goalAnalysis.isGuaranteed ? (
+                  <CheckCircle size={24} className="text-green-400 mt-0.5 shrink-0" />
+                ) : goalAnalysis.scenario1Possible ? (
+                  <AlertTriangle size={24} className="text-yellow-400 mt-0.5 shrink-0" />
+                ) : (
+                  <XCircle size={24} className="text-red-400 mt-0.5 shrink-0" />
+                )}
+                <div>
+                  <div className="font-semibold font-mono text-sm text-slate-100">
+                    {goalAnalysis.isImpossible
+                      ? `Целта ${targetGPA.toFixed(2)} е НЕДОСТИЖИМА`
+                      : goalAnalysis.isGuaranteed
+                        ? `Целта ${targetGPA.toFixed(2)} е ГАРАНТИРАНА!`
+                        : goalAnalysis.scenario1Possible
+                          ? `Целта ${targetGPA.toFixed(2)} е постижима, но изисква усилие`
+                          : `Целта ${targetGPA.toFixed(2)} е почти недостижима`
+                    }
+                  </div>
+                  <div className="text-xs text-slate-400 font-mono mt-1">
+                    {goalAnalysis.isImpossible
+                      ? `Дори с 6.00 навсякъде, най-доброто възможно е ${goalAnalysis.bestPossibleDiploma.toFixed(2)}`
+                      : goalAnalysis.isGuaranteed
+                        ? `Дори с минимални оценки (3.00), дипломата ще е ${goalAnalysis.worstPassDiploma.toFixed(2)}`
+                        : goalAnalysis.remaining > 0
+                          ? `Най-добро възможно: ${goalAnalysis.bestPossibleDiploma.toFixed(2)} | Най-лошо (с тройки): ${goalAnalysis.worstPassDiploma.toFixed(2)}`
+                          : `Очакваш още държавни изпити — средната им ще определи крайния резултат`
+                    }
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed scenarios */}
+            {goalAnalysis.remaining > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Scenario 1: What remaining semesters need */}
+                <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
+                  <div className="text-xs text-slate-500 font-mono mb-2">
+                    Нужна средна за оставащите {goalAnalysis.remaining} семестъра
+                    {stateExams.length >= assumedStateExamCount
+                      ? ` (държавни: ${goalAnalysis.stateAvgForCalc.toFixed(2)})`
+                      : ' (ако държавни = 6.00)'}
+                  </div>
+                  <div className={`text-3xl font-bold font-mono ${
+                    goalAnalysis.avgRemainingNeeded <= 4.50 ? 'text-green-400' :
+                    goalAnalysis.avgRemainingNeeded <= 5.50 ? 'text-yellow-400' :
+                    goalAnalysis.avgRemainingNeeded <= 6.00 ? 'text-orange-400' :
+                    'text-red-400'
+                  }`}>
+                    {goalAnalysis.avgRemainingNeeded <= 0
+                      ? '< 2.00'
+                      : goalAnalysis.avgRemainingNeeded > 6
+                        ? '> 6.00'
+                        : goalAnalysis.avgRemainingNeeded.toFixed(2)
+                    }
+                  </div>
+                  {goalAnalysis.scenario1Possible && goalAnalysis.avgRemainingNeeded > 2 && (
+                    <div className="text-xs text-slate-500 font-mono mt-2">
+                      Буфер: {goalAnalysis.scenario1RoomForError.toFixed(2)} точки под 6.00
+                    </div>
+                  )}
+                  {goalAnalysis.avgRemainingNeeded <= 2 && (
+                    <div className="text-xs text-green-400/70 font-mono mt-2">
+                      Вече си над целта — просто взимай изпитите!
+                    </div>
+                  )}
+                </div>
+
+                {/* Scenario 2: What state exams need */}
+                <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
+                  <div className="text-xs text-slate-500 font-mono mb-2">
+                    Нужна средна от държавни изпити (ако оставащи семестри = 6.00)
+                  </div>
+                  <div className={`text-3xl font-bold font-mono ${
+                    goalAnalysis.neededStateAvg < 2
+                      ? 'text-green-400'
+                      : goalAnalysis.neededStateAvg <= 4.50 ? 'text-green-400' :
+                        goalAnalysis.neededStateAvg <= 5.50 ? 'text-yellow-400' :
+                        goalAnalysis.neededStateAvg <= 6.00 ? 'text-orange-400' :
+                        'text-red-400'
+                  }`}>
+                    {goalAnalysis.neededStateAvg < 2
+                      ? '< 2.00'
+                      : goalAnalysis.neededStateAvg > 6
+                        ? '> 6.00'
+                        : goalAnalysis.neededStateAvg.toFixed(2)
+                    }
+                  </div>
+                  {goalAnalysis.scenario2Possible && goalAnalysis.neededStateAvg >= 2 && (
+                    <div className="text-xs text-slate-500 font-mono mt-2">
+                      Буфер: {(6.00 - goalAnalysis.neededStateAvg).toFixed(2)} точки под 6.00
+                    </div>
+                  )}
+                  {goalAnalysis.neededStateAvg < 2 && (
+                    <div className="text-xs text-green-400/70 font-mono mt-2">
+                      Целта е гарантирана дори с минимални държавни!
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Room for error visualization */}
+            {goalAnalysis.remaining > 0 && goalAnalysis.scenario1Possible && goalAnalysis.avgRemainingNeeded > 2 && (
+              <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
+                <div className="text-xs text-slate-500 font-mono mb-3">
+                  Допустима грешка на оставащите семестри (при държавни = 6.00)
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="h-4 bg-slate-700/50 rounded-full overflow-hidden relative">
+                      {/* Required zone */}
+                      <div
+                        className="absolute inset-y-0 left-0 bg-gradient-to-r from-red-500/40 to-orange-500/40 rounded-l-full"
+                        style={{ width: `${((goalAnalysis.avgRemainingNeeded - 2) / 4) * 100}%` }}
+                      />
+                      {/* Buffer zone */}
+                      <div
+                        className="absolute inset-y-0 bg-gradient-to-r from-green-500/40 to-emerald-500/40"
+                        style={{
+                          left: `${((goalAnalysis.avgRemainingNeeded - 2) / 4) * 100}%`,
+                          width: `${(goalAnalysis.scenario1RoomForError / 4) * 100}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-slate-600 font-mono mt-1">
+                      <span>2.00</span>
+                      <span>3.00</span>
+                      <span>4.00</span>
+                      <span>5.00</span>
+                      <span>6.00</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className={`text-lg font-bold font-mono ${
+                      goalAnalysis.scenario1RoomForError >= 1.5 ? 'text-green-400' :
+                      goalAnalysis.scenario1RoomForError >= 0.5 ? 'text-yellow-400' :
+                      'text-orange-400'
+                    }`}>
+                      {goalAnalysis.scenario1RoomForError >= 1.5 ? 'Комфортно' :
+                       goalAnalysis.scenario1RoomForError >= 0.5 ? 'Умерено' :
+                       'Тясно'}
+                    </div>
+                    <div className="text-xs text-slate-500 font-mono">
+                      буфер {goalAnalysis.scenario1RoomForError.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Retake recommendations (повишителни изпити) */}
+            {retakeRecommendations.length > 0 && (
+              <div className="bg-slate-900/50 border border-slate-700/30 rounded-xl p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Award size={16} className="text-amber-400" />
+                  <span className="text-sm font-semibold text-slate-200 font-mono">
+                    Препоръки за повишителни изпити
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 font-mono mb-3">
+                  Предмети, при които повишителен изпит (до 6.00) ще подобри най-много дипломата:
+                </div>
+                <div className="space-y-2">
+                  {retakeRecommendations.map((rec, i) => (
+                    <div key={rec.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-3 py-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-mono text-slate-600 w-4">{i + 1}.</span>
+                        <div className={`px-2 py-0.5 rounded border text-xs font-mono font-bold ${getGradeBg(rec.grade)} ${getGradeColor(rec.grade)}`}>
+                          {rec.grade.toFixed(2)}
+                        </div>
+                        <span className="text-sm text-slate-300">{rec.subjectName}</span>
+                        <span className="text-xs text-slate-600 font-mono">→ 6.00</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xs font-mono text-green-400">
+                          +{rec.diplomaImpact.toFixed(3)} диплома
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 text-[11px] text-slate-500 font-mono border-t border-slate-700/30 pt-3">
+                  Обща полза при повишаване на всички до 6.00: <span className="text-green-400 font-semibold">
+                    +{retakeRecommendations.reduce((a, r) => a + r.diplomaImpact, 0).toFixed(3)}
+                  </span> към дипломата
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* State Exams Section */}
       {stateExams.length > 0 && (

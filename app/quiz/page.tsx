@@ -436,8 +436,8 @@ function QuizContent() {
     setQuizState(prev => ({ ...prev, isGenerating: true, error: null }));
     setUsedCache(false);
 
-    // Cacheable modes (not dependent on wrong answers or unique recall)
-    const cacheableModes: Set<string> = new Set(['assessment', 'lower_order', 'mid_order', 'higher_order', 'custom']);
+    // Cacheable modes (not dependent on wrong answers or unique recall; assessment excluded — AI decides count fresh)
+    const cacheableModes: Set<string> = new Set(['lower_order', 'mid_order', 'higher_order', 'custom']);
     const isCacheable = !isMultiMode && !forceNewQuestions && topicId && mode && cacheableModes.has(mode);
 
     // Valid question types (filter out removed types like 'matching')
@@ -477,7 +477,8 @@ function QuizContent() {
 
     // Generate new questions (request only the missing count if cache has some)
     const newQuestionsNeeded = previewQuestionCount - cachedQuestions.length;
-    const questionCount = newQuestionsNeeded;
+    // Assessment mode: let AI decide the count based on topic complexity
+    const questionCount = mode === 'assessment' ? null : newQuestionsNeeded;
     let requestBody;
 
     if (isMultiMode && multiTopics.length > 0) {

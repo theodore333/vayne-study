@@ -1,6 +1,6 @@
 'use client';
 
-import { Brain, Play, RefreshCw, ArrowLeft, AlertCircle, StopCircle, Repeat } from 'lucide-react';
+import { Brain, Play, RefreshCw, ArrowLeft, AlertCircle, StopCircle, Repeat, Sparkles } from 'lucide-react';
 import { QuizMode } from '@/lib/quiz-types';
 import { BLOOM_LEVELS, BloomLevel } from '@/lib/types';
 
@@ -146,49 +146,65 @@ export function QuizPreview({
         </div>
 
         {/* Question Count Adjuster */}
-        <div className="mb-6">
-          <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider text-center">
-            Брой въпроси
-          </label>
-          <div className="flex items-center justify-center gap-4">
-            <button
-              onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 5))}
-              disabled={previewQuestionCount <= 3}
-              className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              -5
-            </button>
-            <button
-              onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 1))}
-              disabled={previewQuestionCount <= 3}
-              className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              -1
-            </button>
-            <div className="w-20 text-center">
-              <span className="text-4xl font-bold text-white font-mono">{previewQuestionCount}</span>
+        {mode === 'assessment' ? (
+          <div className="mb-6 text-center">
+            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider">
+              Брой въпроси
+            </label>
+            <div className="inline-flex items-center gap-2 px-4 py-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+              <Sparkles size={18} className="text-purple-400" />
+              <span className="text-purple-300 font-mono text-sm">AI преценява броя спрямо сложността</span>
             </div>
-            <button
-              onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 1))}
-              disabled={previewQuestionCount >= 50}
-              className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              +1
-            </button>
-            <button
-              onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 5))}
-              disabled={previewQuestionCount >= 50}
-              className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-            >
-              +5
-            </button>
+            <p className="text-xs text-slate-500 font-mono mt-2">
+              Всички 6 нива на Bloom — от основи до анализ
+            </p>
           </div>
-          <p className="text-xs text-slate-500 font-mono text-center mt-2">
-            мин: 3 | макс: 50
-          </p>
-        </div>
+        ) : (
+          <div className="mb-6">
+            <label className="block text-xs text-slate-500 mb-3 font-mono uppercase tracking-wider text-center">
+              Брой въпроси
+            </label>
+            <div className="flex items-center justify-center gap-4">
+              <button
+                onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 5))}
+                disabled={previewQuestionCount <= 3}
+                className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                -5
+              </button>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.max(3, previewQuestionCount - 1))}
+                disabled={previewQuestionCount <= 3}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                -1
+              </button>
+              <div className="w-20 text-center">
+                <span className="text-4xl font-bold text-white font-mono">{previewQuestionCount}</span>
+              </div>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 1))}
+                disabled={previewQuestionCount >= 50}
+                className="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 font-mono hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                +1
+              </button>
+              <button
+                onClick={() => setPreviewQuestionCount(Math.min(50, previewQuestionCount + 5))}
+                disabled={previewQuestionCount >= 50}
+                className="w-12 h-12 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-xl hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                +5
+              </button>
+            </div>
+            <p className="text-xs text-slate-500 font-mono text-center mt-2">
+              мин: 3 | макс: 50
+            </p>
+          </div>
+        )}
 
         {/* Quick presets */}
+        {mode !== 'assessment' && (
         <div className="flex justify-center gap-2 mb-6">
           {[5, 10, 15, 20, 30].map(n => (
             <button
@@ -204,6 +220,7 @@ export function QuizPreview({
             </button>
           ))}
         </div>
+        )}
 
         {/* Model Selector */}
         <div className="mb-6">

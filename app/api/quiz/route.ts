@@ -988,12 +988,8 @@ ${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 PRIORITY: Focus on parts of the material NOT covered by the questions above. If all major concepts are covered, ask at HIGHER Bloom levels or test deeper understanding.`
     : '';
 
-  const response = await anthropic.messages.create({
-    model: modelConfig.id,
-    max_tokens: 16000,
-    messages: [{
-      role: 'user',
-      content: `You are an expert medical educator creating a quiz for a Bulgarian medical student.
+  // Build the prompt content
+  const buildPrompt = (count: number | null, partLabel?: string) => `You are an expert medical educator creating a quiz for a Bulgarian medical student.
 
 Subject: ${subjectName}
 Topic: ${topicName}
@@ -1008,10 +1004,11 @@ ${customQuestionsSection}
 ${specimensSection}
 ${previousQuestionsSection}
 
-Generate ${targetQuestionCount}.
+Generate ${count ? `EXACTLY ${count} questions. This is a STRICT requirement.` : targetQuestionCount}.
+${partLabel ? `\nThis is ${partLabel} of a split generation. Cover DIFFERENT concepts from the other part.` : ''}
 
 IMPORTANT QUESTION COUNT REQUIREMENT:
-${questionCount ? `You MUST generate EXACTLY ${questionCount} questions. Count them carefully before responding. If you generate fewer or more, you have FAILED the task.` : hasMaterial ? 'Intelligently select the number based on material complexity.' : 'Intelligently select the number based on topic breadth and complexity.'}
+${count ? `You MUST generate EXACTLY ${count} questions. Count them carefully before responding. If you generate fewer or more, you have FAILED the task.` : hasMaterial ? 'Intelligently select the number based on material complexity.' : 'Intelligently select the number based on topic breadth and complexity.'}
 
 Intelligently select:
 - The most important concepts to test
@@ -1051,13 +1048,114 @@ IMPORTANT:
 - For "short_answer", correctAnswer should be 1-3 sentences max
 - Explanations should be educational
 - Return ONLY the JSON array
-${questionCount ? `
+${count ? `
 FINAL VERIFICATION (CRITICAL):
-Before responding, COUNT your questions. You MUST have EXACTLY ${questionCount} questions in your array.
-If you have fewer than ${questionCount}, ADD more questions until you reach ${questionCount}.
-If you have more than ${questionCount}, REMOVE questions until you have exactly ${questionCount}.
-This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUST receive exactly ${questionCount}.` : ''}`
-    }]
+Before responding, COUNT your questions. You MUST have EXACTLY ${count} questions in your array.
+If you have fewer than ${count}, ADD more questions until you reach ${count}.
+If you have more than ${count}, REMOVE questions until you have exactly ${count}.
+This is NON-NEGOTIABLE. The student requested ${count} questions and MUST receive exactly ${count}.` : ''}`;
+
+  // Helper: parse response text into questions array
+  const parseQuestions = (text: string, stopReason?: string | null): unknown[] => {
+    let cleaned = text.trim().replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    if (stopReason === 'max_tokens') {
+      cleaned = repairTruncatedJson(cleaned);
+    }
+    try {
+      const parsed = JSON.parse(cleaned);
+      return Array.isArray(parsed) ? parsed : parsed.questions || [parsed];
+    } catch {
+      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
+      if (jsonMatch) return JSON.parse(jsonMatch[0]);
+      const objMatches = [...cleaned.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
+      if (objMatches.length > 0) return objMatches.map(m => JSON.parse(m[0]));
+      throw new Error('Failed to parse questions');
+    }
+  };
+
+  // Split generation for large question counts (parallel API calls)
+  const SPLIT_THRESHOLD = 30;
+  const useSplit = questionCount && questionCount > SPLIT_THRESHOLD;
+
+  if (useSplit) {
+    const half1 = Math.ceil(questionCount / 2);
+    const half2 = questionCount - half1;
+
+    const [res1, res2] = await Promise.allSettled([
+      anthropic.messages.create({
+        model: modelConfig.id,
+        max_tokens: 10000,
+        messages: [{ role: 'user', content: buildPrompt(half1, 'part 1 (first half of concepts)') }]
+      }),
+      anthropic.messages.create({
+        model: modelConfig.id,
+        max_tokens: 10000,
+        messages: [{ role: 'user', content: buildPrompt(half2, 'part 2 (second half of concepts)') }]
+      })
+    ]);
+
+    let allQuestions: unknown[] = [];
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+
+    for (const res of [res1, res2]) {
+      if (res.status === 'fulfilled') {
+        const r = res.value;
+        totalInputTokens += r.usage.input_tokens;
+        totalOutputTokens += r.usage.output_tokens;
+        const text = r.content.find(c => c.type === 'text');
+        if (text && text.type === 'text') {
+          try {
+            const qs = parseQuestions(text.text, r.stop_reason);
+            allQuestions = [...allQuestions, ...qs];
+          } catch { /* partial failure — use what we got */ }
+        }
+      }
+    }
+
+    if (allQuestions.length === 0) {
+      return NextResponse.json({ error: 'Failed to generate quiz (both splits failed)' }, { status: 500 });
+    }
+
+    // Deduplicate by question text
+    const seen = new Set<string>();
+    const questions = allQuestions.filter((q: any) => {
+      const key = (q.question || '').toLowerCase().trim().substring(0, 80);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const cost = (totalInputTokens * modelConfig.inputCost + totalOutputTokens * modelConfig.outputCost) / 1000000;
+
+    let countWarning: string | null = null;
+    if (questions.length !== questionCount) {
+      const diff = questionCount - questions.length;
+      if (diff > 0) {
+        countWarning = `Заявени: ${questionCount}, генерирани: ${questions.length} (split: ${half1}+${half2}).`;
+      } else {
+        countWarning = `Заявени: ${questionCount}, генерирани: ${questions.length} (split: ${half1}+${half2}).`;
+      }
+    }
+
+    return NextResponse.json({
+      questions,
+      countWarning,
+      requestedCount: questionCount,
+      actualCount: questions.length,
+      usage: {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        cost: Math.round(cost * 1000000) / 1000000
+      }
+    });
+  }
+
+  // Standard single-call generation (≤30 questions)
+  const response = await anthropic.messages.create({
+    model: modelConfig.id,
+    max_tokens: 16000,
+    messages: [{ role: 'user', content: buildPrompt(questionCount) }]
   });
 
   const textContent = response.content.find(c => c.type === 'text');
@@ -1065,36 +1163,11 @@ This is NON-NEGOTIABLE. The student requested ${questionCount} questions and MUS
     return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
   }
 
-  let responseText = textContent.text.trim();
-  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
-
-  // Handle truncated JSON when response was cut off at token limit
-  if (response.stop_reason === 'max_tokens') {
-    responseText = repairTruncatedJson(responseText);
-  }
-
   let questions;
   try {
-    const parsed = JSON.parse(responseText);
-    questions = Array.isArray(parsed) ? parsed : parsed.questions || [parsed];
+    questions = parseQuestions(textContent.text, response.stop_reason);
   } catch {
-    try {
-      const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      if (jsonMatch) {
-        questions = JSON.parse(jsonMatch[0]);
-      } else {
-        // Try extracting individual question objects
-        const objMatches = [...responseText.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
-        if (objMatches.length > 0) {
-          questions = objMatches.map(m => JSON.parse(m[0]));
-        } else {
-          return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
-        }
-      }
-      if (!Array.isArray(questions)) questions = [questions];
-    } catch {
-      return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
-    }
+    return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
   }
 
   // Cost calculation using selected model's pricing (per MTok)

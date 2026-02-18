@@ -1004,7 +1004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             // Update or initialize FSRS state
             const newFsrs = t.fsrs
-              ? updateFSRS(t.fsrs, score)  // Existing FSRS state - update
+              ? updateFSRS(t.fsrs, score, prev.studyGoals)  // Existing FSRS state - update
               : initializeFSRS(score);     // First quiz - initialize
 
             return {
@@ -1586,7 +1586,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Update FSRS state
       const newFsrs = module.fsrs
-        ? updateFSRS(module.fsrs, score)
+        ? updateFSRS(module.fsrs, score, prev.studyGoals)
         : initializeFSRS(score);
 
       // Update grades

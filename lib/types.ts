@@ -465,6 +465,8 @@ export interface DailyTask {
   techniqueName?: string;
   techniqueIcon?: string;
   techniqueHowToApply?: string;
+  // Soft cap priority bucket (set at task creation, used by generatePrioritySummary)
+  priorityBucket?: 'must' | 'should' | 'can-postpone' | 'flexible';
   // Embedded technique suggestion (shown inside the task card, not as separate task)
   suggestedTechnique?: {
     id: string;

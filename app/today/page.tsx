@@ -269,6 +269,20 @@ export default function TodayPage() {
     }))
   })), [activeSubjects]);
 
+  // Use custom plan if available, otherwise use generated plan
+  const activePlan = customPlan || dailyPlan;
+
+  // Soft cap: priority summary when plan is overloaded
+  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+  const availableMinutes = isWeekend && data.studyGoals.useWeekendHours
+    ? (data.studyGoals.weekendDailyMinutes ?? data.studyGoals.dailyMinutes)
+    : data.studyGoals.dailyMinutes;
+  const prioritySummary = useMemo(
+    () => generatePrioritySummary(activePlan, availableMinutes),
+    [activePlan, availableMinutes]
+  );
+  const [showPrioritySummary, setShowPrioritySummary] = useState(true);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -576,23 +590,10 @@ export default function TodayPage() {
     }
   };
 
-  // Use custom plan if available, otherwise use generated plan
-  const activePlan = customPlan || dailyPlan;
   const allPlanTopics = activePlan.flatMap(task => task.topics);
   const completedTopicCount = allPlanTopics.filter(t => completedTopics.has(t.id)).length;
   const topicProgressPercent = allPlanTopics.length > 0
     ? Math.round((completedTopicCount / allPlanTopics.length) * 100) : 0;
-
-  // Soft cap: priority summary when plan is overloaded
-  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
-  const availableMinutes = isWeekend && data.studyGoals.useWeekendHours
-    ? data.studyGoals.weekendDailyMinutes
-    : data.studyGoals.dailyMinutes;
-  const prioritySummary = useMemo(
-    () => generatePrioritySummary(activePlan, availableMinutes),
-    [activePlan, availableMinutes]
-  );
-  const [showPrioritySummary, setShowPrioritySummary] = useState(true);
 
   const typeColors = {
     setup: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },

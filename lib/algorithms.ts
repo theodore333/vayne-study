@@ -59,7 +59,7 @@ export function calculateRetrievability(fsrs: FSRSState): number {
  */
 export function getDaysUntilReview(fsrs: FSRSState, studyGoals?: StudyGoals): number {
   if (!fsrs.stability || fsrs.stability <= 0 || !isFinite(fsrs.stability)) return 0;
-  const targetR = studyGoals?.fsrsTargetRetention || FSRS_PARAMS.targetR;
+  const targetR = studyGoals?.fsrsTargetRetention ?? FSRS_PARAMS.targetR;
   const daysUntil = -fsrs.stability * Math.log(targetR);
   const daysSinceReview = getDaysSince(fsrs.lastReview);
   return Math.max(0, Math.round(daysUntil - daysSinceReview));
@@ -71,7 +71,7 @@ export function getDaysUntilReview(fsrs: FSRSState, studyGoals?: StudyGoals): nu
 export function topicNeedsReview(topic: Topic, studyGoals?: StudyGoals): boolean {
   if (!topic.fsrs) return false; // No FSRS state = use old decay system
 
-  const targetR = studyGoals?.fsrsTargetRetention || FSRS_PARAMS.targetR;
+  const targetR = studyGoals?.fsrsTargetRetention ?? FSRS_PARAMS.targetR;
   const R = calculateRetrievability(topic.fsrs);
   return R <= targetR;
 }
@@ -103,7 +103,8 @@ export function initializeFSRS(quizScore: number): FSRSState {
  * Update FSRS state after a quiz
  * Core FSRS algorithm adapted for topics
  */
-export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState {
+export function updateFSRS(currentFsrs: FSRSState, quizScore: number, studyGoals?: StudyGoals): FSRSState {
+  const FSRS = getFSRSParams(studyGoals);
   const rating = quizScore < 60 ? 0 : quizScore < 75 ? 1 : quizScore < 90 ? 2 : 3;
   const R = calculateRetrievability(currentFsrs);
 
@@ -118,7 +119,7 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
     // Stability drops to fraction based on difficulty
     newS = Math.max(1, currentFsrs.stability * 0.3 * (1 - currentFsrs.difficulty * 0.5));
     // Difficulty increases on lapse
-    newD = Math.min(FSRS_PARAMS.maxD, currentFsrs.difficulty + 0.1);
+    newD = Math.min(FSRS.maxD, currentFsrs.difficulty + 0.1);
   } else {
     // SUCCESS: Grow stability
     newReps++;
@@ -126,18 +127,18 @@ export function updateFSRS(currentFsrs: FSRSState, quizScore: number): FSRSState
     // Stability growth formula (simplified FSRS)
     // Higher R at review → less stability growth (reviewed too early)
     // Lower difficulty → more stability growth
-    const growthFactor = FSRS_PARAMS.factor * (1 - currentFsrs.difficulty * 0.3);
+    const growthFactor = FSRS.factor * (1 - currentFsrs.difficulty * 0.3);
     const retrievabilityBonus = 1 + (1 - R) * 0.5; // Bonus for reviewing when R is lower
     const ratingBonus = 1 + (rating - 1) * 0.15; // Easy = more growth
 
-    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS_PARAMS.topicMultiplier;
+    newS = currentFsrs.stability * growthFactor * retrievabilityBonus * ratingBonus * FSRS.topicMultiplier;
     // Cap growth to max 4.5x per review (higher than cards — topics are bigger units)
     newS = Math.min(currentFsrs.stability * 4.5, newS);
-    newS = Math.min(FSRS_PARAMS.maxInterval, Math.max(FSRS_PARAMS.minInterval, newS));
+    newS = Math.min(FSRS.maxInterval, Math.max(FSRS.minInterval, newS));
 
     // Difficulty decreases slightly on success
-    const dChange = (rating - 2) * 0.05; // Hard: +0.05, Good: 0, Easy: -0.05
-    newD = Math.max(FSRS_PARAMS.minD, Math.min(FSRS_PARAMS.maxD, currentFsrs.difficulty - dChange));
+    const dChange = (rating - 2) * 0.05; // Hard: -0.05, Good: 0, Easy: +0.05 (subtracted below)
+    newD = Math.max(FSRS.minD, Math.min(FSRS.maxD, currentFsrs.difficulty - dChange));
   }
 
   return {
@@ -162,7 +163,7 @@ export function getTopicsNeedingFSRSReview(
   const needsReview: Array<{ topic: Topic; subject: Subject; urgency: number; retrievability: number }> = [];
 
   for (const subject of subjects) {
-    if (subject.archived) continue;
+    if (subject.archived || subject.deletedAt) continue;
     const daysUntilExam = getDaysUntil(subject.examDate);
 
     for (const topic of subject.topics) {
@@ -1439,6 +1440,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'critical',
+        priorityBucket: 'must',
         typeLabel: `${CLASS_TYPES[exercise.type].icon} ${CLASS_TYPES[exercise.type].label} утре`,
         description: `Подготовка за ${CLASS_TYPES[exercise.type].label.toLowerCase()}`,
         topics: weakTopics,
@@ -1480,6 +1482,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'critical',
+        priorityBucket: 'must',
         typeLabel: `📝 Изпит след ${subjectWork.daysLeft} ${subjectWork.daysLeft === 1 ? 'ден' : 'дни'}`,
         description,
         topics: selected,
@@ -1533,6 +1536,7 @@ export function generateDailyPlan(
           subjectName: subject.name,
           subjectColor: subject.color,
           type: taskType,
+          priorityBucket: 'must',
           typeLabel: `${config.icon} ${eventName} след ${daysUntil}д`,
           description: `Подготовка за ${config.label.toLowerCase()}`,
           topics: selectedTopics,
@@ -1573,6 +1577,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'medium',
+        priorityBucket: 'must',
         typeLabel: '🧠 FSRS Review',
         description: `Spaced repetition (${avgR}% памет, ${selectedTopics.length} ${selectedTopics.length === 1 ? 'тема' : 'теми'})`,
         topics: selectedTopics,
@@ -1606,6 +1611,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'normal',
+        priorityBucket: 'must',
         typeLabel: '⚠️ Преговор',
         description: `Теми без review ${avgWarningDays}+ дни`,
         topics: selectedTopics,
@@ -1631,6 +1637,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'high',
+        priorityBucket: 'must',
         typeLabel: '🟠 Укрепване',
         description: `Теми за ~3.5 - нужен е преговор`,
         topics: selectedTopics,
@@ -1693,6 +1700,7 @@ export function generateDailyPlan(
           subjectName: subject.name,
           subjectColor: subject.color,
           type: 'medium',
+          priorityBucket: 'must',
           typeLabel: '🔄 Затвърждаване',
           description: `Бърз преговор на вчерашен материал (${consTopics.length} ${consTopics.length === 1 ? 'тема' : 'теми'})`,
           topics: consTopics,
@@ -1721,6 +1729,7 @@ export function generateDailyPlan(
       subjectName: subject.name,
       subjectColor: subject.color,
       type: priority,
+      priorityBucket: 'must',
       typeLabel: `🎯 Drill Weakness`,
       description: `${unmastered.length} неупражнявани грешки (${allWrongAnswers.length - unmastered.length} адресирани)`,
       topics: [], // No specific topics - cross-topic drill
@@ -1777,6 +1786,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'medium',
+        priorityBucket: 'can-postpone',
         typeLabel: 'Higher Order',
         description: `Bloom ${bl} \u2192 опитай Higher Order quiz (${names})`,
         topics: bloomTopics,
@@ -1818,6 +1828,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'normal',
+        priorityBucket: 'should',
         typeLabel: '📚 Нов материал',
         description: `${grayPct}% непокрити, изпит след ${classification.daysUntilExam}д`,
         topics: selectedTopics,
@@ -1862,6 +1873,7 @@ export function generateDailyPlan(
         subjectName: subject.name,
         subjectColor: subject.color,
         type: 'normal',
+        priorityBucket: 'should',
         typeLabel: difficulty === 'hard' ? '📖 Предв. подготовка' : '📖 Нов материал',
         description: `Бъдещ изпит след ${classification.daysUntilExam}д (${difficulty === 'hard' ? 'труден' : 'среден'}) — ${totalGray} оставащи`,
         topics: selectedTopics,
@@ -1885,10 +1897,11 @@ export function generateDailyPlan(
 
     tasks.push({
       id: generateId(),
-      subjectId: newMaterialTopicsBySubject[0].subjectId,
+      subjectId: '', // Cross-subject task
       subjectName: subjectNames,
       subjectColor: '#64748b', // slate — neutral color for cross-subject task
       type: 'normal',
+      priorityBucket: 'should',
       typeLabel: '🌙 Вечерен преговор',
       description: `Прегледай накратко ${allNewTopics.length} ${allNewTopics.length === 1 ? 'нова тема' : 'нови теми'} от днес`,
       topics: allNewTopics,
@@ -1948,6 +1961,7 @@ export function generateDailyPlan(
           subjectName: project.name,
           subjectColor: '#06b6d4', // Cyan for projects
           type: 'project',
+          priorityBucket: 'flexible',
           typeLabel: `🚀 Проект`,
           description: goalLabel ? `${goalLabel} — ${moduleLabel}` : moduleLabel,
           topics: [], // No topics
@@ -1993,6 +2007,7 @@ export function generateDailyPlan(
           subjectName: project.name,
           subjectColor: '#8b5cf6', // Purple for module reviews (different from project cyan)
           type: 'project',
+          priorityBucket: 'flexible',
           typeLabel: '🧠 Преговор',
           description: `${modules.length} модул${modules.length > 1 ? 'а' : ''} за преговор (${Math.round(avgRetrievability * 100)}% памет)`,
           topics: [],
@@ -2178,6 +2193,7 @@ export function generateDailyPlan(
           subjectName: 'IcanStudy',
           subjectColor: '#8b5cf6', // violet
           type: 'technique',
+          priorityBucket: 'flexible',
           typeLabel: `${best.icon} Техника`,
           description: `Практикувай: ${best.name}`,
           topics: [],
@@ -2249,10 +2265,13 @@ export function generateDailyPlan(
     }
 
     // Final pass: if two consecutive tasks share a subject, try swapping with the next different one
+    // Only swap within the same priority tier to preserve priority ordering
     for (let i = 1; i < interleaved.length - 1; i++) {
       if (interleaved[i].subjectId && interleaved[i].subjectId === interleaved[i - 1].subjectId) {
+        const currentPriority = priorityValue(interleaved[i].type);
         for (let j = i + 1; j < Math.min(i + 4, interleaved.length); j++) {
-          if (interleaved[j].subjectId !== interleaved[i].subjectId) {
+          if (interleaved[j].subjectId !== interleaved[i].subjectId
+              && priorityValue(interleaved[j].type) === currentPriority) {
             [interleaved[i], interleaved[j]] = [interleaved[j], interleaved[i]];
             break;
           }
@@ -2299,24 +2318,13 @@ export function generatePrioritySummary(
   availableMinutes: number
 ): PrioritySummary {
   // Classify each task into a priority bucket
+  // Uses priorityBucket field set at task creation (robust, not display-string dependent)
   const classifyTask = (task: DailyTask): PriorityBucket => {
-    // Must: forgetting risk or immovable deadlines
+    if (task.priorityBucket) return task.priorityBucket;
+    // Fallback for tasks without priorityBucket (e.g. custom/manual plans)
     if (task.type === 'critical') return 'must';
-    if (task.typeLabel.includes('FSRS')) return 'must';
-    if (task.typeLabel.includes('Затвърждаване')) return 'must';
-    if (task.typeLabel.includes('Drill')) return 'must';
-
-    // Should: maintains study pace
-    if (task.typeLabel.includes('Нов материал')) return 'should';
-    if (task.typeLabel.includes('Предв. подготовка')) return 'should';
-    if (task.typeLabel.includes('Вечерен преговор')) return 'should';
-    if (task.type === 'high') return 'should'; // academic events, orange reinforcement
-
-    // Flexible: no academic pressure
     if (task.type === 'project') return 'flexible';
     if (task.type === 'technique') return 'flexible';
-
-    // Can postpone: helpful but not urgent
     return 'can-postpone';
   };
 

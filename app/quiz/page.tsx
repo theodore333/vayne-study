@@ -423,31 +423,44 @@ function QuizContent() {
     const cacheableModes: Set<string> = new Set(['assessment', 'lower_order', 'mid_order', 'higher_order', 'custom']);
     const isCacheable = !isMultiMode && !forceNewQuestions && topicId && mode && cacheableModes.has(mode);
 
-    // Check cache before generating
+    // Valid question types (filter out removed types like 'matching')
+    const validTypes = new Set(['multiple_choice', 'open', 'case_study', 'fill_blank', 'short_answer']);
+
+    // Check cache for reusable questions (will be mixed with new ones if not enough)
+    let cachedQuestions: Question[] = [];
     if (isCacheable && topicId && mode) {
       try {
         const cached = await getCachedQuiz(topicId, mode);
         if (cached && cached.questions.length > 0) {
           const currentHash = hashMaterial(topic?.material || '');
           if (cached.materialHash === currentHash) {
-            // Cache hit - material unchanged, reuse questions
-            setUsedCache(true);
-            setQuizState({
-              questions: cached.questions,
-              currentIndex: 0,
-              answers: new Array(cached.questions.length).fill(null),
-              showResult: false, isGenerating: false, error: null
-            });
-            timer.initQuestionTimes(cached.questions.length);
-            setForceNewQuestions(false);
-            return;
+            // Filter out invalid/removed question types and shuffle
+            cachedQuestions = cached.questions
+              .filter((q: Question) => validTypes.has(q.type))
+              .sort(() => Math.random() - 0.5);
           }
         }
-      } catch { /* cache miss - proceed with generation */ }
+      } catch { /* cache miss */ }
     }
 
-    // Build request body
-    const questionCount = previewQuestionCount;
+    // If cache fully covers the requested count, use cache only
+    if (cachedQuestions.length >= previewQuestionCount) {
+      const selected = cachedQuestions.slice(0, previewQuestionCount);
+      setUsedCache(true);
+      setQuizState({
+        questions: selected,
+        currentIndex: 0,
+        answers: new Array(selected.length).fill(null),
+        showResult: false, isGenerating: false, error: null
+      });
+      timer.initQuestionTimes(selected.length);
+      setForceNewQuestions(false);
+      return;
+    }
+
+    // Generate new questions (request only the missing count if cache has some)
+    const newQuestionsNeeded = previewQuestionCount - cachedQuestions.length;
+    const questionCount = newQuestionsNeeded;
     let requestBody;
 
     if (isMultiMode && multiTopics.length > 0) {
@@ -541,8 +554,17 @@ function QuizContent() {
     if (result.usage) incrementApiCalls(result.usage.cost);
     setCountWarning(result.countWarning || null);
 
-    // Mix in question bank questions linked to this topic
+    // Mix cached questions with newly generated ones
     let allQuestions = result.questions!;
+    if (cachedQuestions.length > 0) {
+      // Deduplicate: skip cached questions whose text matches new ones
+      const newTexts = new Set(allQuestions.map(q => q.question.toLowerCase().trim().substring(0, 100)));
+      const uniqueCached = cachedQuestions.filter(q => !newTexts.has(q.question.toLowerCase().trim().substring(0, 100)));
+      allQuestions = [...allQuestions, ...uniqueCached].sort(() => Math.random() - 0.5);
+      setUsedCache(true);
+    }
+
+    // Mix in question bank questions linked to this topic
     if (topicId && subjectId && !isMultiMode && !isModuleQuiz) {
       const banks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
 
@@ -595,9 +617,19 @@ function QuizContent() {
     if (allQuestions.length > 0) initQuestionState(allQuestions[0]);
     timer.initQuestionTimes(allQuestions.length);
 
-    // Save to cache for reuse
+    // Save combined questions to cache (cached + new, excluding bank questions)
     if (isCacheable && topicId && mode && result.questions) {
-      saveCachedQuiz(topicId, mode, result.questions, topic?.material || '');
+      // Store new + valid cached (without bank questions which are added separately)
+      const cacheWorthy = [...result.questions, ...cachedQuestions.filter(q => validTypes.has(q.type))];
+      // Deduplicate by question text
+      const seen = new Set<string>();
+      const deduped = cacheWorthy.filter(q => {
+        const key = q.question.toLowerCase().trim().substring(0, 100);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      saveCachedQuiz(topicId, mode, deduped, topic?.material || '');
     }
     setForceNewQuestions(false);
   };
@@ -1738,7 +1770,7 @@ function QuizContent() {
         onAnswer={handleAnswer}
         onNext={handleNext}
         onEarlyStop={handleEarlyStop}
-        onBack={() => { setShowBackConfirm(false); router.push('/quiz'); }}
+        onBack={() => { setShowBackConfirm(false); resetQuiz(); }}
         fillBlankAnswer={fillBlankAnswer}
         setFillBlankAnswer={setFillBlankAnswer}
         onEditQuestion={handleEditQuestion}

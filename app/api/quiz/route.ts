@@ -990,7 +990,7 @@ PRIORITY: Focus on parts of the material NOT covered by the questions above. If 
 
   const response = await anthropic.messages.create({
     model: modelConfig.id,
-    max_tokens: 12000,
+    max_tokens: 16000,
     messages: [{
       role: 'user',
       content: `You are an expert medical educator creating a quiz for a Bulgarian medical student.

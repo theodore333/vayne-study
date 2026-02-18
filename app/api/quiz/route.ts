@@ -115,6 +115,15 @@ export async function POST(request: Request) {
       return handleFreeRecallEvaluation(anthropic, material, topicName, subjectName, userRecall, studyTechniques, body.examSimulation);
     }
 
+    if (mode === 'mind_map') {
+      if (!material) return NextResponse.json({ error: 'Няма материал за тази тема' }, { status: 400 });
+      const { mindMapData, mindMapImage } = body;
+      if (!mindMapData && !mindMapImage) {
+        return NextResponse.json({ error: 'Добави клонове или качи снимка' }, { status: 400 });
+      }
+      return handleMindMapEvaluation(anthropic, material, topicName, subjectName, mindMapData, mindMapImage);
+    }
+
     if (mode === 'drill_weakness') {
       // Drill Weakness mode - rephrase wrong answers
       const { wrongAnswers } = body;
@@ -366,6 +375,118 @@ interface WrongAnswerInput {
   correctAnswer: string;
   concept: string;
   bloomLevel: number;
+}
+
+async function handleMindMapEvaluation(
+  anthropic: Anthropic,
+  material: string,
+  topicName: string,
+  subjectName: string,
+  mindMapData: string | null,
+  mindMapImage: string | null
+) {
+  const modelId = 'claude-opus-4-6';
+
+  const studentInput = mindMapData
+    ? `MIND MAP НА СТУДЕНТА (структуриран текст):\n${mindMapData}`
+    : 'MIND MAP НА СТУДЕНТА: Виж приложената снимка по-долу.';
+
+  const promptText = `Ти си медицински преподавател. Оценяваш mind map на студент по темата "${topicName}" (предмет: ${subjectName}).
+
+МАТЕРИАЛ (reference):
+${material.substring(0, 8000)}
+
+${studentInput}
+
+ЗАДАЧА: Оцени mind map-а на студента спрямо материала.
+
+Оценявай:
+1. ПОКРИТИЕ НА КОНЦЕПЦИИ: Кои ключови концепции от материала присъстват? Кои липсват?
+2. ТОЧНОСТ НА ВРЪЗКИТЕ: Връзките между концепциите верни ли са? Какви важни връзки липсват?
+3. ОРГАНИЗАЦИЯ: Логична ли е йерархията? (централен → категории → детайли)
+4. BLOOM НИВО: Какво когнитивно ниво демонстрира? (4=Analyze, 5=Evaluate, 6=Create)
+
+КРИТЕРИИ:
+- Mind map с правилна йерархия + ключови връзки = 70+
+- Всички основни концепции + точни връзки + добра организация = 85+
+- Покрити всички концепции + задълбочени кръстосани връзки = 95+
+- Липсващи критични концепции = сериозно намаляване
+- Грешни връзки = по-голямо наказание от липсващи
+
+Върни САМО валиден JSON:
+{
+  "score": <0-100>,
+  "grade": <2.0-6.0 българска оценка>,
+  "bloomLevel": <4-6>,
+  "conceptsCovered": [{"concept": "...", "accuracy": "correct|partial|wrong"}],
+  "connectionsCovered": [{"from": "...", "to": "...", "label": "...", "accuracy": "correct|partial|wrong"}],
+  "missingConcepts": [{"concept": "...", "importance": "critical|important|nice_to_know"}],
+  "missingConnections": [{"from": "...", "to": "...", "relationship": "описание на връзката"}],
+  "hierarchyScore": <0-100>,
+  "feedback": "<обратна връзка на български — какво е добре, какво може да се подобри>",
+  "suggestedNextStep": "<конкретна препоръка за следваща стъпка>"
+}`;
+
+  // Build message — multimodal if image provided
+  type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  const content: Array<{ type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: ImageMediaType; data: string } }> = [];
+
+  if (mindMapImage) {
+    // Extract base64 data from data URI
+    const base64Data = mindMapImage.replace(/^data:image\/\w+;base64,/, '');
+    const mediaMatch = mindMapImage.match(/^data:(image\/\w+);base64,/);
+    const rawType = mediaMatch ? mediaMatch[1] : 'image/jpeg';
+    const validTypes: ImageMediaType[] = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const mediaType: ImageMediaType = validTypes.includes(rawType as ImageMediaType) ? rawType as ImageMediaType : 'image/jpeg';
+
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: mediaType, data: base64Data }
+    });
+  }
+  content.push({ type: 'text', text: promptText });
+
+  const response = await anthropic.messages.create({
+    model: modelId,
+    max_tokens: 4096,
+    messages: [{ role: 'user' as const, content }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  if (!textContent || textContent.type !== 'text') {
+    return NextResponse.json({ error: 'No response from Claude' }, { status: 500 });
+  }
+
+  let responseText = textContent.text.trim();
+  responseText = responseText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  let evaluation;
+  try {
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    evaluation = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(responseText);
+  } catch {
+    evaluation = {
+      score: 50, grade: 3.5, bloomLevel: 4,
+      conceptsCovered: [], connectionsCovered: [],
+      missingConcepts: [], missingConnections: [],
+      hierarchyScore: 50,
+      feedback: 'Не успях да оценя mind map-а автоматично.',
+      suggestedNextStep: 'Опитай отново.'
+    };
+  }
+
+  // Cost: Opus $15/$75 per MTok
+  const cost = (response.usage.input_tokens * 15 + response.usage.output_tokens * 75) / 1000000;
+
+  return NextResponse.json({
+    evaluation,
+    model: 'opus',
+    usage: {
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      cost: Math.round(cost * 1000000) / 1000000
+    }
+  });
 }
 
 async function handleDrillWeakness(

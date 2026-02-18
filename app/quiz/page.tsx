@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { BLOOM_LEVELS, BloomLevel, QuizLengthPreset, QUIZ_LENGTH_PRESETS, WrongAnswer } from '@/lib/types';
-import { QuizMode, Question, FreeRecallEvaluation, OpenAnswerEvaluation, MistakeAnalysis, QuizState, buildMasteryContext, calculateScore, getGradeFromScore, isAnswerCorrect, getQuestionScore } from '@/lib/quiz-types';
+import { QuizMode, Question, FreeRecallEvaluation, MindMapEvaluation, OpenAnswerEvaluation, MistakeAnalysis, QuizState, buildMasteryContext, calculateScore, getGradeFromScore, isAnswerCorrect, getQuestionScore } from '@/lib/quiz-types';
 import { fetchWithTimeout, getFetchErrorMessage, isAbortOrTimeoutError } from '@/lib/fetch-utils';
 import { checkAnkiConnect, addClozeNotes } from '@/lib/anki';
 import { showToast } from '@/components/Toast';
@@ -19,6 +19,7 @@ import { QuizQuestion } from '@/components/quiz/QuizQuestion';
 import { QuizResults } from '@/components/quiz/QuizResults';
 import { QuizPreview } from '@/components/quiz/QuizPreview';
 import ConfirmDialog from '@/components/modals/ConfirmDialog';
+import { MindMapBuilder, MindMapBranch, MindMapConnection, serializeMindMap } from '@/components/quiz/MindMapBuilder';
 
 function QuizContent() {
   const searchParams = useSearchParams();
@@ -104,6 +105,13 @@ function QuizContent() {
   const [pendingCogAction, setPendingCogAction] = useState<(() => void) | null>(null);
   const [freeRecallEvaluation, setFreeRecallEvaluation] = useState<FreeRecallEvaluation | null>(null);
   const [isEvaluating, setIsEvaluating] = useState(false);
+
+  // Mind map state
+  const [mindMapCentral, setMindMapCentral] = useState('');
+  const [mindMapBranches, setMindMapBranches] = useState<MindMapBranch[]>([]);
+  const [mindMapConnections, setMindMapConnections] = useState<MindMapConnection[]>([]);
+  const [mindMapImage, setMindMapImage] = useState<string | null>(null);
+  const [mindMapEvaluation, setMindMapEvaluation] = useState<MindMapEvaluation | null>(null);
 
   // Open answer AI evaluation
   const [openEvaluations, setOpenEvaluations] = useState<Record<number, OpenAnswerEvaluation>>({});
@@ -409,11 +417,14 @@ function QuizContent() {
       return;
     }
 
-    // free_recall requires material (compares student recall against it)
-    if (mode === 'free_recall' && !topic?.material?.trim()) {
-      setQuizState(prev => ({ ...prev, error: 'Free Recall изисква добавен материал към темата.' }));
+    // free_recall and mind_map require material
+    if ((mode === 'free_recall' || mode === 'mind_map') && !topic?.material?.trim()) {
+      setQuizState(prev => ({ ...prev, error: `${mode === 'free_recall' ? 'Free Recall' : 'Mind Map'} изисква добавен материал към темата.` }));
       return;
     }
+
+    // mind_map skips generation — renders directly from mode selection
+    if (mode === 'mind_map') return;
 
     const apiKey = localStorage.getItem('claude-api-key');
     if (!apiKey) {
@@ -749,6 +760,48 @@ function QuizContent() {
       }
     } catch {
       // Handle error
+    }
+    setIsEvaluating(false);
+  };
+
+  // Mind map evaluation
+  const evaluateMindMap = async () => {
+    if (isEvaluating || !topic?.material) return;
+
+    const hasBranches = mindMapBranches.some(b => b.text.trim());
+    if (!hasBranches && !mindMapImage) return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return;
+
+    setIsEvaluating(true);
+    try {
+      const mindMapData = hasBranches
+        ? serializeMindMap(mindMapCentral || topic.name, mindMapBranches, mindMapConnections)
+        : null;
+
+      const response = await fetchWithTimeout('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          mode: 'mind_map',
+          material: topic.material,
+          topicName: topic.name,
+          subjectName: subject?.name,
+          mindMapData,
+          mindMapImage: mindMapImage || undefined
+        }),
+        signal: gen.abortControllerRef.current?.signal
+      });
+
+      const result = await response.json();
+      if (result.evaluation) {
+        setMindMapEvaluation(result.evaluation);
+        if (result.usage) incrementApiCalls(result.usage.cost);
+      }
+    } catch (e) {
+      console.error('Mind map eval failed:', e);
     }
     setIsEvaluating(false);
   };
@@ -1584,6 +1637,18 @@ function QuizContent() {
     // Note: Don't track as "read" here - free recall tests knowledge, not reading
   };
 
+  const handleSaveMindMapGrade = () => {
+    if (!mindMapEvaluation) return;
+    if (subjectId && topicId && topic) {
+      addGrade(subjectId, topicId, mindMapEvaluation.grade, {
+        bloomLevel: mindMapEvaluation.bloomLevel,
+        questionsCount: 1,
+        correctAnswers: mindMapEvaluation.score >= 50 ? 1 : 0,
+        weight: 1.0
+      });
+    }
+  };
+
   const resetQuiz = () => {
     setQuizState({
       questions: [],
@@ -1598,6 +1663,11 @@ function QuizContent() {
     setShowExplanation(false);
     setFreeRecallText('');
     setFreeRecallEvaluation(null);
+    setMindMapCentral('');
+    setMindMapBranches([]);
+    setMindMapConnections([]);
+    setMindMapImage(null);
+    setMindMapEvaluation(null);
     setCurrentHint(null);
     setHintsUsed(0);
     timer.reset();
@@ -2098,6 +2168,171 @@ function QuizContent() {
           cancelText="Ще опитам сам"
           variant="warning"
         />
+      </div>
+    );
+  }
+
+  // Mind Map Mode
+  if (mode === 'mind_map' && !quizState.isGenerating) {
+    // Show results if evaluation is done
+    if (mindMapEvaluation) {
+      const evalEmoji = mindMapEvaluation.score >= 75 ? '🎉' : mindMapEvaluation.score >= 50 ? '👍' : '📚';
+      return (
+        <div className="min-h-screen p-6 space-y-6">
+          <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-3xl">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <span className="text-5xl">{evalEmoji}</span>
+              <div className={`text-4xl font-bold font-mono mt-3 ${
+                mindMapEvaluation.grade >= 5 ? 'text-green-400' :
+                mindMapEvaluation.grade >= 4 ? 'text-yellow-400' : 'text-orange-400'
+              }`}>
+                {mindMapEvaluation.grade.toFixed(1)}
+              </div>
+              <p className="text-sm text-slate-500 font-mono mt-1">
+                Mind Map · {mindMapEvaluation.score}% покритие · Bloom {mindMapEvaluation.bloomLevel}
+              </p>
+            </div>
+
+            {/* Feedback */}
+            <div className="p-4 bg-slate-800/50 rounded-lg mb-4">
+              <p className="text-sm text-slate-300 font-mono">{mindMapEvaluation.feedback}</p>
+            </div>
+
+            {/* Hierarchy score */}
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-mono mb-1">
+                <span>Организация на йерархията</span>
+                <span>{mindMapEvaluation.hierarchyScore}%</span>
+              </div>
+              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    mindMapEvaluation.hierarchyScore >= 70 ? 'bg-green-500' :
+                    mindMapEvaluation.hierarchyScore >= 40 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${mindMapEvaluation.hierarchyScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Concepts covered */}
+            {mindMapEvaluation.conceptsCovered.length > 0 && (
+              <div className="p-3 bg-green-500/10 rounded-lg mb-3">
+                <p className="text-xs text-green-400 font-mono font-semibold mb-1.5">Покрити концепции:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {mindMapEvaluation.conceptsCovered.map((c, i) => (
+                    <span key={i} className={`px-2 py-0.5 rounded-full text-xs font-mono ${
+                      c.accuracy === 'correct' ? 'bg-green-500/20 text-green-400' :
+                      c.accuracy === 'partial' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-red-500/20 text-red-400'
+                    }`}>
+                      {c.concept}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Connections covered */}
+            {mindMapEvaluation.connectionsCovered.length > 0 && (
+              <div className="p-3 bg-teal-500/10 rounded-lg mb-3">
+                <p className="text-xs text-teal-400 font-mono font-semibold mb-1.5">Покрити връзки:</p>
+                <ul className="space-y-1">
+                  {mindMapEvaluation.connectionsCovered.map((c, i) => (
+                    <li key={i} className={`text-xs font-mono flex items-center gap-1.5 ${
+                      c.accuracy === 'correct' ? 'text-green-400' :
+                      c.accuracy === 'partial' ? 'text-yellow-400' : 'text-red-400'
+                    }`}>
+                      {c.from} → {c.to}: {c.label}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Missing concepts */}
+            {mindMapEvaluation.missingConcepts.length > 0 && (
+              <div className="p-3 bg-red-500/10 rounded-lg mb-3">
+                <p className="text-xs text-red-400 font-mono font-semibold mb-1.5">Пропуснати концепции:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {mindMapEvaluation.missingConcepts.map((c, i) => (
+                    <span key={i} className={`px-2 py-0.5 rounded-full text-xs font-mono ${
+                      c.importance === 'critical' ? 'bg-red-500/20 text-red-400' :
+                      c.importance === 'important' ? 'bg-amber-500/20 text-amber-400' :
+                      'bg-slate-700 text-slate-400'
+                    }`}>
+                      {c.concept}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing connections */}
+            {mindMapEvaluation.missingConnections.length > 0 && (
+              <div className="p-3 bg-orange-500/10 rounded-lg mb-3">
+                <p className="text-xs text-orange-400 font-mono font-semibold mb-1.5">Пропуснати връзки:</p>
+                <ul className="space-y-1">
+                  {mindMapEvaluation.missingConnections.map((c, i) => (
+                    <li key={i} className="text-xs font-mono text-orange-300">
+                      {c.from} → {c.to}: {c.relationship}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Next step */}
+            {mindMapEvaluation.suggestedNextStep && (
+              <div className="p-3 bg-purple-500/10 rounded-lg mb-4">
+                <p className="text-xs text-purple-400 font-mono font-semibold mb-1">Следваща стъпка:</p>
+                <p className="text-sm text-slate-300 font-mono">{mindMapEvaluation.suggestedNextStep}</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => { handleSaveMindMapGrade(); resetQuiz(); }}
+                className="flex-1 py-3 bg-gradient-to-r from-teal-600 to-emerald-600 text-white font-semibold rounded-lg font-mono"
+              >
+                Запази и затвори
+              </button>
+              <button
+                onClick={() => { handleSaveMindMapGrade(); setMindMapEvaluation(null); }}
+                className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-mono"
+              >
+                Опитай пак
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Show builder
+    return (
+      <div className="min-h-screen p-6 space-y-6">
+        <Link href="/quiz" className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 font-mono text-sm">
+          <ArrowLeft size={16} /> Назад
+        </Link>
+
+        <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-3xl">
+          <MindMapBuilder
+            central={mindMapCentral}
+            setCentral={setMindMapCentral}
+            branches={mindMapBranches}
+            setBranches={setMindMapBranches}
+            connections={mindMapConnections}
+            setConnections={setMindMapConnections}
+            image={mindMapImage}
+            setImage={setMindMapImage}
+            isEvaluating={isEvaluating}
+            onEvaluate={evaluateMindMap}
+            topicName={topic?.name || ''}
+          />
+        </div>
       </div>
     );
   }

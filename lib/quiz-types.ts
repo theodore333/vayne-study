@@ -1,6 +1,6 @@
 import { BloomLevel } from './types';
 
-export type QuizMode = 'assessment' | 'free_recall' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards' | 'specimen_quiz';
+export type QuizMode = 'assessment' | 'free_recall' | 'mind_map' | 'lower_order' | 'mid_order' | 'higher_order' | 'custom' | 'drill_weakness' | 'anki_cards' | 'specimen_quiz';
 
 export type QuestionType = 'multiple_choice' | 'open' | 'case_study' | 'fill_blank' | 'short_answer';
 
@@ -22,6 +22,19 @@ export interface FreeRecallEvaluation {
   bloomLevel: number;
   covered: Array<{ concept: string; accuracy: string; detail: string }>;
   missing: Array<{ concept: string; importance: string }>;
+  feedback: string;
+  suggestedNextStep: string;
+}
+
+export interface MindMapEvaluation {
+  score: number;           // 0-100
+  grade: number;           // 2-6 Bulgarian grade
+  bloomLevel: number;      // 4-6 typically
+  conceptsCovered: Array<{ concept: string; accuracy: 'correct' | 'partial' | 'wrong' }>;
+  connectionsCovered: Array<{ from: string; to: string; label: string; accuracy: 'correct' | 'partial' | 'wrong' }>;
+  missingConcepts: Array<{ concept: string; importance: 'critical' | 'important' | 'nice_to_know' }>;
+  missingConnections: Array<{ from: string; to: string; relationship: string }>;
+  hierarchyScore: number;  // 0-100 how well organized
   feedback: string;
   suggestedNextStep: string;
 }

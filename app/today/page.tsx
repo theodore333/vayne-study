@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat, MessageSquare, X, Send } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
+import { generateDailyPlan, generatePrioritySummary, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -583,6 +583,17 @@ export default function TodayPage() {
   const topicProgressPercent = allPlanTopics.length > 0
     ? Math.round((completedTopicCount / allPlanTopics.length) * 100) : 0;
 
+  // Soft cap: priority summary when plan is overloaded
+  const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
+  const availableMinutes = isWeekend && data.studyGoals.useWeekendHours
+    ? data.studyGoals.weekendDailyMinutes
+    : data.studyGoals.dailyMinutes;
+  const prioritySummary = useMemo(
+    () => generatePrioritySummary(activePlan, availableMinutes),
+    [activePlan, availableMinutes]
+  );
+  const [showPrioritySummary, setShowPrioritySummary] = useState(true);
+
   const typeColors = {
     setup: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400' },
     critical: { bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
@@ -900,6 +911,72 @@ export default function TodayPage() {
           </div>
         )}
 
+        {/* Soft Cap Priority Summary */}
+        {prioritySummary.isOverloaded && activePlan.length > 0 && (
+          <div className="px-5 py-4 border-b border-[#1e293b] bg-gradient-to-r from-amber-900/10 to-orange-900/10">
+            <button
+              onClick={() => setShowPrioritySummary(!showPrioritySummary)}
+              className="w-full flex items-center justify-between text-left"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} className="text-amber-400" />
+                <span className="text-sm font-mono text-amber-300">
+                  {Math.round(prioritySummary.totalMinutes / 60)}ч план / {Math.round(availableMinutes / 60)}ч налично
+                </span>
+                <span className="text-xs font-mono text-slate-500">— приоритети</span>
+              </div>
+              {showPrioritySummary
+                ? <ChevronDown size={14} className="text-slate-500" />
+                : <ChevronRight size={14} className="text-slate-500" />
+              }
+            </button>
+            {showPrioritySummary && (
+              <div className="mt-3 space-y-2">
+                {prioritySummary.buckets.map(bucket => {
+                  const bucketColors: Record<string, string> = {
+                    'must': 'text-red-400 border-red-500/30',
+                    'should': 'text-blue-400 border-blue-500/30',
+                    'can-postpone': 'text-slate-400 border-slate-600/30',
+                    'flexible': 'text-slate-500 border-slate-700/30',
+                  };
+                  const bucketIcons: Record<string, string> = {
+                    'must': '🔴',
+                    'should': '🔵',
+                    'can-postpone': '⚪',
+                    'flexible': '💤',
+                  };
+                  const color = bucketColors[bucket.bucket] || 'text-slate-400 border-slate-600/30';
+                  return (
+                    <div key={bucket.bucket} className={`flex items-center justify-between py-1.5 px-3 rounded-lg border ${color.split(' ')[1]} bg-slate-900/30`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">{bucketIcons[bucket.bucket]}</span>
+                        <span className={`text-xs font-mono font-medium ${color.split(' ')[0]}`}>
+                          {bucket.label}
+                        </span>
+                        <span className="text-xs font-mono text-slate-600">
+                          {bucket.tasks.length} {bucket.tasks.length === 1 ? 'задача' : 'задачи'}
+                        </span>
+                      </div>
+                      <span className="text-xs font-mono text-slate-500">
+                        ~{bucket.totalMinutes >= 60
+                          ? `${Math.round(bucket.totalMinutes / 60 * 10) / 10}ч`
+                          : `${bucket.totalMinutes}м`
+                        }
+                      </span>
+                    </div>
+                  );
+                })}
+                <p className="text-xs font-mono text-slate-600 pt-1">
+                  Фокусирай се на 🔴 + 🔵 = ~{Math.round(
+                    ((prioritySummary.buckets.find(b => b.bucket === 'must')?.totalMinutes || 0) +
+                    (prioritySummary.buckets.find(b => b.bucket === 'should')?.totalMinutes || 0)) / 6
+                  ) / 10}ч
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {activePlan.length === 0 ? (
           <div className="p-12 text-center">
             <div className="text-4xl mb-4">✨</div>
@@ -913,8 +990,9 @@ export default function TodayPage() {
             {activePlan.map(task => {
               const isCompleted = completedTasks.has(task.id);
               const colors = typeColors[task.type];
+              const isDeprioritized = prioritySummary.isOverloaded && !prioritySummary.prioritizedIds.has(task.id);
               return (
-                <div key={task.id} className={"p-5 transition-all " + (isCompleted ? "opacity-50" : "")}>
+                <div key={task.id} className={"p-5 transition-all " + (isCompleted ? "opacity-50" : isDeprioritized ? "opacity-40" : "")}>
                   <div className="flex items-start gap-4">
                     <button onClick={() => toggleTask(task.id, task)} className="mt-1 transition-transform hover:scale-110">
                       {isCompleted ? (

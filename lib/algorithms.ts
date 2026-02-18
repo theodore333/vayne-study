@@ -2269,6 +2269,133 @@ export function generateDailyPlan(
   return tasks;
 }
 
+// ============================================================================
+// Soft Cap — Priority summary when plan exceeds available time
+// ============================================================================
+
+export type PriorityBucket = 'must' | 'should' | 'can-postpone' | 'flexible';
+
+export interface PrioritySummary {
+  totalMinutes: number;
+  availableMinutes: number;
+  isOverloaded: boolean;
+  buckets: {
+    bucket: PriorityBucket;
+    label: string;
+    description: string;
+    tasks: DailyTask[];
+    totalMinutes: number;
+  }[];
+  /** Tasks that fit within available time (in priority order) */
+  prioritizedIds: Set<string>;
+}
+
+/**
+ * Analyze daily plan and generate priority summary.
+ * When plan exceeds available time, suggests what to focus on.
+ */
+export function generatePrioritySummary(
+  tasks: DailyTask[],
+  availableMinutes: number
+): PrioritySummary {
+  // Classify each task into a priority bucket
+  const classifyTask = (task: DailyTask): PriorityBucket => {
+    // Must: forgetting risk or immovable deadlines
+    if (task.type === 'critical') return 'must';
+    if (task.typeLabel.includes('FSRS')) return 'must';
+    if (task.typeLabel.includes('Затвърждаване')) return 'must';
+    if (task.typeLabel.includes('Drill')) return 'must';
+
+    // Should: maintains study pace
+    if (task.typeLabel.includes('Нов материал')) return 'should';
+    if (task.typeLabel.includes('Предв. подготовка')) return 'should';
+    if (task.typeLabel.includes('Вечерен преговор')) return 'should';
+    if (task.type === 'high') return 'should'; // academic events, orange reinforcement
+
+    // Flexible: no academic pressure
+    if (task.type === 'project') return 'flexible';
+    if (task.type === 'technique') return 'flexible';
+
+    // Can postpone: helpful but not urgent
+    return 'can-postpone';
+  };
+
+  const must: DailyTask[] = [];
+  const should: DailyTask[] = [];
+  const canPostpone: DailyTask[] = [];
+  const flexible: DailyTask[] = [];
+
+  for (const task of tasks) {
+    const bucket = classifyTask(task);
+    switch (bucket) {
+      case 'must': must.push(task); break;
+      case 'should': should.push(task); break;
+      case 'can-postpone': canPostpone.push(task); break;
+      case 'flexible': flexible.push(task); break;
+    }
+  }
+
+  const sumMinutes = (arr: DailyTask[]) => arr.reduce((s, t) => s + t.estimatedMinutes, 0);
+  const totalMinutes = sumMinutes(tasks);
+
+  // Build prioritized list that fits in available time
+  const prioritizedIds = new Set<string>();
+  let timeLeft = availableMinutes;
+
+  // Add in priority order: must → should → can-postpone → flexible
+  for (const bucket of [must, should, canPostpone, flexible]) {
+    for (const task of bucket) {
+      if (timeLeft >= task.estimatedMinutes) {
+        prioritizedIds.add(task.id);
+        timeLeft -= task.estimatedMinutes;
+      } else if (timeLeft > 0 && task.estimatedMinutes > 0) {
+        // Partial fit — still include if at least half can be done
+        if (timeLeft >= task.estimatedMinutes * 0.5) {
+          prioritizedIds.add(task.id);
+          timeLeft = 0;
+        }
+      }
+    }
+  }
+
+  return {
+    totalMinutes,
+    availableMinutes,
+    isOverloaded: totalMinutes > availableMinutes * 1.2, // 20% buffer before showing warning
+    buckets: [
+      {
+        bucket: 'must' as PriorityBucket,
+        label: 'Задължително днес',
+        description: 'Забравяш ако не днес / краен срок',
+        tasks: must,
+        totalMinutes: sumMinutes(must),
+      },
+      {
+        bucket: 'should' as PriorityBucket,
+        label: 'Важно за темпото',
+        description: 'Поддържа плана ти за покриване',
+        tasks: should,
+        totalMinutes: sumMinutes(should),
+      },
+      {
+        bucket: 'can-postpone' as PriorityBucket,
+        label: 'Може утре',
+        description: 'Полезно, но няма спешност',
+        tasks: canPostpone,
+        totalMinutes: sumMinutes(canPostpone),
+      },
+      {
+        bucket: 'flexible' as PriorityBucket,
+        label: 'По избор',
+        description: 'Проекти и техники — без академичен натиск',
+        tasks: flexible,
+        totalMinutes: sumMinutes(flexible),
+      },
+    ].filter(b => b.tasks.length > 0),
+    prioritizedIds,
+  };
+}
+
 export function parseTopicsFromText(text: string): Omit<Topic, 'id'>[] {
   const lines = text.split('\n').filter(line => line.trim());
   return lines.map((line, index) => {

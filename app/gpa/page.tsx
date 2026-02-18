@@ -115,6 +115,12 @@ export default function GPAPage() {
     // Goal feasibility
     const isImpossible = bestPossibleDiploma < targetGPA;
     const isGuaranteed = worstPassDiploma >= targetGPA;
+    // Currently meeting the target (even if future semesters could change it)
+    const isCurrentlyOnTarget = remaining === 0
+      ? (stateExamsComplete ? diplomaGPA >= targetGPA : overallSemesterAverage >= targetGPA)
+      : false;
+    // "Comfortable" = remaining avg needed ≤ 3.00 (just pass) — nearly guaranteed
+    const isComfortable = !isGuaranteed && scenario1Possible && avgRemainingNeeded <= 3.00;
 
     return {
       completedCount,
@@ -135,16 +141,18 @@ export default function GPAPage() {
       roomPerSubject,
       isImpossible,
       isGuaranteed,
+      isCurrentlyOnTarget,
+      isComfortable,
     };
-  }, [semesterAverages, totalSemesters, targetGPA, stateExams, stateExamAverage, assumedStateExamCount]);
+  }, [semesterAverages, totalSemesters, targetGPA, stateExams, stateExamAverage, assumedStateExamCount, diplomaGPA, overallSemesterAverage]);
 
   // === RETAKE RECOMMENDATIONS (повишителни изпити) ===
   const retakeRecommendations = useMemo(() => {
     if (grades.length === 0) return [];
 
-    // For each grade, calculate diploma impact if improved to 6.00
+    // Only recommend retakes for weak grades (Среден or low Добър)
     return grades
-      .filter(g => g.grade < 5.50) // Only recommend for grades below 5.50
+      .filter(g => g.grade < 4.50) // Only grades actually worth retaking
       .map(g => {
         const semKey = `${g.year}-${g.semester}`;
         const semGrades = semesters[semKey] || [];
@@ -379,49 +387,71 @@ export default function GPAPage() {
             </div>
 
             {/* Main verdict */}
-            <div className={`p-4 rounded-xl border ${
-              goalAnalysis.isImpossible
-                ? 'bg-red-500/10 border-red-500/30'
-                : goalAnalysis.isGuaranteed
-                  ? 'bg-green-500/10 border-green-500/30'
-                  : goalAnalysis.scenario1Possible
-                    ? 'bg-yellow-500/10 border-yellow-500/30'
-                    : 'bg-red-500/10 border-red-500/30'
-            }`}>
-              <div className="flex items-start gap-3">
-                {goalAnalysis.isImpossible ? (
-                  <XCircle size={24} className="text-red-400 mt-0.5 shrink-0" />
-                ) : goalAnalysis.isGuaranteed ? (
-                  <CheckCircle size={24} className="text-green-400 mt-0.5 shrink-0" />
-                ) : goalAnalysis.scenario1Possible ? (
-                  <AlertTriangle size={24} className="text-yellow-400 mt-0.5 shrink-0" />
-                ) : (
-                  <XCircle size={24} className="text-red-400 mt-0.5 shrink-0" />
-                )}
-                <div>
-                  <div className="font-semibold font-mono text-sm text-slate-100">
-                    {goalAnalysis.isImpossible
-                      ? `Целта ${targetGPA.toFixed(2)} е НЕДОСТИЖИМА`
-                      : goalAnalysis.isGuaranteed
-                        ? `Целта ${targetGPA.toFixed(2)} е ГАРАНТИРАНА!`
-                        : goalAnalysis.scenario1Possible
-                          ? `Целта ${targetGPA.toFixed(2)} е постижима, но изисква усилие`
-                          : `Целта ${targetGPA.toFixed(2)} е почти недостижима`
-                    }
-                  </div>
-                  <div className="text-xs text-slate-400 font-mono mt-1">
-                    {goalAnalysis.isImpossible
-                      ? `Дори с 6.00 навсякъде, най-доброто възможно е ${goalAnalysis.bestPossibleDiploma.toFixed(2)}`
-                      : goalAnalysis.isGuaranteed
-                        ? `Дори с минимални оценки (3.00), дипломата ще е ${goalAnalysis.worstPassDiploma.toFixed(2)}`
-                        : goalAnalysis.remaining > 0
-                          ? `Най-добро възможно: ${goalAnalysis.bestPossibleDiploma.toFixed(2)} | Най-лошо (с тройки): ${goalAnalysis.worstPassDiploma.toFixed(2)}`
-                          : `Очакваш още държавни изпити — средната им ще определи крайния резултат`
-                    }
+            {(() => {
+              // Determine verdict category (priority order)
+              const currentlyAboveTarget = diplomaGPA >= targetGPA && diplomaGPA > 0;
+              let verdictStyle: string;
+              let verdictIcon: 'check' | 'warning' | 'x';
+              let verdictTitle: string;
+              let verdictSubtext: string;
+
+              if (goalAnalysis.isImpossible) {
+                verdictStyle = 'bg-red-500/10 border-red-500/30';
+                verdictIcon = 'x';
+                verdictTitle = `Целта ${targetGPA.toFixed(2)} е НЕДОСТИЖИМА`;
+                verdictSubtext = `Дори с 6.00 навсякъде, най-доброто възможно е ${goalAnalysis.bestPossibleDiploma.toFixed(2)}`;
+              } else if (goalAnalysis.isGuaranteed) {
+                verdictStyle = 'bg-green-500/10 border-green-500/30';
+                verdictIcon = 'check';
+                verdictTitle = `Целта ${targetGPA.toFixed(2)} е ГАРАНТИРАНА!`;
+                verdictSubtext = `Дори с минимални оценки (3.00), дипломата ще е ${goalAnalysis.worstPassDiploma.toFixed(2)}`;
+              } else if (currentlyAboveTarget && goalAnalysis.isComfortable) {
+                verdictStyle = 'bg-green-500/10 border-green-500/30';
+                verdictIcon = 'check';
+                verdictTitle = `Над целта ${targetGPA.toFixed(2)} — просто продължавай да взимаш изпитите`;
+                verdictSubtext = `Текуща диплома: ${diplomaGPA.toFixed(2)} | Нужна средна за оставащите: ≤ ${Math.max(3, goalAnalysis.avgRemainingNeeded).toFixed(2)}`;
+              } else if (currentlyAboveTarget && goalAnalysis.scenario1Possible) {
+                verdictStyle = 'bg-cyan-500/10 border-cyan-500/30';
+                verdictIcon = 'check';
+                verdictTitle = `Текущо си на целта ${targetGPA.toFixed(2)} — поддържай нивото`;
+                verdictSubtext = goalAnalysis.remaining > 0
+                  ? `Средна за оставащите ${goalAnalysis.remaining} семестъра: ≥ ${goalAnalysis.avgRemainingNeeded.toFixed(2)}`
+                  : `Очакваш още държавни изпити — средната им ще определи крайния резултат`;
+              } else if (goalAnalysis.scenario1Possible && goalAnalysis.avgRemainingNeeded <= 4.50) {
+                verdictStyle = 'bg-yellow-500/10 border-yellow-500/30';
+                verdictIcon = 'warning';
+                verdictTitle = `Целта ${targetGPA.toFixed(2)} е постижима с умерено усилие`;
+                verdictSubtext = `Най-добро: ${goalAnalysis.bestPossibleDiploma.toFixed(2)} | Най-лошо: ${goalAnalysis.worstPassDiploma.toFixed(2)}`;
+              } else if (goalAnalysis.scenario1Possible) {
+                verdictStyle = 'bg-orange-500/10 border-orange-500/30';
+                verdictIcon = 'warning';
+                verdictTitle = `Целта ${targetGPA.toFixed(2)} е постижима, но изисква сериозно усилие`;
+                verdictSubtext = `Нужна средна ≥ ${goalAnalysis.avgRemainingNeeded.toFixed(2)} за оставащите ${goalAnalysis.remaining} семестъра`;
+              } else {
+                verdictStyle = 'bg-red-500/10 border-red-500/30';
+                verdictIcon = 'x';
+                verdictTitle = `Целта ${targetGPA.toFixed(2)} е почти недостижима`;
+                verdictSubtext = `Най-добро възможно: ${goalAnalysis.bestPossibleDiploma.toFixed(2)}`;
+              }
+
+              return (
+                <div className={`p-4 rounded-xl border ${verdictStyle}`}>
+                  <div className="flex items-start gap-3">
+                    {verdictIcon === 'x' ? (
+                      <XCircle size={24} className="text-red-400 mt-0.5 shrink-0" />
+                    ) : verdictIcon === 'check' ? (
+                      <CheckCircle size={24} className="text-green-400 mt-0.5 shrink-0" />
+                    ) : (
+                      <AlertTriangle size={24} className="text-yellow-400 mt-0.5 shrink-0" />
+                    )}
+                    <div>
+                      <div className="font-semibold font-mono text-sm text-slate-100">{verdictTitle}</div>
+                      <div className="text-xs text-slate-400 font-mono mt-1">{verdictSubtext}</div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Detailed scenarios */}
             {goalAnalysis.remaining > 0 && (

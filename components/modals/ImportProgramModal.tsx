@@ -68,7 +68,7 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
         .map(e => e.date)
     );
     const descDates = new Set(
-      Object.keys(selectedClass?.weeklyDescriptions || {})
+      Object.keys(selectedClass?.weeklyTopics || {})
     );
     return { eventDates, descDates };
   }, [data.academicEvents, subjectId, selectedClass]);
@@ -155,14 +155,17 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
     const topicEntries = selected.filter(e => !ENTRY_TYPE_MAP[e.entryType]?.isEvent);
     const eventEntries = selected.filter(e => ENTRY_TYPE_MAP[e.entryType]?.isEvent);
 
-    // Update class with weekly descriptions
+    // Update class with weekly topics (description + matched topicIds)
     if (topicEntries.length > 0) {
-      const existing = selectedClass.weeklyDescriptions || {};
+      const existing = selectedClass.weeklyTopics || {};
       const merged = { ...existing };
       for (const entry of topicEntries) {
-        merged[entry.date] = entry.topic;
+        merged[entry.date] = {
+          description: entry.topic,
+          topicIds: entry.matchedTopicIds.length > 0 ? entry.matchedTopicIds : undefined
+        };
       }
-      updateClass(selectedClass.id, { weeklyDescriptions: merged });
+      updateClass(selectedClass.id, { weeklyTopics: merged });
     }
 
     // Create academic events for colloquiums/exams

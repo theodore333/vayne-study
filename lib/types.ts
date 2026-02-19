@@ -262,7 +262,7 @@ export interface ScheduleClass {
   description?: string;     // Free-text topic/theme of the exercise
   topicIds?: string[];       // Specific topics covered in this exercise
   startDate?: string;        // ISO date - when this class starts (ignore before this date)
-  weeklyDescriptions?: Record<string, string>; // date → topic description for that week
+  weeklyTopics?: Record<string, { description: string; topicIds?: string[] }>; // date → weekly topic info
 }
 
 export type ClassType = 'exercise';

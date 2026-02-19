@@ -428,7 +428,10 @@ export default function SchedulePage() {
                           </button>
                         </div>
                         {(() => {
-                          const weeklyDesc = cls.weeklyDescriptions?.[dayDate];
+                          const weeklyInfo = cls.weeklyTopics?.[dayDate];
+                          const linkedTopics = weeklyInfo?.topicIds
+                            ?.map(id => subject.topics.find(t => t.id === id))
+                            .filter(Boolean) || [];
                           return (
                             <>
                               <div className="flex items-center gap-1.5 mb-1">
@@ -446,24 +449,35 @@ export default function SchedulePage() {
                                   <span className="text-[10px] font-mono">{cls.room}</span>
                                 </div>
                               )}
-                              {weeklyDesc ? (
-                                <div
-                                  className="text-[10px] text-cyan-300/80 font-mono mt-1.5 leading-relaxed line-clamp-3"
-                                  title={weeklyDesc}
-                                >
-                                  {weeklyDesc}
-                                </div>
+                              {weeklyInfo ? (
+                                <>
+                                  <div
+                                    className="text-[10px] text-cyan-300/80 font-mono mt-1.5 leading-relaxed line-clamp-3"
+                                    title={weeklyInfo.description}
+                                  >
+                                    {weeklyInfo.description}
+                                  </div>
+                                  {linkedTopics.length > 0 && (
+                                    <div className="flex flex-wrap gap-0.5 mt-1">
+                                      {linkedTopics.map(t => (
+                                        <span key={t!.id} className="text-[9px] font-mono bg-purple-500/15 text-purple-400 px-1 py-0.5 rounded truncate max-w-full" title={t!.name}>
+                                          #{t!.number}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
                               ) : cls.description ? (
                                 <div className="text-[10px] text-slate-400 font-mono mt-1 truncate" title={cls.description}>
                                   {cls.description}
                                 </div>
                               ) : null}
-                              {cls.topicIds && cls.topicIds.length > 0 && (
+                              {cls.topicIds && cls.topicIds.length > 0 && !weeklyInfo && (
                                 <div className="text-[10px] text-purple-400/60 font-mono mt-0.5">
                                   {cls.topicIds.length} теми
                                 </div>
                               )}
-                              {cls.startDate && !weeklyDesc && (
+                              {cls.startDate && !weeklyInfo && (
                                 <div className="text-[10px] text-slate-600 font-mono mt-0.5">
                                   от {new Date(cls.startDate).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
                                 </div>

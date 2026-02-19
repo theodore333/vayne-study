@@ -58,7 +58,14 @@ export function useQuizGeneration() {
             signal: abortControllerRef.current?.signal
           });
 
-          result = await response.json() as Record<string, unknown>;
+          // Handle non-JSON responses (server crash, HTML error page, empty body)
+          try {
+            result = await response.json() as Record<string, unknown>;
+          } catch {
+            lastError = `Сървърна грешка (HTTP ${response.status}). Провери конзолата.`;
+            if (attempt === 0) options?.onRetry?.();
+            continue;
+          }
 
           if (response.ok) break;
 

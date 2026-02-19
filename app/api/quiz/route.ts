@@ -208,10 +208,22 @@ export async function POST(request: Request) {
 
   } catch (error: unknown) {
     console.error('Quiz generation error:', error);
+
+    // Handle Anthropic SDK errors with specific status codes
+    const apiStatus = (error as { status?: number })?.status;
     const message = error instanceof Error ? error.message : 'Unknown error';
 
-    if (message.includes('invalid_api_key')) {
+    if (apiStatus === 429 || message.includes('rate_limit') || message.includes('Rate limit')) {
+      return NextResponse.json({ error: 'API rate limit — изчакай 1-2 минути и пробвай пак.' }, { status: 429 });
+    }
+    if (apiStatus === 529 || message.includes('overloaded')) {
+      return NextResponse.json({ error: 'Claude е претоварен — пробвай пак след минута.' }, { status: 529 });
+    }
+    if (apiStatus === 401 || message.includes('invalid_api_key') || message.includes('authentication')) {
       return NextResponse.json({ error: 'Невалиден API ключ' }, { status: 401 });
+    }
+    if (apiStatus === 400 || message.includes('invalid_request')) {
+      return NextResponse.json({ error: `Невалидна заявка: ${message}` }, { status: 400 });
     }
 
     return NextResponse.json({ error: message }, { status: 500 });

@@ -214,8 +214,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ cards, cost });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Failed to generate cards';
     console.error('Anki cards generation error:', error);
+    const apiStatus = (error as { status?: number })?.status;
+    const message = error instanceof Error ? error.message : 'Failed to generate cards';
+
+    if (apiStatus === 429 || message.includes('rate_limit')) {
+      return NextResponse.json({ error: 'API rate limit — изчакай 1-2 минути и пробвай пак.' }, { status: 429 });
+    }
+    if (apiStatus === 529 || message.includes('overloaded')) {
+      return NextResponse.json({ error: 'Claude е претоварен — пробвай пак след минута.' }, { status: 529 });
+    }
+
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

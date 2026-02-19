@@ -22,6 +22,15 @@ function repairTruncatedJson(text: string): string {
   return text;
 }
 
+// Fix common JSON issues from AI output (trailing commas, control chars, etc.)
+function fixJsonSyntax(text: string): string {
+  // Remove trailing commas before } or ]  (e.g. {..."foo",} → {..."foo"})
+  text = text.replace(/,\s*([\]}])/g, '$1');
+  // Remove control characters inside strings (except \n \t \r which are legit)
+  text = text.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+  return text;
+}
+
 // Bloom's Taxonomy level descriptions
 const BLOOM_PROMPTS: Record<number, string> = {
   1: `Level 1 - REMEMBER (Запомняне): Focus on recall of facts, terms, and basic concepts.
@@ -1190,19 +1199,44 @@ This is NON-NEGOTIABLE. The student requested ${count} questions and MUST receiv
 
   // Helper: parse response text into questions array
   const parseQuestions = (text: string, stopReason?: string | null): unknown[] => {
+    // Strip markdown fences and whitespace
     let cleaned = text.trim().replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+    // Fix truncated JSON if max_tokens
     if (stopReason === 'max_tokens') {
       cleaned = repairTruncatedJson(cleaned);
     }
+
+    // Attempt 1: direct parse
     try {
       const parsed = JSON.parse(cleaned);
       return Array.isArray(parsed) ? parsed : parsed.questions || [parsed];
     } catch {
-      const jsonMatch = cleaned.match(/\[[\s\S]*\]/);
-      if (jsonMatch) return JSON.parse(jsonMatch[0]);
-      const objMatches = [...cleaned.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
-      if (objMatches.length > 0) return objMatches.map(m => JSON.parse(m[0]));
-      throw new Error('Failed to parse questions');
+      // Attempt 2: fix common syntax issues (trailing commas, control chars) and retry
+      const fixed = fixJsonSyntax(cleaned);
+      try {
+        const parsed = JSON.parse(fixed);
+        return Array.isArray(parsed) ? parsed : parsed.questions || [parsed];
+      } catch {
+        // Attempt 3: extract array portion and try with repair
+        const jsonMatch = fixed.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          try { return JSON.parse(jsonMatch[0]); } catch {
+            // Try repair on the extracted array
+            try { return JSON.parse(fixJsonSyntax(repairTruncatedJson(jsonMatch[0]))); } catch { /* fall through */ }
+          }
+        }
+        // Attempt 4: extract individual question objects
+        const objMatches = [...fixed.matchAll(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g)];
+        if (objMatches.length > 0) {
+          const questions: unknown[] = [];
+          for (const m of objMatches) {
+            try { questions.push(JSON.parse(m[0])); } catch { /* skip bad object */ }
+          }
+          if (questions.length > 0) return questions;
+        }
+        throw new Error('Failed to parse questions');
+      }
     }
   };
 

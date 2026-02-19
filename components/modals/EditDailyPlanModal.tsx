@@ -233,10 +233,10 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
                                       className="w-2 h-2 rounded-full shrink-0"
                                       style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
                                     />
-                                    <span className="flex-1 text-xs font-mono text-slate-300 truncate">
+                                    <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
                                       #{topic.number} {topic.name}
                                     </span>
-                                    <Plus size={12} className="text-slate-500" />
+                                    <Plus size={12} className="text-slate-500 shrink-0" />
                                   </button>
                                 );
                               })
@@ -411,10 +411,10 @@ function AddTaskPanel({
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
                   />
-                  <span className="flex-1 text-xs font-mono text-slate-300 truncate">
+                  <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
                     #{topic.number} {topic.name}
                   </span>
-                  {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400" />}
+                  {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400 shrink-0" />}
                 </button>
               ))
             )}

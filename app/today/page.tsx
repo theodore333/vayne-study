@@ -1078,9 +1078,17 @@ export default function TodayPage() {
                           {task.subjectName}
                         </Link>
                       </div>
-                      <p className={"text-sm mb-3 " + (isCompleted ? "text-slate-600" : "text-slate-400")}>
-                        {task.description}
-                      </p>
+                      <div className={"text-sm mb-3 " + (isCompleted ? "text-slate-600" : "text-slate-400")}>
+                        {task.description.includes('\n') ? (
+                          <div className="space-y-1">
+                            {task.description.split('\n').map((line, li) => (
+                              <p key={li} className="leading-relaxed">{line}</p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p>{task.description}</p>
+                        )}
+                      </div>
                       {/* Render topics for subject tasks */}
                       {task.topics.length > 0 && (
                         <div className="space-y-1.5">

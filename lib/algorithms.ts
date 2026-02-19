@@ -1891,27 +1891,45 @@ export function generateDailyPlan(
   }
 
   // 12. EVENING REVIEW — Quick recap of today's new material (same-day consolidation)
-  // NOTE: Don't include topic objects — at plan generation time they're still gray (unstudied).
-  // This is a reminder task; the user reviews whatever they actually studied today.
-  if (newMaterialTopicsBySubject.length > 0) {
-    const allNewTopics = newMaterialTopicsBySubject.flatMap(s => s.topics);
-    const subjectNames = [...new Set(newMaterialTopicsBySubject.map(s => s.subjectName))].join(', ');
-    const topicNames = allNewTopics.map(t => t.name).slice(0, 6).join(', ');
-    const moreCount = allNewTopics.length > 6 ? ` (+${allNewTopics.length - 6})` : '';
+  // Only shows topics that are NO LONGER gray (user actually studied them today).
+  // At plan generation time most are still gray — the task recalculates dynamically.
+  {
+    const studiedTodayBySubject: { subjectName: string; topicNames: string[] }[] = [];
+    for (const subject of subjects) {
+      const studiedToday = subject.topics.filter(t =>
+        t.status !== 'gray' &&
+        t.lastReview === getTodayString()
+      );
+      if (studiedToday.length > 0) {
+        studiedTodayBySubject.push({
+          subjectName: subject.name,
+          topicNames: studiedToday.map(t => `#${t.number} ${t.name}`)
+        });
+      }
+    }
 
-    tasks.push({
-      id: generateId(),
-      subjectId: '', // Cross-subject task
-      subjectName: subjectNames,
-      subjectColor: '#64748b', // slate — neutral color for cross-subject task
-      type: 'normal',
-      priorityBucket: 'should',
-      typeLabel: '🌙 Вечерен преговор',
-      description: `Прегледай накратко днешните нови теми: ${topicNames}${moreCount}`,
-      topics: [], // Empty — topics are still gray at plan time, user reviews what they actually studied
-      estimatedMinutes: Math.max(10, allNewTopics.length * 5), // ~5 min per topic quick glance
-      completed: false
-    });
+    if (studiedTodayBySubject.length > 0) {
+      const totalCount = studiedTodayBySubject.reduce((s, g) => s + g.topicNames.length, 0);
+      const subjectNames = studiedTodayBySubject.map(s => s.subjectName).join(', ');
+      // Format: one line per subject with its topics
+      const lines = studiedTodayBySubject.map(s =>
+        `${s.subjectName}: ${s.topicNames.join(' • ')}`
+      );
+
+      tasks.push({
+        id: generateId(),
+        subjectId: '',
+        subjectName: subjectNames,
+        subjectColor: '#64748b',
+        type: 'normal',
+        priorityBucket: 'should',
+        typeLabel: '🌙 Вечерен преговор',
+        description: lines.join('\n'),
+        topics: [],
+        estimatedMinutes: Math.max(10, totalCount * 5),
+        completed: false
+      });
+    }
   }
 
   // 13. PROJECTS — Development projects

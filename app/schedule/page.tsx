@@ -37,7 +37,7 @@ export default function SchedulePage() {
         const subject = event.subjectId ? data.subjects.find(s => s.id === event.subjectId) : null;
         return { event, daysUntil, subject };
       })
-      .filter(e => e.daysUntil >= 0 && (e.subject || !e.event.subjectId)) // Include general events too
+      .filter(e => e.daysUntil >= 0 && (e.subject || !e.event.subjectId) && e.event.type !== 'seminar') // Exclude seminar (weekly topics) — only special events
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [data.academicEvents, data.subjects]);
 
@@ -133,7 +133,7 @@ export default function SchedulePage() {
     for (let i = 0; i < 7; i++) {
       weekDates.add(getDateForDay(i));
     }
-    return data.academicEvents.filter(e => weekDates.has(e.date));
+    return data.academicEvents.filter(e => weekDates.has(e.date) && e.type !== 'seminar');
   }, [data.academicEvents, selectedWeekMonday]);
 
   const getEventsForDay = (dayIndex: number) => {
@@ -357,6 +357,7 @@ export default function SchedulePage() {
                     <div
                       key={ev.id}
                       className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 relative group"
+                      title={[ev.name || config.label, ev.description].filter(Boolean).join('\n')}
                     >
                       <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-all">
                         <button
@@ -426,36 +427,50 @@ export default function SchedulePage() {
                             <Trash2 size={11} className="text-red-400" />
                           </button>
                         </div>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm">{typeConfig.icon}</span>
-                          <span className="text-xs font-mono font-semibold" style={{ color: typeConfig.color }}>
-                            {cls.time}
-                          </span>
-                        </div>
-                        <div className="text-sm font-medium truncate" style={{ color: subject.color }}>
-                          {subject.name}
-                        </div>
-                        {cls.room && (
-                          <div className="flex items-center gap-1 mt-1 text-slate-500">
-                            <MapPin size={10} />
-                            <span className="text-[10px] font-mono">{cls.room}</span>
-                          </div>
-                        )}
-                        {cls.description && (
-                          <div className="text-[10px] text-slate-400 font-mono mt-1 truncate">
-                            {cls.description}
-                          </div>
-                        )}
-                        {cls.topicIds && cls.topicIds.length > 0 && (
-                          <div className="text-[10px] text-purple-400/60 font-mono mt-0.5">
-                            {cls.topicIds.length} теми
-                          </div>
-                        )}
-                        {cls.startDate && (
-                          <div className="text-[10px] text-slate-600 font-mono mt-0.5">
-                            от {new Date(cls.startDate).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
-                          </div>
-                        )}
+                        {(() => {
+                          const weeklyDesc = cls.weeklyDescriptions?.[dayDate];
+                          return (
+                            <>
+                              <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-sm">{typeConfig.icon}</span>
+                                <span className="text-xs font-mono font-semibold" style={{ color: typeConfig.color }}>
+                                  {cls.time}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium truncate" style={{ color: subject.color }}>
+                                {subject.name}
+                              </div>
+                              {cls.room && (
+                                <div className="flex items-center gap-1 mt-1 text-slate-500">
+                                  <MapPin size={10} />
+                                  <span className="text-[10px] font-mono">{cls.room}</span>
+                                </div>
+                              )}
+                              {weeklyDesc ? (
+                                <div
+                                  className="text-[10px] text-cyan-300/80 font-mono mt-1.5 leading-relaxed line-clamp-3"
+                                  title={weeklyDesc}
+                                >
+                                  {weeklyDesc}
+                                </div>
+                              ) : cls.description ? (
+                                <div className="text-[10px] text-slate-400 font-mono mt-1 truncate" title={cls.description}>
+                                  {cls.description}
+                                </div>
+                              ) : null}
+                              {cls.topicIds && cls.topicIds.length > 0 && (
+                                <div className="text-[10px] text-purple-400/60 font-mono mt-0.5">
+                                  {cls.topicIds.length} теми
+                                </div>
+                              )}
+                              {cls.startDate && !weeklyDesc && (
+                                <div className="text-[10px] text-slate-600 font-mono mt-0.5">
+                                  от {new Date(cls.startDate).toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     );
                   })

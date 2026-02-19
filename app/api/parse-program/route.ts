@@ -11,6 +11,7 @@ interface ParsedEntry {
   weekNumber: number;
   topic: string;
   matchedTopicIds: string[];
+  entryType: 'topic' | 'colloquium' | 'control_test' | 'exam';
 }
 
 /**
@@ -85,7 +86,11 @@ ${text}
 2. Ако има номерация (Седмица 1, Week 1, I, II, 1., 2., №1) — използвай нея
 3. Ако няма номерация — номерирай последователно (1, 2, 3...)
 4. Ако за една седмица има повече от една тема — обедини ги в един запис
-5. Ако запис е "Колоквиум", "Контролно", "Изпит" — запази го (НЕ го филтрирай)
+5. КЛАСИФИЦИРАЙ всеки запис:
+   - "topic" = обикновена учебна тема (лекция, упражнение)
+   - "colloquium" = колоквиум, устен изпит, тест по материала
+   - "control_test" = контролно, писмен тест
+   - "exam" = изпит, финален изпит
 
 СЪЩЕСТВУВАЩИ ТЕМИ НА ПРЕДМЕТА (за съпоставка):
 ${topicsList}
@@ -99,7 +104,14 @@ ${topicsList}
     {
       "weekNumber": 1,
       "topic": "Точният текст от програмата",
+      "entryType": "topic",
       "matchedTopicIds": ["id1"] или []
+    },
+    {
+      "weekNumber": 8,
+      "topic": "Колоквиум I - теми 1-7",
+      "entryType": "colloquium",
+      "matchedTopicIds": []
     }
   ]
 }
@@ -107,7 +119,8 @@ ${topicsList}
 ВАЖНО:
 - Запази ТОЧНО оригиналния текст на всяка тема
 - Не добавяй теми от собствени познания
-- Не пропускай колоквиуми/контролни — те са важни за графика
+- НЕ пропускай колоквиуми/контролни — те са СПЕЦИАЛНИ събития
+- Колоквиум/контролно ВИНАГИ е "colloquium" или "control_test", НИКОГА "topic"
 - Ако не си сигурен за съвпадение — остави matchedTopicIds празен масив`
       }]
     });
@@ -137,10 +150,13 @@ ${topicsList}
     // Calculate absolute dates and resolve topic names
     const topicMap = new Map(existingTopics?.map(t => [t.id, t.name]) || []);
 
+    const validTypes = new Set(['topic', 'colloquium', 'control_test', 'exam']);
+
     const enrichedEntries = entries.map(entry => ({
       weekNumber: entry.weekNumber,
       date: calculateDateForWeek(semesterStart, classDay, entry.weekNumber),
       topic: entry.topic,
+      entryType: validTypes.has(entry.entryType) ? entry.entryType : 'topic',
       matchedTopicIds: entry.matchedTopicIds || [],
       matchedTopicNames: (entry.matchedTopicIds || [])
         .map(id => topicMap.get(id))

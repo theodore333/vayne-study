@@ -6,23 +6,31 @@ import { useApp } from '@/lib/context';
 import { AcademicEventType } from '@/lib/types';
 import { ACADEMIC_EVENT_CONFIG } from '@/lib/constants';
 
+type EntryType = 'topic' | 'colloquium' | 'control_test' | 'exam';
+
 interface ParsedEntry {
   weekNumber: number;
   date: string;
   topic: string;
+  entryType: EntryType;
   matchedTopicIds: string[];
   matchedTopicNames: string[];
 }
 
+const ENTRY_TYPE_MAP: Record<EntryType, { label: string; icon: string; isEvent: boolean; eventType?: AcademicEventType }> = {
+  topic: { label: 'Тема', icon: '📖', isEvent: false },
+  colloquium: { label: 'Колоквиум', icon: '📋', isEvent: true, eventType: 'colloquium' },
+  control_test: { label: 'Контролно', icon: '📝', isEvent: true, eventType: 'control_test' },
+  exam: { label: 'Изпит', icon: '🎓', isEvent: true, eventType: 'practical_exam' },
+};
+
 export default function ImportProgramModal({ onClose }: { onClose: () => void }) {
-  const { data, addAcademicEventsBatch } = useApp();
+  const { data, addAcademicEventsBatch, updateClass } = useApp();
 
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
 
   const [subjectId, setSubjectId] = useState(activeSubjects[0]?.id || '');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [eventType, setEventType] = useState<AcademicEventType>('seminar');
-  const [weight, setWeight] = useState(ACADEMIC_EVENT_CONFIG.seminar.defaultWeight);
   const [text, setText] = useState('');
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +38,7 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
   const [selectedEntries, setSelectedEntries] = useState<Set<number>>(new Set());
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [usageCost, setUsageCost] = useState<number | null>(null);
+  const [eventWeight, setEventWeight] = useState(1.0);
 
   // Get schedule classes for selected subject
   const subjectClasses = useMemo(() => {
@@ -51,14 +60,18 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
     lab: 'Лаборатория',
   };
 
-  // Check for existing events (dedup)
-  const existingEventDates = useMemo(() => {
-    return new Set(
+  // Check for existing events and weekly descriptions (dedup)
+  const existingData = useMemo(() => {
+    const eventDates = new Set(
       data.academicEvents
-        .filter(e => e.subjectId === subjectId && e.type === eventType)
+        .filter(e => e.subjectId === subjectId)
         .map(e => e.date)
     );
-  }, [data.academicEvents, subjectId, eventType]);
+    const descDates = new Set(
+      Object.keys(selectedClass?.weeklyDescriptions || {})
+    );
+    return { eventDates, descDates };
+  }, [data.academicEvents, subjectId, selectedClass]);
 
   const handleSubjectChange = (newId: string) => {
     setSubjectId(newId);
@@ -116,7 +129,11 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
       const today = new Date().toISOString().split('T')[0];
       const autoSelected = new Set<number>();
       parsed.forEach((entry, i) => {
-        if (entry.date >= today && !existingEventDates.has(entry.date)) {
+        const isEvent = ENTRY_TYPE_MAP[entry.entryType]?.isEvent;
+        const isDup = isEvent
+          ? existingData.eventDates.has(entry.date)
+          : existingData.descDates.has(entry.date);
+        if (entry.date >= today && !isDup) {
           autoSelected.add(i);
         }
       });
@@ -130,23 +147,41 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
   };
 
   const handleImport = () => {
-    if (!entries) return;
+    if (!entries || !selectedClass) return;
 
-    const eventsToCreate = entries
-      .filter((_, i) => selectedEntries.has(i))
-      .map(entry => ({
-        type: eventType,
-        subjectId,
-        date: entry.date,
-        name: `Седмица ${entry.weekNumber}`,
-        description: entry.topic,
-        topicIds: entry.matchedTopicIds.length > 0 ? entry.matchedTopicIds : undefined,
-        weight
-      }));
+    const selected = entries.filter((_, i) => selectedEntries.has(i));
 
-    if (eventsToCreate.length > 0) {
+    // Split: regular topics → weeklyDescriptions, special → AcademicEvents
+    const topicEntries = selected.filter(e => !ENTRY_TYPE_MAP[e.entryType]?.isEvent);
+    const eventEntries = selected.filter(e => ENTRY_TYPE_MAP[e.entryType]?.isEvent);
+
+    // Update class with weekly descriptions
+    if (topicEntries.length > 0) {
+      const existing = selectedClass.weeklyDescriptions || {};
+      const merged = { ...existing };
+      for (const entry of topicEntries) {
+        merged[entry.date] = entry.topic;
+      }
+      updateClass(selectedClass.id, { weeklyDescriptions: merged });
+    }
+
+    // Create academic events for colloquiums/exams
+    if (eventEntries.length > 0) {
+      const eventsToCreate = eventEntries.map(entry => {
+        const mapping = ENTRY_TYPE_MAP[entry.entryType];
+        return {
+          type: (mapping.eventType || 'colloquium') as AcademicEventType,
+          subjectId,
+          date: entry.date,
+          name: entry.topic,
+          description: undefined as string | undefined,
+          topicIds: entry.matchedTopicIds.length > 0 ? entry.matchedTopicIds : undefined,
+          weight: eventWeight
+        };
+      });
       addAcademicEventsBatch(eventsToCreate);
     }
+
     onClose();
   };
 
@@ -170,6 +205,14 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
 
   const selectedCount = selectedEntries.size;
   const today = new Date().toISOString().split('T')[0];
+
+  // Count topics vs events in selection
+  const selectedTopicCount = entries
+    ? entries.filter((e, i) => selectedEntries.has(i) && !ENTRY_TYPE_MAP[e.entryType]?.isEvent).length
+    : 0;
+  const selectedEventCount = entries
+    ? entries.filter((e, i) => selectedEntries.has(i) && ENTRY_TYPE_MAP[e.entryType]?.isEvent).length
+    : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -264,29 +307,13 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
           {showAdvanced && (
             <div className="space-y-3 pl-3 border-l-2 border-slate-800">
               <div>
-                <label className="block text-xs text-slate-500 mb-1 font-mono">Тип събитие</label>
-                <select
-                  value={eventType}
-                  onChange={e => {
-                    const t = e.target.value as AcademicEventType;
-                    setEventType(t);
-                    setWeight(ACADEMIC_EVENT_CONFIG[t].defaultWeight);
-                  }}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 font-mono text-sm"
-                >
-                  {(Object.keys(ACADEMIC_EVENT_CONFIG) as AcademicEventType[]).map(t => (
-                    <option key={t} value={t}>{ACADEMIC_EVENT_CONFIG[t].icon} {ACADEMIC_EVENT_CONFIG[t].label}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className="block text-xs text-slate-500 mb-1 font-mono">
-                  Тежест: {weight.toFixed(1)}x
+                  Тежест на събития (колоквиуми/контролни): {eventWeight.toFixed(1)}x
                 </label>
                 <input
                   type="range" min="0.5" max="1.5" step="0.1"
-                  value={weight}
-                  onChange={e => setWeight(parseFloat(e.target.value))}
+                  value={eventWeight}
+                  onChange={e => setEventWeight(parseFloat(e.target.value))}
                   className="w-full accent-cyan-500"
                 />
               </div>
@@ -301,7 +328,7 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
             <textarea
               value={text}
               onChange={e => setText(e.target.value)}
-              placeholder={"Постави програмата тук...\n\nПример:\nСедмица 1: Въведение в предмета\nСедмица 2: Антихипертензивни средства\nСедмица 3: Диуретици"}
+              placeholder={"Постави програмата тук...\n\nПример:\nСедмица 1: Въведение в предмета\nСедмица 2: Антихипертензивни средства\nСедмица 8: Колоквиум I"}
               rows={6}
               className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-slate-200 font-mono text-sm focus:outline-none focus:border-cyan-500 placeholder:text-slate-600 resize-none"
             />
@@ -345,10 +372,19 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
                 </button>
               </div>
 
+              {/* Legend */}
+              <div className="flex items-center gap-3 mb-2 text-[10px] font-mono text-slate-600">
+                <span>📖 Тема → описание на занятие</span>
+                <span>📋 Колоквиум → събитие</span>
+              </div>
+
               <div className="border border-slate-700 rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
                 {entries.map((entry, i) => {
                   const isPast = entry.date < today;
-                  const isDuplicate = existingEventDates.has(entry.date);
+                  const mapping = ENTRY_TYPE_MAP[entry.entryType] || ENTRY_TYPE_MAP.topic;
+                  const isDuplicate = mapping.isEvent
+                    ? existingData.eventDates.has(entry.date)
+                    : existingData.descDates.has(entry.date);
                   const isSelected = selectedEntries.has(i);
 
                   return (
@@ -372,6 +408,13 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
                           <span className="text-xs font-mono text-cyan-400 shrink-0">
                             {new Date(entry.date + 'T00:00:00').toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}
                           </span>
+                          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0 ${
+                            mapping.isEvent
+                              ? 'bg-red-500/15 text-red-400 border border-red-500/30'
+                              : 'bg-slate-800 text-slate-500'
+                          }`}>
+                            {mapping.icon} {mapping.label}
+                          </span>
                           {isPast && (
                             <span className="text-[10px] font-mono text-slate-600 bg-slate-800 px-1.5 rounded">минала</span>
                           )}
@@ -379,7 +422,7 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
                             <span className="text-[10px] font-mono text-amber-500 bg-amber-500/10 px-1.5 rounded">вече съществува</span>
                           )}
                         </div>
-                        <p className="text-sm text-slate-300 mt-0.5 truncate">{entry.topic}</p>
+                        <p className="text-sm text-slate-300 mt-0.5 truncate" title={entry.topic}>{entry.topic}</p>
                         {entry.matchedTopicNames.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
                             {entry.matchedTopicNames.map((name, j) => (
@@ -406,20 +449,33 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
 
         {/* Footer */}
         {entries && entries.length > 0 && (
-          <div className="p-4 border-t border-[#1e293b] flex gap-3">
-            <button
-              onClick={() => { setEntries(null); setError(''); }}
-              className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-lg font-mono text-sm hover:bg-slate-700 transition-colors"
-            >
-              Обратно
-            </button>
-            <button
-              onClick={handleImport}
-              disabled={selectedCount === 0}
-              className="flex-1 py-2.5 bg-cyan-600 text-white rounded-lg font-mono text-sm hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Импортирай {selectedCount} {selectedCount === 1 ? 'събитие' : 'събития'}
-            </button>
+          <div className="p-4 border-t border-[#1e293b]">
+            {/* Summary of what will happen */}
+            {selectedCount > 0 && (
+              <div className="flex items-center gap-3 mb-3 text-[11px] font-mono text-slate-500">
+                {selectedTopicCount > 0 && (
+                  <span>📖 {selectedTopicCount} {selectedTopicCount === 1 ? 'тема' : 'теми'} → график</span>
+                )}
+                {selectedEventCount > 0 && (
+                  <span>📋 {selectedEventCount} {selectedEventCount === 1 ? 'събитие' : 'събития'} → календар</span>
+                )}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setEntries(null); setError(''); }}
+                className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-lg font-mono text-sm hover:bg-slate-700 transition-colors"
+              >
+                Обратно
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={selectedCount === 0}
+                className="flex-1 py-2.5 bg-cyan-600 text-white rounded-lg font-mono text-sm hover:bg-cyan-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Импортирай {selectedCount} записа
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -1229,7 +1229,10 @@ This is NON-NEGOTIABLE. The student requested ${count} questions and MUST receiv
           try {
             const qs = parseQuestions(text.text, r.stop_reason);
             allQuestions = [...allQuestions, ...qs];
-          } catch { /* partial failure — use what we got */ }
+          } catch (splitErr) {
+            console.error('[QUIZ] Split parse error:', splitErr);
+            console.error('[QUIZ] Split raw (first 300 chars):', text.text.substring(0, 300));
+          }
         }
       }
     }
@@ -1287,8 +1290,15 @@ This is NON-NEGOTIABLE. The student requested ${count} questions and MUST receiv
   let questions;
   try {
     questions = parseQuestions(textContent.text, response.stop_reason);
-  } catch {
-    return NextResponse.json({ error: 'Failed to generate quiz' }, { status: 500 });
+  } catch (parseErr) {
+    console.error('[QUIZ] Parse error:', parseErr);
+    console.error('[QUIZ] Raw response (first 500 chars):', textContent.text.substring(0, 500));
+    console.error('[QUIZ] Stop reason:', response.stop_reason);
+    // Try to give a useful error message
+    const snippet = textContent.text.substring(0, 100).replace(/\n/g, ' ');
+    return NextResponse.json({
+      error: `Грешка при парсване на отговора от AI. Начало: "${snippet}..." (stop: ${response.stop_reason})`
+    }, { status: 500 });
   }
 
   // Cost calculation using selected model's pricing (per MTok)

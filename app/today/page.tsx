@@ -1012,8 +1012,18 @@ export default function TodayPage() {
               const isCompleted = completedTasks.has(task.id);
               const colors = typeColors[task.type];
               const isDeprioritized = prioritySummary.isOverloaded && !prioritySummary.prioritizedIds.has(task.id);
+              // Bucket color indicator (only when soft cap is active)
+              const bucketBorderColors: Record<string, string> = {
+                'must': 'border-l-red-500',
+                'should': 'border-l-blue-500',
+                'can-postpone': 'border-l-slate-500',
+                'flexible': 'border-l-slate-700',
+              };
+              const bucketBorder = prioritySummary.isOverloaded && task.priorityBucket
+                ? `border-l-4 ${bucketBorderColors[task.priorityBucket] || ''}`
+                : '';
               return (
-                <div key={task.id} className={"p-5 transition-all " + (isCompleted ? "opacity-50" : isDeprioritized ? "opacity-40" : "")}>
+                <div key={task.id} className={"p-5 transition-all " + bucketBorder + " " + (isCompleted ? "opacity-50" : isDeprioritized ? "opacity-40" : "")}>
                   <div className="flex items-start gap-4">
                     <button onClick={() => toggleTask(task.id, task)} className="mt-1 transition-transform hover:scale-110">
                       {isCompleted ? (

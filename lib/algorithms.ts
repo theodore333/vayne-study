@@ -1891,9 +1891,13 @@ export function generateDailyPlan(
   }
 
   // 12. EVENING REVIEW — Quick recap of today's new material (same-day consolidation)
+  // NOTE: Don't include topic objects — at plan generation time they're still gray (unstudied).
+  // This is a reminder task; the user reviews whatever they actually studied today.
   if (newMaterialTopicsBySubject.length > 0) {
     const allNewTopics = newMaterialTopicsBySubject.flatMap(s => s.topics);
     const subjectNames = [...new Set(newMaterialTopicsBySubject.map(s => s.subjectName))].join(', ');
+    const topicNames = allNewTopics.map(t => t.name).slice(0, 6).join(', ');
+    const moreCount = allNewTopics.length > 6 ? ` (+${allNewTopics.length - 6})` : '';
 
     tasks.push({
       id: generateId(),
@@ -1903,8 +1907,8 @@ export function generateDailyPlan(
       type: 'normal',
       priorityBucket: 'should',
       typeLabel: '🌙 Вечерен преговор',
-      description: `Прегледай накратко ${allNewTopics.length} ${allNewTopics.length === 1 ? 'нова тема' : 'нови теми'} от днес`,
-      topics: allNewTopics,
+      description: `Прегледай накратко днешните нови теми: ${topicNames}${moreCount}`,
+      topics: [], // Empty — topics are still gray at plan time, user reviews what they actually studied
       estimatedMinutes: Math.max(10, allNewTopics.length * 5), // ~5 min per topic quick glance
       completed: false
     });
@@ -2034,7 +2038,7 @@ export function generateDailyPlan(
           subjectColor: '#8b5cf6', // Purple for module reviews (different from project cyan)
           type: 'project',
           priorityBucket: 'flexible',
-          typeLabel: '🧠 Преговор',
+          typeLabel: '📦 Проект Review',
           description: `${modules.length} модул${modules.length > 1 ? 'а' : ''} за преговор (${Math.round(avgRetrievability * 100)}% памет)`,
           topics: [],
           estimatedMinutes: modules.length * 15, // ~15 min per module review

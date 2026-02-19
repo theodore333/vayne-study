@@ -37,6 +37,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   );
   const [expandedTask, setExpandedTask] = useState<string | null>(null);
   const [showAddTopicFor, setShowAddTopicFor] = useState<string | null>(null);
+  const [topicSearch, setTopicSearch] = useState('');
   const [showAddTask, setShowAddTask] = useState(false);
 
   // Get topics that are already in the plan
@@ -214,14 +215,31 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
                       {/* Add Topic Button */}
                       {showAddTopicFor === task.id ? (
                         <div className="mt-2 space-y-2">
-                          <div className="text-xs text-slate-500 font-mono">Избери тема за добавяне:</div>
-                          <div className="max-h-32 overflow-y-auto space-y-1">
-                            {availableTopics.length === 0 ? (
-                              <div className="text-xs text-slate-600 font-mono text-center py-2">
-                                Няма налични теми от този предмет
-                              </div>
-                            ) : (
-                              availableTopics.slice(0, 10).map(topic => {
+                          <input
+                            type="text"
+                            placeholder="Търси тема..."
+                            value={topicSearch}
+                            onChange={e => setTopicSearch(e.target.value)}
+                            autoFocus
+                            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
+                          />
+                          <div className="max-h-48 overflow-y-auto space-y-1">
+                            {(() => {
+                              const query = topicSearch.toLowerCase().trim();
+                              const filtered = query
+                                ? availableTopics.filter(t =>
+                                    t.name.toLowerCase().includes(query) ||
+                                    `#${t.number}`.includes(query)
+                                  )
+                                : availableTopics;
+                              if (filtered.length === 0) {
+                                return (
+                                  <div className="text-xs text-slate-600 font-mono text-center py-2">
+                                    {availableTopics.length === 0 ? 'Няма налични теми от този предмет' : 'Няма съвпадения'}
+                                  </div>
+                                );
+                              }
+                              return filtered.map(topic => {
                                 const subject = activeSubjects.find(s => s.id === task.subjectId)!;
                                 return (
                                   <button
@@ -239,11 +257,11 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
                                     <Plus size={12} className="text-slate-500 shrink-0" />
                                   </button>
                                 );
-                              })
-                            )}
+                              });
+                            })()}
                           </div>
                           <button
-                            onClick={() => setShowAddTopicFor(null)}
+                            onClick={() => { setShowAddTopicFor(null); setTopicSearch(''); }}
                             className="text-xs text-slate-500 hover:text-slate-300 font-mono"
                           >
                             Затвори
@@ -251,7 +269,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
                         </div>
                       ) : (
                         <button
-                          onClick={() => setShowAddTopicFor(task.id)}
+                          onClick={() => { setShowAddTopicFor(task.id); setTopicSearch(''); }}
                           className="flex items-center gap-2 text-xs text-slate-500 hover:text-cyan-400 font-mono transition-colors mt-2"
                         >
                           <Plus size={14} />

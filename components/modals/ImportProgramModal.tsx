@@ -126,7 +126,7 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
       setUsageCost(result.usage?.cost || null);
 
       // Auto-select: check all entries except past dates and duplicates
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date(); const today = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
       const autoSelected = new Set<number>();
       parsed.forEach((entry, i) => {
         const isEvent = ENTRY_TYPE_MAP[entry.entryType]?.isEvent;
@@ -207,7 +207,8 @@ export default function ImportProgramModal({ onClose }: { onClose: () => void })
   };
 
   const selectedCount = selectedEntries.size;
-  const today = new Date().toISOString().split('T')[0];
+  const nowLocal = new Date();
+  const today = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,'0')}-${String(nowLocal.getDate()).padStart(2,'0')}`;
 
   // Count topics vs events in selection
   const selectedTopicCount = entries

@@ -124,7 +124,11 @@ export default function SchedulePage() {
   const getDateForDay = (dayIndex: number): string => {
     const d = new Date(selectedWeekMonday);
     d.setDate(d.getDate() + dayIndex);
-    return d.toISOString().split('T')[0];
+    // Use local date (NOT toISOString which converts to UTC and loses a day in UTC+2)
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   // Get academic events for a specific date

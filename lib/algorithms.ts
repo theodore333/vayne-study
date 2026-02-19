@@ -1275,14 +1275,22 @@ function selectTopicsWithRelations(
   allTopics: Topic[],
   maxCount: number,
   inCrunchMode: boolean = false,
-  qbWeaknessMap?: Map<string, { accuracy: number; attempts: number }>
+  qbWeaknessMap?: Map<string, { accuracy: number; attempts: number }>,
+  preferredTopicIds?: Set<string>
 ): Topic[] {
   if (allTopics.length === 0 || maxCount <= 0) return [];
 
   const getQB = (t: Topic) => qbWeaknessMap?.get(t.id) ?? null;
 
-  // Sort by priority, then material as tie-breaker
+  // Sort by priority: preferred topics (from weekly program) come first, then by priority score
   const sorted = [...allTopics].sort((a, b) => {
+    // Preferred topics (matched to upcoming exercise) always come first
+    if (preferredTopicIds && preferredTopicIds.size > 0) {
+      const aPref = preferredTopicIds.has(a.id);
+      const bPref = preferredTopicIds.has(b.id);
+      if (aPref && !bPref) return -1;
+      if (!aPref && bPref) return 1;
+    }
     const priorityDiff = getTopicPriority(a, inCrunchMode, getQB(a)) - getTopicPriority(b, inCrunchMode, getQB(b));
     if (priorityDiff !== 0) return priorityDiff;
     // Tie-break: topics with material first
@@ -1412,6 +1420,35 @@ export function generateDailyPlan(
   // Check if semester has started (for filtering exercises)
   const semStart = academicPeriod?.semesterStart ? new Date(academicPeriod.semesterStart) : null;
   const semesterStarted = !semStart || semStart <= tomorrow;
+
+  // Build preferred topics per subject from upcoming weekly program (schedule weeklyTopics)
+  // Finds the nearest future exercise with weeklyTopics for each subject
+  const preferredTopicsBySubject = new Map<string, Set<string>>();
+  {
+    const todayLocal = getTodayString();
+    for (const cls of schedule) {
+      if (!cls.weeklyTopics) continue;
+      // Find the nearest future date with topics for this class
+      const futureDates = Object.keys(cls.weeklyTopics)
+        .filter(d => d >= todayLocal)
+        .sort();
+      if (futureDates.length === 0) continue;
+      // Take nearest + next week (so we prepare ahead)
+      const datesToUse = futureDates.slice(0, 2);
+      const topicIds = new Set<string>();
+      for (const date of datesToUse) {
+        const entry = cls.weeklyTopics[date];
+        if (entry?.topicIds) {
+          for (const id of entry.topicIds) topicIds.add(id);
+        }
+      }
+      if (topicIds.size > 0) {
+        const existing = preferredTopicsBySubject.get(cls.subjectId) || new Set();
+        for (const id of topicIds) existing.add(id);
+        preferredTopicsBySubject.set(cls.subjectId, existing);
+      }
+    }
+  }
 
   // 1. CRITICAL: Exercises tomorrow - take topics from that subject's workload
   const tomorrowExercises = schedule.filter(c => {
@@ -1816,7 +1853,8 @@ export function generateDailyPlan(
     const topicsToTake = Math.min(sw.topics, grayTopics.length);
     if (topicsToTake <= 0) continue;
 
-    const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode, qbWeaknessMap);
+    const preferred = preferredTopicsBySubject.get(subject.id);
+    const selectedTopics = selectTopicsWithRelations(grayTopics, topicsToTake, inCrunchMode, qbWeaknessMap, preferred);
 
     if (selectedTopics.length > 0) {
       const grayCount = subject.topics.filter(t => t.status === 'gray').length;
@@ -1863,7 +1901,8 @@ export function generateDailyPlan(
     );
     if (grayTopics.length === 0) continue;
 
-    const selectedTopics = selectTopicsWithRelations(grayTopics, 1, inCrunchMode, qbWeaknessMap);
+    const preferredFuture = preferredTopicsBySubject.get(subject.id);
+    const selectedTopics = selectTopicsWithRelations(grayTopics, 1, inCrunchMode, qbWeaknessMap, preferredFuture);
 
     if (selectedTopics.length > 0) {
       const totalGray = subject.topics.filter(t => t.status === 'gray').length;

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText, Copy } from 'lucide-react';
+import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText, Copy, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/lib/context';
 import { STATUS_CONFIG } from '@/lib/constants';
@@ -1379,6 +1379,54 @@ function QuizContent() {
     setIsGeneratingAnkiMaterial(false);
   };
 
+  // Generate MORE Anki cards (appends to existing)
+  const generateMoreAnkiCards = async () => {
+    if (isGeneratingAnkiMaterial || !ankiMaterialCards) return;
+
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) { setAnkiMaterialError('API_KEY_MISSING'); return; }
+    if (!topic?.material?.trim()) return;
+
+    setIsGeneratingAnkiMaterial(true);
+    setAnkiMaterialError(null);
+    setAnkiSendResult(null);
+
+    try {
+      const response = await fetchWithTimeout('/api/anki-cards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey,
+          material: topic.material,
+          topicName: topic.name,
+          mode: 'from_material',
+          existingCards: ankiMaterialCards
+        }),
+        timeout: 300000
+      });
+
+      const result = await response.json();
+      if (result.error) {
+        setAnkiMaterialError(result.error);
+      } else if (result.cards && result.cards.length > 0) {
+        const merged = [...ankiMaterialCards, ...result.cards];
+        setAnkiMaterialCards(merged);
+        if (result.cost) incrementApiCalls(result.cost);
+        if (subjectId && topicId) {
+          updateTopic(subjectId, topicId, { ankiCards: merged, ankiCardsSourceLength: topic.material?.length });
+        }
+        setAnkiSendResult(`+${result.cards.length} нови карти (общо ${merged.length})`);
+      } else {
+        setAnkiSendResult('Няма допълнителни карти — материалът е покрит.');
+      }
+    } catch (err) {
+      if (!isAbortOrTimeoutError(err)) {
+        setAnkiMaterialError(getFetchErrorMessage(err));
+      }
+    }
+    setIsGeneratingAnkiMaterial(false);
+  };
+
   // Send generated Anki cards to AnkiConnect
   const sendCardsToAnki = async () => {
     if (!ankiMaterialCards || ankiMaterialCards.length === 0) return;
@@ -2047,6 +2095,14 @@ function QuizContent() {
                     <Sparkles size={16} /> Изпрати в Anki
                   </button>
                 )}
+
+                <button
+                  onClick={generateMoreAnkiCards}
+                  disabled={isGeneratingAnkiMaterial}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-cyan-600/20 border border-cyan-600/30 text-cyan-400 hover:bg-cyan-600/30 rounded-lg font-mono text-sm transition-colors disabled:opacity-50"
+                >
+                  <Plus size={16} /> Генерирай още
+                </button>
 
                 <button
                   onClick={() => generateAnkiFromMaterial(true)}

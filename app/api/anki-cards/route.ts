@@ -78,7 +78,7 @@ Minor details, secondary examples, historical notes
 Facts stated only once in passing
 Anything that is context/explanation rather than a standalone fact
 
-TARGET: 20-35 cards per topic. If you find yourself exceeding 35, you are including Tier 3 material — cut it.
+COVERAGE: Cover ALL Tier 1 and Tier 2 facts from the material. Do NOT skip paragraphs or sections. Every key definition, classification, and clinically critical value MUST have a card. Create as many cards as needed — thoroughness over brevity.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 INTERLEAVING STRATEGY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -165,8 +165,16 @@ export async function POST(request: Request) {
     }
 
     systemPrompt = materialSystemPrompt;
-    userPrompt = `Тема: ${topicName || 'General'}\n\nМатериал:\n\n${stripped}\n\nГенерирай Bloom Level 1 (Запомняне) cloze карти. САМО JSON array.`;
-    maxTokens = 8000;
+
+    // Check if this is a "generate more" request with existing cards
+    const existingCards: string[] = body.existingCards || [];
+    if (existingCards.length > 0) {
+      const existingList = existingCards.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n');
+      userPrompt = `Тема: ${topicName || 'General'}\n\nМатериал:\n\n${stripped}\n\nВЕЧЕ ГЕНЕРИРАНИ КАРТИ (${existingCards.length} бр.):\n${existingList}\n\nГенерирай ДОПЪЛНИТЕЛНИ Bloom Level 1 cloze карти за частите от материала, които НЕ са покрити от горните карти. НЕ повтаряй същите факти. САМО JSON array с НОВИТЕ карти.`;
+    } else {
+      userPrompt = `Тема: ${topicName || 'General'}\n\nМатериал:\n\n${stripped}\n\nГенерирай Bloom Level 1 (Запомняне) cloze карти. Покрий ЦЕЛИЯ материал. САМО JSON array.`;
+    }
+    maxTokens = 16000;
   } else {
     // ── Generate cards from wrong answers (existing behavior) ──
     const { wrongAnswers } = body;

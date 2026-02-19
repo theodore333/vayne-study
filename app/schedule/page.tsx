@@ -227,46 +227,28 @@ export default function SchedulePage() {
                 )}
               </h2>
             </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1 font-mono">Семестър</label>
-                <div className="flex gap-1">
-                  <input type="date" value={ap.semesterStart || ''}
-                    onChange={e => updateAcademicPeriod({ semesterStart: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                  <input type="date" value={ap.semesterEnd || ''}
-                    onChange={e => updateAcademicPeriod({ semesterEnd: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
+            <div className="space-y-3">
+              {[
+                { label: 'Семестър', startKey: 'semesterStart' as const, endKey: 'semesterEnd' as const, startVal: ap.semesterStart, endVal: ap.semesterEnd },
+                { label: 'Цикъл', startKey: 'cycleStart' as const, endKey: 'cycleEnd' as const, startVal: ap.cycleStart, endVal: ap.cycleEnd },
+                { label: 'Сесия', startKey: 'sessionStart' as const, endKey: 'sessionEnd' as const, startVal: ap.sessionStart, endVal: ap.sessionEnd },
+              ].map(period => (
+                <div key={period.label} className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500 font-mono w-20 shrink-0">{period.label}</span>
+                  <div className="flex items-center gap-2 flex-1">
+                    <span className="text-[10px] text-slate-600 font-mono">от</span>
+                    <input type="date" value={period.startVal || ''}
+                      onChange={e => updateAcademicPeriod({ [period.startKey]: e.target.value || null })}
+                      className="flex-1 max-w-[160px] px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                    />
+                    <span className="text-[10px] text-slate-600 font-mono">до</span>
+                    <input type="date" value={period.endVal || ''}
+                      onChange={e => updateAcademicPeriod({ [period.endKey]: e.target.value || null })}
+                      className="flex-1 max-w-[160px] px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1 font-mono">Цикъл</label>
-                <div className="flex gap-1">
-                  <input type="date" value={ap.cycleStart || ''}
-                    onChange={e => updateAcademicPeriod({ cycleStart: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                  <input type="date" value={ap.cycleEnd || ''}
-                    onChange={e => updateAcademicPeriod({ cycleEnd: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1 font-mono">Сесия</label>
-                <div className="flex gap-1">
-                  <input type="date" value={ap.sessionStart || ''}
-                    onChange={e => updateAcademicPeriod({ sessionStart: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                  <input type="date" value={ap.sessionEnd || ''}
-                    onChange={e => updateAcademicPeriod({ sessionEnd: e.target.value || null })}
-                    className="flex-1 px-2 py-1.5 bg-slate-800/50 border border-slate-700 rounded text-slate-200 font-mono text-xs focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-              </div>
+              ))}
             </div>
             {!ap.semesterStart && !ap.cycleStart && !ap.sessionStart && (
               <p className="text-xs text-slate-600 font-mono mt-2">Задай дати за да знае AI кога какво почва</p>
@@ -314,10 +296,10 @@ export default function SchedulePage() {
         {/* Day Headers */}
         <div className={`grid ${colsClass} border-b border-[#1e293b]`}>
           {visibleDays.map(i => {
-            const classCount = getClassesForDay(i).length;
             const dayDate = getDateForDay(i);
-            const dayEvents = getEventsForDay(i);
             const isActive = isInAcademicPeriod(dayDate);
+            const classCount = isActive ? getClassesForDay(i).length : 0;
+            const dayEvents = getEventsForDay(i);
             const isCurrentDay = weekOffset === 0 && i === today;
             return (
               <div
@@ -355,11 +337,12 @@ export default function SchedulePage() {
         {/* Schedule Grid */}
         <div className={`grid ${colsClass} min-h-[400px]`}>
           {visibleDays.map(dayIndex => {
-            const classes = getClassesForDay(dayIndex);
-            const dayEvents = getEventsForDay(dayIndex);
             const dayDate = getDateForDay(dayIndex);
             const isCurrentDay = weekOffset === 0 && dayIndex === today;
             const isActive = isInAcademicPeriod(dayDate);
+            // Only show recurring classes during the academic period
+            const classes = isActive ? getClassesForDay(dayIndex) : [];
+            const dayEvents = getEventsForDay(dayIndex);
 
             return (
               <div
@@ -401,13 +384,19 @@ export default function SchedulePage() {
                 })}
 
                 {classes.length === 0 && dayEvents.length === 0 ? (
-                  <button
-                    onClick={() => { setSelectedDay(dayIndex); setShowAddClass(true); }}
-                    className="w-full h-full min-h-[60px] flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-800 hover:border-slate-600 text-slate-700 hover:text-slate-400 transition-all group"
-                  >
-                    <Plus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                    <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity">Добави</span>
-                  </button>
+                  !isActive ? (
+                    <div className="w-full min-h-[60px] flex items-center justify-center">
+                      <span className="text-[10px] font-mono text-slate-700">—</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setSelectedDay(dayIndex); setShowAddClass(true); }}
+                      className="w-full h-full min-h-[60px] flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-800 hover:border-slate-600 text-slate-700 hover:text-slate-400 transition-all group"
+                    >
+                      <Plus size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <span className="text-[10px] font-mono opacity-0 group-hover:opacity-100 transition-opacity">Добави</span>
+                    </button>
+                  )
                 ) : (
                   classes.map(cls => {
                     const subject = getSubjectById(cls.subjectId);

@@ -1119,6 +1119,16 @@ export default function TodayPage() {
                               </div>
                             );
                           })}
+                          {/* Quick Quiz button for FSRS review tasks */}
+                          {task.typeLabel.includes('FSRS') && task.topics.length >= 2 && (
+                            <Link
+                              href={`/quiz?subject=${task.subjectId}&topics=${task.topics.map(t => t.id).join(',')}&mode=mix`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center justify-center gap-2 mt-2 px-3 py-2 bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 rounded-lg text-purple-300 hover:text-purple-200 text-xs font-mono transition-all"
+                            >
+                              🧪 Mix Quiz ({task.topics.length} теми)
+                            </Link>
+                          )}
                         </div>
                       )}
                       {/* Render modules for project tasks */}
@@ -1345,58 +1355,7 @@ export default function TodayPage() {
         </div>
       )}
 
-      {/* FSRS Scheduled Reviews */}
-      {fsrsReviews.length > 0 && (
-        <div className="bg-gradient-to-r from-purple-900/30 to-pink-900/30 border border-purple-500/30 rounded-xl p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Brain size={20} className="text-purple-400" />
-              <div>
-                <h3 className="text-sm font-semibold text-slate-100 font-mono">FSRS Преговор</h3>
-                <p className="text-xs text-slate-400 font-mono">{fsrsReviews.length} теми с ниско запомняне</p>
-              </div>
-            </div>
-            {fsrsReviews.length > 1 && (
-              <Link
-                href={`/quiz?multi=true&topics=${fsrsReviews.slice(0, 5).map(r => `${r.subject.id}:${r.topic.id}`).join(',')}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
-              >
-                <Brain size={12} />
-                Mix Quiz ({Math.min(5, fsrsReviews.length)})
-              </Link>
-            )}
-          </div>
-          <div className="space-y-2 max-h-[200px] overflow-y-auto">
-            {fsrsReviews.slice(0, 8).map(({ topic, subject, retrievability }) => (
-              <div key={topic.id} className="flex items-center gap-3 p-2 bg-slate-800/30 rounded-lg">
-                <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: subject.color }} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-slate-200 truncate">{topic.name}</div>
-                  <div className="text-[10px] text-slate-500">{subject.name}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`text-sm font-mono font-bold ${
-                    retrievability < 0.5 ? 'text-red-400' : retrievability < 0.7 ? 'text-orange-400' : 'text-yellow-400'
-                  }`}>
-                    {Math.round(retrievability * 100)}%
-                  </div>
-                  <Link
-                    href={`/quiz?subject=${subject.id}&topic=${topic.id}`}
-                    className="px-2 py-1 text-[10px] font-mono bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 rounded transition-colors"
-                  >
-                    Quiz
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-          {fsrsReviews.length > 8 && (
-            <div className="mt-2 text-center">
-              <span className="text-xs text-slate-500 font-mono">+{fsrsReviews.length - 8} още теми</span>
-            </div>
-          )}
-        </div>
-      )}
+      {/* FSRS reviews are shown inline in the daily plan tasks (tier 4) — no separate widget */}
 
       {/* Syllabus Progress Widget - Collapsible */}
       {syllabusProgress.bySubject.length > 0 && (

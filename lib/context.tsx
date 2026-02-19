@@ -307,6 +307,7 @@ interface AppContextType {
 
   // Academic Events (Колоквиуми, Контролни)
   addAcademicEvent: (event: Omit<AcademicEvent, 'id' | 'createdAt'>) => void;
+  addAcademicEventsBatch: (events: Omit<AcademicEvent, 'id' | 'createdAt'>[]) => void;
   updateAcademicEvent: (id: string, updates: Partial<AcademicEvent>) => void;
   deleteAcademicEvent: (id: string) => void;
 
@@ -1769,6 +1770,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }));
   }, [updateData]);
 
+  const addAcademicEventsBatch = useCallback((events: Omit<AcademicEvent, 'id' | 'createdAt'>[]) => {
+    if (events.length === 0) return;
+    updateData(prev => ({
+      ...prev,
+      academicEvents: [
+        ...prev.academicEvents,
+        ...events.map(event => ({
+          ...event,
+          id: generateId(),
+          createdAt: new Date().toISOString()
+        }))
+      ]
+    }));
+  }, [updateData]);
+
   const updateAcademicEvent = useCallback((id: string, updates: Partial<AcademicEvent>) => {
     updateData(prev => ({
       ...prev,
@@ -1966,6 +1982,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateModuleHighlights,
     updateCareerProfile,
     addAcademicEvent,
+    addAcademicEventsBatch,
     updateAcademicEvent,
     deleteAcademicEvent,
     setLastOpenedTopic,

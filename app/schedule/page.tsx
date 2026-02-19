@@ -1,18 +1,21 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target, MapPin } from 'lucide-react';
+import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target, MapPin, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DAYS, DAYS_SHORT, CLASS_TYPES, ACADEMIC_EVENT_CONFIG } from '@/lib/constants';
 import AddClassModal from '@/components/modals/AddClassModal';
 import AddAcademicEventModal from '@/components/modals/AddAcademicEventModal';
+import ImportProgramModal from '@/components/modals/ImportProgramModal';
 
 export default function SchedulePage() {
   const { data, isLoading, deleteClass, deleteAcademicEvent, updateAcademicPeriod } = useApp();
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [showImportProgram, setShowImportProgram] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
   const [editingClass, setEditingClass] = useState<typeof data.schedule[0] | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
 
   // Determine which days to show (Mon-Fri, or include weekends if they have classes)
   const visibleDays = useMemo(() => {
@@ -107,6 +110,53 @@ export default function SchedulePage() {
 
   const today = (new Date().getDay() + 6) % 7;
 
+  // Calculate the Monday of the selected week
+  const selectedWeekMonday = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const dayOfWeek = (now.getDay() + 6) % 7; // 0=Mon
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + weekOffset * 7);
+    return monday;
+  }, [weekOffset]);
+
+  // Get the date for a specific day index (0=Mon..6=Sun) in the selected week
+  const getDateForDay = (dayIndex: number): string => {
+    const d = new Date(selectedWeekMonday);
+    d.setDate(d.getDate() + dayIndex);
+    return d.toISOString().split('T')[0];
+  };
+
+  // Get academic events for a specific date
+  const eventsForWeek = useMemo(() => {
+    const weekDates = new Set<string>();
+    for (let i = 0; i < 7; i++) {
+      weekDates.add(getDateForDay(i));
+    }
+    return data.academicEvents.filter(e => weekDates.has(e.date));
+  }, [data.academicEvents, selectedWeekMonday]);
+
+  const getEventsForDay = (dayIndex: number) => {
+    const dateStr = getDateForDay(dayIndex);
+    return eventsForWeek.filter(e => e.date === dateStr);
+  };
+
+  // Week label
+  const weekLabel = useMemo(() => {
+    const start = new Date(selectedWeekMonday);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const fmt = (d: Date) => d.toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' });
+    return `${fmt(start)} — ${fmt(end)}`;
+  }, [selectedWeekMonday]);
+
+  // Check if a date falls in academic period
+  const isInAcademicPeriod = (dateStr: string): boolean => {
+    const ap = data.academicPeriod;
+    if (!ap.semesterStart || !ap.semesterEnd) return true; // No period set = assume active
+    return dateStr >= ap.semesterStart && dateStr <= ap.semesterEnd;
+  };
+
   const getClassesForDay = (day: number) => {
     return data.schedule
       .filter(c => c.day === day)
@@ -126,6 +176,12 @@ export default function SchedulePage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowImportProgram(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors font-mono text-sm"
+          >
+            <FileText size={16} /> Програма
+          </button>
           <button
             onClick={() => setShowAddEvent(true)}
             className="flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors font-mono text-sm"
@@ -221,23 +277,67 @@ export default function SchedulePage() {
 
       {/* Week Grid */}
       <div className="bg-[rgba(20,20,35,0.8)] border border-[#1e293b] rounded-xl overflow-hidden">
+        {/* Week Navigation */}
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-[#1e293b] bg-slate-900/30">
+          <button
+            onClick={() => setWeekOffset(w => w - 1)}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <div className="text-center">
+            <button
+              onClick={() => setWeekOffset(0)}
+              className="text-sm font-mono text-slate-300 hover:text-cyan-400 transition-colors"
+            >
+              {weekLabel}
+            </button>
+            {weekOffset !== 0 && (
+              <div className="text-[10px] font-mono text-slate-600 mt-0.5">
+                {weekOffset > 0 ? `+${weekOffset}` : weekOffset} {Math.abs(weekOffset) === 1 ? 'седмица' : 'седмици'}
+              </div>
+            )}
+            {eventsForWeek.length > 0 && (
+              <div className="text-[10px] font-mono text-purple-400 mt-0.5">
+                {eventsForWeek.length} {eventsForWeek.length === 1 ? 'събитие' : 'събития'} тази седмица
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setWeekOffset(w => w + 1)}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-500 hover:text-slate-300 transition-colors"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+
         {/* Day Headers */}
         <div className={`grid ${colsClass} border-b border-[#1e293b]`}>
           {visibleDays.map(i => {
             const classCount = getClassesForDay(i).length;
+            const dayDate = getDateForDay(i);
+            const dayEvents = getEventsForDay(i);
+            const isActive = isInAcademicPeriod(dayDate);
+            const isCurrentDay = weekOffset === 0 && i === today;
             return (
               <div
                 key={i}
-                className={"p-3 border-r last:border-r-0 border-[#1e293b] " + (i === today ? "bg-blue-500/10" : "")}
+                className={"p-3 border-r last:border-r-0 border-[#1e293b] " + (isCurrentDay ? "bg-blue-500/10" : !isActive ? "bg-slate-900/50" : "")}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className={"text-sm font-semibold font-mono " + (i === today ? "text-blue-400" : "text-slate-400")}>
+                    <div className={"text-sm font-semibold font-mono " + (isCurrentDay ? "text-blue-400" : !isActive ? "text-slate-700" : "text-slate-400")}>
                       {DAYS_SHORT[i]}
-                      {i === today && <span className="ml-1.5 text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded">ДНЕС</span>}
+                      <span className="ml-1.5 text-[10px] text-slate-600 font-normal">
+                        {new Date(dayDate + 'T00:00:00').getDate()}
+                      </span>
+                      {isCurrentDay && <span className="ml-1.5 text-[10px] bg-blue-500/20 px-1.5 py-0.5 rounded">ДНЕС</span>}
                     </div>
                     {classCount > 0 && (
                       <div className="text-[10px] text-slate-600 font-mono mt-0.5">{classCount} зан.</div>
+                    )}
+                    {dayEvents.length > 0 && (
+                      <div className="text-[10px] text-purple-400 font-mono mt-0.5">{dayEvents.length} съб.</div>
                     )}
                   </div>
                   <button
@@ -256,14 +356,51 @@ export default function SchedulePage() {
         <div className={`grid ${colsClass} min-h-[400px]`}>
           {visibleDays.map(dayIndex => {
             const classes = getClassesForDay(dayIndex);
-            const isToday = dayIndex === today;
+            const dayEvents = getEventsForDay(dayIndex);
+            const dayDate = getDateForDay(dayIndex);
+            const isCurrentDay = weekOffset === 0 && dayIndex === today;
+            const isActive = isInAcademicPeriod(dayDate);
 
             return (
               <div
                 key={dayIndex}
-                className={"p-2.5 border-r last:border-r-0 border-[#1e293b] space-y-2 " + (isToday ? "bg-blue-500/5" : "")}
+                className={"p-2.5 border-r last:border-r-0 border-[#1e293b] space-y-2 " + (isCurrentDay ? "bg-blue-500/5" : !isActive ? "bg-slate-900/30" : "")}
               >
-                {classes.length === 0 ? (
+                {/* Academic events for this day */}
+                {dayEvents.map(ev => {
+                  const config = ACADEMIC_EVENT_CONFIG[ev.type];
+                  const subject = ev.subjectId ? data.subjects.find(s => s.id === ev.subjectId) : null;
+                  return (
+                    <div
+                      key={ev.id}
+                      className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 relative group"
+                    >
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-all">
+                        <button
+                          onClick={() => deleteAcademicEvent(ev.id)}
+                          className="p-1 rounded hover:bg-red-500/20"
+                        >
+                          <Trash2 size={10} className="text-red-400" />
+                        </button>
+                      </div>
+                      <div className="text-xs font-mono text-purple-300">
+                        {config.icon} {ev.name || config.label}
+                      </div>
+                      {subject && (
+                        <div className="text-[10px] font-mono mt-0.5 truncate" style={{ color: subject.color }}>
+                          {subject.name}
+                        </div>
+                      )}
+                      {ev.description && (
+                        <div className="text-[10px] text-slate-400 font-mono mt-0.5 truncate">
+                          {ev.description}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {classes.length === 0 && dayEvents.length === 0 ? (
                   <button
                     onClick={() => { setSelectedDay(dayIndex); setShowAddClass(true); }}
                     className="w-full h-full min-h-[60px] flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-slate-800 hover:border-slate-600 text-slate-700 hover:text-slate-400 transition-all group"
@@ -662,6 +799,7 @@ export default function SchedulePage() {
       {showAddClass && <AddClassModal onClose={() => setShowAddClass(false)} defaultDay={selectedDay} />}
       {editingClass && <AddClassModal onClose={() => setEditingClass(null)} editClass={editingClass} />}
       {showAddEvent && <AddAcademicEventModal onClose={() => setShowAddEvent(false)} />}
+      {showImportProgram && <ImportProgramModal onClose={() => setShowImportProgram(false)} />}
     </div>
   );
 }

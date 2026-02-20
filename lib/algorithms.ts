@@ -1942,11 +1942,15 @@ export function generateDailyPlan(
   }
 
   // 11b. FUTURE SUBJECTS — FSRS maintenance reviews (low priority, max 3 topics/subject)
-  // These are subjects with exams far away. We still do minimal FSRS to avoid full decay,
-  // but at lower priority and capped so they don't overwhelm the plan.
+  // Only for hard/medium future subjects. Easy future subjects wait until they become active.
   {
+    // Build set of easy future subject IDs to exclude
+    const easyFutureIds = new Set(
+      sessions.future.filter(s => s.examDifficulty === 'easy').map(s => s.subject.id)
+    );
+
     const futureFsrsReviews = getTopicsNeedingFSRSReview(subjects, Infinity, studyGoals)
-      .filter(item => !usedTopicIds.has(item.topic.id) && futureSubjectIds.has(item.subject.id));
+      .filter(item => !usedTopicIds.has(item.topic.id) && futureSubjectIds.has(item.subject.id) && !easyFutureIds.has(item.subject.id));
 
     // Group by subject, cap at 3 topics per subject
     const futureFsrsBySubject = new Map<string, typeof futureFsrsReviews>();

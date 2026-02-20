@@ -354,11 +354,20 @@ function AddTaskPanel({
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [taskDescription, setTaskDescription] = useState('');
+  const [newTaskSearch, setNewTaskSearch] = useState('');
 
   const availableTopics = useMemo(() => {
     if (!selectedSubject) return [];
     return selectedSubject.topics.filter(t => !topicsInPlan.has(t.id));
   }, [selectedSubject, topicsInPlan]);
+
+  const filteredTopics = useMemo(() => {
+    const query = newTaskSearch.toLowerCase().trim();
+    if (!query) return availableTopics;
+    return availableTopics.filter(t =>
+      t.name.toLowerCase().includes(query) || String(t.number).includes(query)
+    );
+  }, [availableTopics, newTaskSearch]);
 
   const handleToggleTopic = (topicId: string) => {
     setSelectedTopics(prev => {
@@ -389,7 +398,7 @@ function AddTaskPanel({
           {subjects.map(subject => (
             <button
               key={subject.id}
-              onClick={() => { setSelectedSubject(subject); setSelectedTopics(new Set()); }}
+              onClick={() => { setSelectedSubject(subject); setSelectedTopics(new Set()); setNewTaskSearch(''); }}
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
                 selectedSubject?.id === subject.id
                   ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300'
@@ -409,13 +418,27 @@ function AddTaskPanel({
           <label className="text-xs text-slate-500 font-mono block mb-2">
             Избери теми ({selectedTopics.size} избрани):
           </label>
-          <div className="max-h-40 overflow-y-auto space-y-1">
+          {availableTopics.length > 5 && (
+            <input
+              type="text"
+              placeholder="Търси тема..."
+              value={newTaskSearch}
+              onChange={e => setNewTaskSearch(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-2 mb-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
+            />
+          )}
+          <div className="max-h-48 overflow-y-auto space-y-1">
             {availableTopics.length === 0 ? (
               <div className="text-xs text-slate-600 font-mono text-center py-2">
                 Всички теми от този предмет са вече в плана
               </div>
+            ) : filteredTopics.length === 0 ? (
+              <div className="text-xs text-slate-600 font-mono text-center py-2">
+                Няма теми за &ldquo;{newTaskSearch}&rdquo;
+              </div>
             ) : (
-              availableTopics.map(topic => (
+              filteredTopics.map(topic => (
                 <button
                   key={topic.id}
                   onClick={() => handleToggleTopic(topic.id)}

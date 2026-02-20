@@ -1406,6 +1406,14 @@ export function generateDailyPlan(
   // Session classification: active (nearest exam session), future (later exams), no-exam
   const sessions = classifySubjectSessions(subjects);
 
+  // Build set of "current" subject IDs (active + noExam) for high-priority tiers
+  // Future subjects only get low-priority trickle (tier 11) and capped reviews (tier 11b)
+  const currentSubjectIds = new Set<string>([
+    ...sessions.active.map(s => s.subject.id),
+    ...sessions.noExam.map(s => s.subject.id)
+  ]);
+  const futureSubjectIds = new Set<string>(sessions.future.map(s => s.subject.id));
+
   // Get per-subject workload from calculateDailyTopics (for active session new material)
   const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals);
 
@@ -1585,13 +1593,15 @@ export function generateDailyPlan(
     }
   }
 
-  // 4. ALL FSRS REVIEWS — Spaced repetition, ALL subjects, no daily cap
-  // Exam-aware: includes topics whose next review would be after the exam
+  // 4. FSRS REVIEWS — Spaced repetition for ACTIVE + NO-EXAM subjects, no daily cap
+  // Future subjects get their own lower-priority tier (11b)
   const vacationDecayMultiplier = studyGoals?.vacationMode === true ? 1.5 : 1.0;
 
   {
     const fsrsReviews = getTopicsNeedingFSRSReview(subjects, Infinity, studyGoals);
-    const filteredFsrsReviews = fsrsReviews.filter(item => !usedTopicIds.has(item.topic.id));
+    const filteredFsrsReviews = fsrsReviews.filter(item =>
+      !usedTopicIds.has(item.topic.id) && currentSubjectIds.has(item.subject.id)
+    );
 
     // Group by subject
     const fsrsBySubject = new Map<string, typeof fsrsReviews>();
@@ -1625,8 +1635,9 @@ export function generateDailyPlan(
     }
   }
 
-  // 5. ALL LEGACY DECAY REVIEWS — Topics without FSRS state past warning threshold
+  // 5. LEGACY DECAY REVIEWS — Topics without FSRS state past warning threshold (active + noExam only)
   for (const subject of subjects) {
+    if (!currentSubjectIds.has(subject.id)) continue; // Skip future subjects
     const decayingTopics = filterUsedTopics(subject.topics.filter(t => {
       if (t.status === 'gray') return false;
       if (t.fsrs) return false; // Skip FSRS topics, already handled
@@ -1659,8 +1670,9 @@ export function generateDailyPlan(
     }
   }
 
-  // 6. ALL ORANGE REINFORCEMENT — Topics known but weak (grade ~3-3.5), all subjects
+  // 6. ORANGE REINFORCEMENT — Topics known but weak (grade ~3-3.5), active + noExam only
   for (const subject of subjects) {
+    if (!currentSubjectIds.has(subject.id)) continue; // Skip future subjects
     const orangeTopics = filterUsedTopics(subject.topics.filter(t => t.status === 'orange'), usedTopicIds);
     if (orangeTopics.length === 0) continue;
 
@@ -1926,6 +1938,49 @@ export function generateDailyPlan(
         subjectColor: subject.color,
         topics: selectedTopics
       });
+    }
+  }
+
+  // 11b. FUTURE SUBJECTS — FSRS maintenance reviews (low priority, max 3 topics/subject)
+  // These are subjects with exams far away. We still do minimal FSRS to avoid full decay,
+  // but at lower priority and capped so they don't overwhelm the plan.
+  {
+    const futureFsrsReviews = getTopicsNeedingFSRSReview(subjects, Infinity, studyGoals)
+      .filter(item => !usedTopicIds.has(item.topic.id) && futureSubjectIds.has(item.subject.id));
+
+    // Group by subject, cap at 3 topics per subject
+    const futureFsrsBySubject = new Map<string, typeof futureFsrsReviews>();
+    for (const item of futureFsrsReviews) {
+      const existing = futureFsrsBySubject.get(item.subject.id) || [];
+      existing.push(item);
+      futureFsrsBySubject.set(item.subject.id, existing);
+    }
+
+    for (const [subjectId, items] of futureFsrsBySubject) {
+      const subject = subjects.find(s => s.id === subjectId);
+      if (!subject) continue;
+
+      // Cap at 3 most urgent (lowest retrievability)
+      const capped = items.sort((a, b) => a.retrievability - b.retrievability).slice(0, 3);
+      const selectedTopics = capped.map(i => i.topic);
+      const avgR = Math.round(capped.reduce((s, i) => s + i.retrievability, 0) / capped.length * 100);
+      const classification = sessions.future.find(s => s.subject.id === subjectId);
+      const daysLabel = classification ? ` (изпит след ${classification.daysUntilExam}д)` : '';
+
+      tasks.push({
+        id: generateId(),
+        subjectId: subject.id,
+        subjectName: subject.name,
+        subjectColor: subject.color,
+        type: 'normal',
+        priorityBucket: 'can-postpone',
+        typeLabel: '🧠 Бъдещ FSRS',
+        description: `Поддръжка${daysLabel} — ${avgR}% памет, ${selectedTopics.length} ${selectedTopics.length === 1 ? 'тема' : 'теми'}`,
+        topics: selectedTopics,
+        estimatedMinutes: selectedTopics.length * 15, // Shorter sessions for maintenance
+        completed: false
+      });
+      markTopicsUsed(selectedTopics, usedTopicIds);
     }
   }
 

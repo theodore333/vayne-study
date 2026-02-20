@@ -62,7 +62,11 @@ export function useQuizGeneration() {
           try {
             result = await response.json() as Record<string, unknown>;
           } catch {
-            lastError = `Сървърна грешка (HTTP ${response.status}). Провери конзолата.`;
+            if (response.status === 503 || response.status === 529) {
+              lastError = 'Claude е претоварен — изчакай 1-2 минути и пробвай пак.';
+            } else {
+              lastError = `Сървърна грешка (HTTP ${response.status}). Изчакай и пробвай пак.`;
+            }
             if (attempt === 0) options?.onRetry?.();
             continue;
           }

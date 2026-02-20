@@ -225,8 +225,8 @@ export async function POST(request: Request) {
     if (apiStatus === 429 || message.includes('rate_limit') || message.includes('Rate limit')) {
       return NextResponse.json({ error: 'API rate limit — изчакай 1-2 минути и пробвай пак.' }, { status: 429 });
     }
-    if (apiStatus === 529 || message.includes('overloaded')) {
-      return NextResponse.json({ error: 'Claude е претоварен — пробвай пак след минута.' }, { status: 529 });
+    if (apiStatus === 529 || apiStatus === 503 || message.includes('overloaded') || message.includes('Service Unavailable')) {
+      return NextResponse.json({ error: 'Claude е претоварен — изчакай 1-2 минути и пробвай пак.' }, { status: 529 });
     }
     if (apiStatus === 401 || message.includes('invalid_api_key') || message.includes('authentication')) {
       return NextResponse.json({ error: 'Невалиден API ключ' }, { status: 401 });

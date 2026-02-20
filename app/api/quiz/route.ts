@@ -1488,8 +1488,27 @@ ${studyTechniques && studyTechniques.length > 0 ? `
   // Fix common JSON issues
   responseText = responseText
     .replace(/,\s*}/g, '}')  // Remove trailing commas before }
-    .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
-    .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === '\n' || ch === '\t' || ch === '\r' ? ch : ' '); // Remove control chars but keep newlines/tabs
+    .replace(/,\s*]/g, ']');  // Remove trailing commas before ]
+  // Fix unescaped newlines/control chars inside JSON string values (common AI mistake)
+  {
+    let fixed = '';
+    let inStr = false;
+    let esc = false;
+    for (let i = 0; i < responseText.length; i++) {
+      const ch = responseText[i];
+      if (esc) { fixed += ch; esc = false; continue; }
+      if (ch === '\\' && inStr) { fixed += ch; esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; fixed += ch; continue; }
+      if (inStr) {
+        if (ch === '\n') { fixed += '\\n'; continue; }
+        if (ch === '\r') continue;
+        if (ch === '\t') { fixed += '\\t'; continue; }
+        if (ch.charCodeAt(0) < 32) { fixed += ' '; continue; }
+      }
+      fixed += ch;
+    }
+    responseText = fixed;
+  }
 
   // Handle truncated JSON (if response was cut off)
   if (response.stop_reason === 'max_tokens') {

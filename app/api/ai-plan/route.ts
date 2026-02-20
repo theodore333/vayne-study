@@ -119,6 +119,34 @@ export async function POST(request: NextRequest) {
       return true;
     });
 
+    // Classify subjects into active/future/noExam sessions
+    // Active = exams within 30 days of earliest exam, Future = later, NoExam = no date
+    const subjectsWithExam: { subject: RequestSubject; days: number }[] = [];
+    const noExamSubjects: RequestSubject[] = [];
+    for (const s of subjects) {
+      if (s.examDate) {
+        const days = Math.ceil((new Date(s.examDate).getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        if (days > 0) {
+          subjectsWithExam.push({ subject: s, days });
+        } else {
+          noExamSubjects.push(s); // Past exam = treat as no-exam
+        }
+      } else {
+        noExamSubjects.push(s);
+      }
+    }
+    subjectsWithExam.sort((a, b) => a.days - b.days);
+    const earliestExamDays = subjectsWithExam.length > 0 ? subjectsWithExam[0].days : Infinity;
+    const activeWindowEnd = earliestExamDays + 30;
+
+    const sessionCategoryMap = new Map<string, 'active' | 'future' | 'no-exam'>();
+    for (const { subject, days } of subjectsWithExam) {
+      sessionCategoryMap.set(subject.id, days <= activeWindowEnd ? 'active' : 'future');
+    }
+    for (const s of noExamSubjects) {
+      sessionCategoryMap.set(s.id, 'no-exam');
+    }
+
     // Build detailed subject data for the prompt
     const subjectData = subjects.map(s => {
       const totalTopics = s.topics.length;
@@ -184,6 +212,7 @@ export async function POST(request: NextRequest) {
         examDate: s.examDate,
         examFormat: s.examFormat,
         examDifficulty: s.examDifficulty ?? 'medium',
+        sessionCategory: sessionCategoryMap.get(s.id) || 'no-exam',
         daysUntilExam,
         totalTopics,
         greenTopics,
@@ -221,8 +250,11 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // Check if any subjects need setup
-    const subjectsNeedingSetup = subjectData.filter(s => !s.setupStatus.isReadyForStudy);
+    // Check if any ACTIVE subjects need setup (skip easy future subjects)
+    const subjectsNeedingSetup = subjectData.filter(s =>
+      !s.setupStatus.isReadyForStudy &&
+      !(s.sessionCategory === 'future' && s.examDifficulty === 'easy')
+    );
     const hasSetupTasks = subjectsNeedingSetup.length > 0;
 
     // Bonus mode specific instructions
@@ -390,6 +422,14 @@ ${(() => {
   });
   return summaryLines.length > 0 ? '📋 БЪРЗ СПРАВОЧНИК ПО ТЕМИ:\n' + summaryLines.join('\n\n') : '';
 })()}
+
+СЕСИЙНА КЛАСИФИКАЦИЯ (КРИТИЧНО — СПАЗВАЙ!):
+Всеки предмет има sessionCategory:
+- "active" = изпит скоро (до ${activeWindowEnd} дни) → ПЪЛЕН ПРИОРИТЕТ, планирай нормално
+- "future" = изпит далеч → МИНИМАЛНО присъствие! За "easy" future = НИЩО. За "medium"/"hard" future = максимум 1 тема за поддръжка
+- "no-exam" = без дата → САМО ако имат вече учени теми за преговор, иначе ПРОПУСНИ
+⚠️ НЕ генерирай setup tasks за "future" предмети с examDifficulty "easy"!
+⚠️ НЕ планирай нови теми за "future" + "easy" предмети!
 
 ПРАВИЛА ЗА ПРИОРИТИЗАЦИЯ (спазвай стриктно!):
 

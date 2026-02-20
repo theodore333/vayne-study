@@ -1787,10 +1787,11 @@ export function generateDailyPlan(
     });
   }
 
-  // 9. BLOOM PROGRESSION - Push green/yellow topics toward higher-order thinking
+  // 9. BLOOM PROGRESSION - Push green/yellow topics toward higher-order thinking (active + noExam only)
   {
     const bloomCandidates: { topic: Topic; subject: Subject }[] = [];
     for (const subject of subjects) {
+      if (!currentSubjectIds.has(subject.id)) continue; // Skip future subjects
       for (const topic of subject.topics) {
         const bl = topic.currentBloomLevel || 1;
         if (

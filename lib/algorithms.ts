@@ -1705,6 +1705,7 @@ export function generateDailyPlan(
     const consolidationCandidates: { topic: Topic; subject: Subject }[] = [];
 
     for (const subject of subjects) {
+      if (!currentSubjectIds.has(subject.id)) continue; // Skip future subjects
       for (const topic of subject.topics) {
         if (!yesterdaySet.has(topic.id)) continue;
         if (usedTopicIds.has(topic.id)) continue;
@@ -1995,6 +1996,7 @@ export function generateDailyPlan(
   {
     const studiedTodayBySubject: { subjectName: string; topicNames: string[] }[] = [];
     for (const subject of subjects) {
+      if (!currentSubjectIds.has(subject.id)) continue; // Skip future subjects
       const studiedToday = subject.topics.filter(t =>
         t.status !== 'gray' &&
         t.lastReview === getTodayString()

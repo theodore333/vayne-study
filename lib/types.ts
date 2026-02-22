@@ -284,6 +284,8 @@ export interface TimerSession {
   pomodorosCompleted?: number; // Number of pomodoro cycles completed in this session
   sessionType?: 'normal' | 'pomodoro'; // Type of timer session
   distractionNote?: string; // Notes about what distracted during the session
+  sessionGoal?: string; // Custom goal for the session (e.g. "бележки", "Анки карти")
+  goalCompleted?: boolean; // Whether the session goal was achieved
 }
 
 export interface PomodoroSettings {

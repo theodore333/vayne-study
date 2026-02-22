@@ -17,7 +17,7 @@ interface PomodoroState {
 }
 
 export default function FloatingTimer() {
-  const { data, stopTimer } = useApp();
+  const { data, stopTimerWithNote } = useApp();
   const pathname = usePathname();
   const [elapsed, setElapsed] = useState(0);
   const [showRating, setShowRating] = useState(false);
@@ -261,10 +261,13 @@ export default function FloatingTimer() {
     }
   };
 
+  const [floatingGoalCompleted, setFloatingGoalCompleted] = useState<boolean | undefined>(undefined);
+
   const handleRatingSubmit = (rating: number | null) => {
-    stopTimer(rating);
+    stopTimerWithNote(rating, undefined, floatingGoalCompleted);
     setShowRating(false);
     setElapsed(0);
+    setFloatingGoalCompleted(undefined);
   };
 
   const formatTime = (seconds: number) => {
@@ -325,6 +328,35 @@ export default function FloatingTimer() {
           <p className="text-lg text-cyan-400 mb-4 text-center font-mono font-bold">
             {formatTime(elapsed)} ({Math.round(elapsed / 60)} мин)
           </p>
+          {/* Goal outcome */}
+          {activeSession.sessionGoal && (
+            <div className="mb-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+              <p className="text-xs text-slate-500 font-mono mb-2">🎯 {activeSession.sessionGoal}</p>
+              <p className="text-sm text-slate-400 font-mono mb-2">Успя ли?</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFloatingGoalCompleted(true)}
+                  className={`flex-1 py-2 rounded-lg font-mono text-sm transition-all ${
+                    floatingGoalCompleted === true
+                      ? 'bg-green-500/30 border border-green-500/50 text-green-400'
+                      : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-green-500/50 hover:text-green-400'
+                  }`}
+                >
+                  ✅ Да
+                </button>
+                <button
+                  onClick={() => setFloatingGoalCompleted(false)}
+                  className={`flex-1 py-2 rounded-lg font-mono text-sm transition-all ${
+                    floatingGoalCompleted === false
+                      ? 'bg-orange-500/30 border border-orange-500/50 text-orange-400'
+                      : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-orange-500/50 hover:text-orange-400'
+                  }`}
+                >
+                  ❌ Не
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-5 gap-2 mb-4">
             {[1, 2, 3, 4, 5].map(rating => (
               <button
@@ -439,18 +471,25 @@ export default function FloatingTimer() {
         <div className="p-4">
           {/* Subject/Topic for normal timer */}
           {!isPomodoro && subject && (
-            <div className="flex items-center gap-2 mb-3">
-              <div
-                className="w-3 h-3 rounded-full animate-pulse"
-                style={{ backgroundColor: subject.color }}
-              />
-              <span className="text-sm font-mono text-slate-200 truncate">
-                {subject.name}
-              </span>
-              {topic && (
-                <span className="text-xs font-mono text-slate-500">
-                  #{topic.number}
+            <div className="mb-3">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-3 h-3 rounded-full animate-pulse"
+                  style={{ backgroundColor: subject.color }}
+                />
+                <span className="text-sm font-mono text-slate-200 truncate">
+                  {subject.name}
                 </span>
+                {topic && (
+                  <span className="text-xs font-mono text-slate-500">
+                    #{topic.number}
+                  </span>
+                )}
+              </div>
+              {activeSession?.sessionGoal && (
+                <div className="text-xs font-mono text-slate-400 mt-1 ml-5 truncate">
+                  🎯 {activeSession.sessionGoal}
+                </div>
               )}
             </div>
           )}

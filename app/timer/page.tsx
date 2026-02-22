@@ -36,6 +36,8 @@ export default function TimerPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [showRating, setShowRating] = useState(false);
   const [distractionNote, setDistractionNote] = useState('');
+  const [sessionGoal, setSessionGoal] = useState('');
+  const [goalCompleted, setGoalCompleted] = useState<boolean | undefined>(undefined);
   const [showPomodoroRating, setShowPomodoroRating] = useState(false);
   const [pomodoroDistractionNote, setPomodoroDistractionNote] = useState('');
   const [pendingPomodoroData, setPendingPomodoroData] = useState<{duration: number; count: number; isLongBreak: boolean; nextPhase: 'shortBreak' | 'longBreak'; breakDuration: number} | null>(null);
@@ -462,7 +464,7 @@ export default function TimerPage() {
         setNormalTimerPausedAt(null);
       } else if (!activeSession) {
         // Start new session - subject is optional, use 'general' as fallback
-        startTimer(selectedSubject || 'general', selectedTopic);
+        startTimer(selectedSubject || 'general', selectedTopic, sessionGoal.trim() || undefined);
         setElapsed(0);
       }
     }
@@ -554,11 +556,13 @@ export default function TimerPage() {
   };
 
   const handleRatingSubmit = (rating: number | null) => {
-    stopTimerWithNote(rating, distractionNote.trim() || undefined);
+    stopTimerWithNote(rating, distractionNote.trim() || undefined, goalCompleted);
     setIsRunning(false);
     setShowRating(false);
     setElapsed(0);
     setDistractionNote('');
+    setSessionGoal('');
+    setGoalCompleted(undefined);
   };
 
   const handlePomodoroRatingSubmit = (rating: number | null) => {
@@ -1053,15 +1057,27 @@ export default function TimerPage() {
                       </select>
                     </div>
                   )}
+                  <div>
+                    <label className="block text-sm text-slate-400 mb-2 font-mono">
+                      <FileText size={14} className="inline mr-2" />Какво ще правиш? (незадължително)
+                    </label>
+                    <input
+                      type="text"
+                      value={sessionGoal}
+                      onChange={(e) => setSessionGoal(e.target.value)}
+                      placeholder="напр. бележки, Анки карти, quiz, преговор..."
+                      className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500 font-mono text-sm placeholder:text-slate-600"
+                    />
+                  </div>
                 </div>
               )}
 
               {isRunning && (selectedSubjectData || selectedSubject === 'anki') && (
-                <div className="mb-8">
+                <div className="mb-8 space-y-2">
                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono"
-                    style={{ 
-                      backgroundColor: selectedSubject === 'anki' ? 'rgba(34, 197, 94, 0.2)' : `${selectedSubjectData?.color}30`, 
-                      color: selectedSubject === 'anki' ? '#22c55e' : selectedSubjectData?.color 
+                    style={{
+                      backgroundColor: selectedSubject === 'anki' ? 'rgba(34, 197, 94, 0.2)' : `${selectedSubjectData?.color}30`,
+                      color: selectedSubject === 'anki' ? '#22c55e' : selectedSubjectData?.color
                     }}>
                     <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
                     {selectedSubject === 'anki' ? 'Anki' : selectedSubjectData?.name}
@@ -1069,6 +1085,11 @@ export default function TimerPage() {
                       <span className="text-slate-400">• #{topics.find(t => t.id === selectedTopic)?.number}</span>
                     )}
                   </div>
+                  {activeSession?.sessionGoal && (
+                    <div className="text-sm text-slate-400 font-mono">
+                      🎯 {activeSession.sessionGoal}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1226,6 +1247,35 @@ export default function TimerPage() {
             <p className="text-sm text-slate-400 mb-4 text-center font-mono">
               {formatTime(elapsed)} ({Math.round(elapsed / 60)} мин)
             </p>
+            {/* Goal outcome */}
+            {activeSession?.sessionGoal && (
+              <div className="mb-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700">
+                <p className="text-xs text-slate-500 font-mono mb-2">🎯 Целта ти беше: <span className="text-slate-300">{activeSession.sessionGoal}</span></p>
+                <p className="text-sm text-slate-400 font-mono mb-2">Успя ли?</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setGoalCompleted(true)}
+                    className={`flex-1 py-2 rounded-lg font-mono text-sm transition-all ${
+                      goalCompleted === true
+                        ? 'bg-green-500/30 border border-green-500/50 text-green-400'
+                        : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-green-500/50 hover:text-green-400'
+                    }`}
+                  >
+                    ✅ Да
+                  </button>
+                  <button
+                    onClick={() => setGoalCompleted(false)}
+                    className={`flex-1 py-2 rounded-lg font-mono text-sm transition-all ${
+                      goalCompleted === false
+                        ? 'bg-orange-500/30 border border-orange-500/50 text-orange-400'
+                        : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-orange-500/50 hover:text-orange-400'
+                    }`}
+                  >
+                    ❌ Не напълно
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-5 gap-2 mb-4">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(rating => (
                 <button key={rating} onClick={() => handleRatingSubmit(rating)}

@@ -241,7 +241,7 @@ interface AppContextType {
   updateDailyStatus: (status: Partial<DailyStatus>) => void;
 
   // Timer operations
-  startTimer: (subjectId: string, topicId: string | null) => void;
+  startTimer: (subjectId: string, topicId: string | null, sessionGoal?: string) => void;
   stopTimer: (rating: number | null) => void;
   addPomodoroSession: (durationMinutes: number, subjectId?: string, topicId?: string | null, note?: string, rating?: number | null) => void;
 
@@ -272,7 +272,7 @@ interface AppContextType {
   cleanOldTimerSessions: (cutoffDate: Date) => void;
 
   // Timer with distraction note
-  stopTimerWithNote: (rating: number | null, distractionNote?: string) => void;
+  stopTimerWithNote: (rating: number | null, distractionNote?: string, goalCompleted?: boolean) => void;
 
   // UI State
   sidebarCollapsed: boolean;
@@ -1121,7 +1121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   // Timer operations
-  const startTimer = useCallback((subjectId: string, topicId: string | null) => {
+  const startTimer = useCallback((subjectId: string, topicId: string | null, sessionGoal?: string) => {
     const session: TimerSession = {
       id: generateId(),
       subjectId,
@@ -1129,7 +1129,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startTime: new Date().toISOString(),
       endTime: null,
       duration: 0,
-      rating: null
+      rating: null,
+      sessionGoal: sessionGoal || undefined
     };
     updateData(prev => {
       // Auto-stop any existing active session to prevent orphans
@@ -1146,7 +1147,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [updateData]);
 
-  const stopTimerWithNote = useCallback((rating: number | null, distractionNote?: string) => {
+  const stopTimerWithNote = useCallback((rating: number | null, distractionNote?: string, goalCompleted?: boolean) => {
     updateData(prev => {
       const sessions = [...prev.timerSessions];
       const activeIndex = sessions.findIndex(s => s.endTime === null);
@@ -1162,7 +1163,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         endTime,
         duration,
         rating,
-        distractionNote: distractionNote || undefined
+        distractionNote: distractionNote || undefined,
+        ...(goalCompleted !== undefined ? { goalCompleted } : {})
       };
 
       return { ...prev, timerSessions: sessions };

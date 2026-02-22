@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check, Brain, Loader2 } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { DailyTask, Topic, Subject } from '@/lib/types';
+import { DailyTask, Topic, Subject, DevelopmentProject } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
 import { generateId } from '@/lib/algorithms';
 
@@ -76,7 +76,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
     setShowAddTopicFor(null);
   };
 
-  // Handle adding a new task
+  // Handle adding a new task (subject-based)
   const handleAddTask = (subject: Subject, topics: Topic[], customDescription?: string) => {
     const newTask: DailyTask = {
       id: generateId(),
@@ -89,6 +89,31 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
       topics: topics,
       estimatedMinutes: topics.length * 20,
       completed: false
+    };
+    setEditedPlan(prev => [...prev, newTask]);
+    setShowAddTask(false);
+  };
+
+  // Handle adding a project task
+  const handleAddProjectTask = (project: DevelopmentProject, description?: string) => {
+    const incompleteModules = project.modules
+      .filter(m => m.status !== 'completed')
+      .sort((a, b) => a.order - b.order)
+      .slice(0, 3);
+    const newTask: DailyTask = {
+      id: generateId(),
+      subjectId: '',
+      subjectName: project.name,
+      subjectColor: '#06b6d4',
+      type: 'project',
+      typeLabel: '🚀 Проект',
+      description: description || project.description || 'Продължи',
+      topics: [],
+      estimatedMinutes: project.weeklyGoalMinutes ? Math.round(project.weeklyGoalMinutes / 7) : 30,
+      completed: false,
+      projectId: project.id,
+      projectName: project.name,
+      projectModules: incompleteModules
     };
     setEditedPlan(prev => [...prev, newTask]);
     setShowAddTask(false);
@@ -287,8 +312,10 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
           {showAddTask ? (
             <AddTaskPanel
               subjects={activeSubjects}
+              projects={data.developmentProjects.filter(p => p.status === 'active')}
               topicsInPlan={topicsInPlan}
               onAdd={handleAddTask}
+              onAddProject={handleAddProjectTask}
               onCancel={() => setShowAddTask(false)}
             />
           ) : (
@@ -297,7 +324,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
               className="w-full flex items-center justify-center gap-2 p-4 rounded-xl border border-dashed border-slate-700 text-slate-500 hover:text-cyan-400 hover:border-cyan-500/50 font-mono transition-colors"
             >
               <Plus size={16} />
-              Добави задача от друг предмет
+              Добави задача
             </button>
           )}
         </div>
@@ -342,19 +369,26 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
 // Sub-component for adding a new task
 function AddTaskPanel({
   subjects,
+  projects,
   topicsInPlan,
   onAdd,
+  onAddProject,
   onCancel
 }: {
   subjects: Subject[];
+  projects: DevelopmentProject[];
   topicsInPlan: Set<string>;
   onAdd: (subject: Subject, topics: Topic[], description?: string) => void;
+  onAddProject: (project: DevelopmentProject, description?: string) => void;
   onCancel: () => void;
 }) {
+  const [mode, setMode] = useState<'subject' | 'project'>('subject');
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedTopics, setSelectedTopics] = useState<Set<string>>(new Set());
   const [taskDescription, setTaskDescription] = useState('');
   const [newTaskSearch, setNewTaskSearch] = useState('');
+  const [selectedProject, setSelectedProject] = useState<DevelopmentProject | null>(null);
+  const [projectDescription, setProjectDescription] = useState('');
 
   const availableTopics = useMemo(() => {
     if (!selectedSubject) return [];
@@ -387,115 +421,221 @@ function AddTaskPanel({
     onAdd(selectedSubject, topics, taskDescription.trim() || undefined);
   };
 
+  const handleAddProject = () => {
+    if (!selectedProject) return;
+    onAddProject(selectedProject, projectDescription.trim() || undefined);
+  };
+
   return (
     <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5 space-y-4">
       <div className="text-sm font-semibold text-slate-200 font-mono">Добави нова задача</div>
 
-      {/* Subject Selection */}
-      <div>
-        <label className="text-xs text-slate-500 font-mono block mb-2">Избери предмет:</label>
-        <div className="flex flex-wrap gap-2">
-          {subjects.map(subject => (
-            <button
-              key={subject.id}
-              onClick={() => { setSelectedSubject(subject); setSelectedTopics(new Set()); setNewTaskSearch(''); }}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
-                selectedSubject?.id === subject.id
-                  ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300'
-                  : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
-              }`}
-            >
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subject.color }} />
-              {subject.name}
-            </button>
-          ))}
-        </div>
+      {/* Mode Toggle */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => setMode('subject')}
+          className={`flex-1 py-2 rounded-lg font-mono text-xs transition-all ${
+            mode === 'subject'
+              ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300'
+              : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+          }`}
+        >
+          📚 Предмет
+        </button>
+        {projects.length > 0 && (
+          <button
+            onClick={() => setMode('project')}
+            className={`flex-1 py-2 rounded-lg font-mono text-xs transition-all ${
+              mode === 'project'
+                ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300'
+                : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
+            }`}
+          >
+            🚀 Проект
+          </button>
+        )}
       </div>
 
-      {/* Topic Selection */}
-      {selectedSubject && (
-        <div>
-          <label className="text-xs text-slate-500 font-mono block mb-2">
-            Избери теми ({selectedTopics.size} избрани):
-          </label>
-          {availableTopics.length > 5 && (
-            <input
-              type="text"
-              placeholder="Търси тема..."
-              value={newTaskSearch}
-              onChange={e => setNewTaskSearch(e.target.value)}
-              autoFocus
-              className="w-full px-3 py-2 mb-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
-            />
-          )}
-          <div className="max-h-48 overflow-y-auto space-y-1">
-            {availableTopics.length === 0 ? (
-              <div className="text-xs text-slate-600 font-mono text-center py-2">
-                Всички теми от този предмет са вече в плана
-              </div>
-            ) : filteredTopics.length === 0 ? (
-              <div className="text-xs text-slate-600 font-mono text-center py-2">
-                Няма теми за &ldquo;{newTaskSearch}&rdquo;
-              </div>
-            ) : (
-              filteredTopics.map(topic => (
+      {mode === 'subject' ? (
+        <>
+          {/* Subject Selection */}
+          <div>
+            <label className="text-xs text-slate-500 font-mono block mb-2">Избери предмет:</label>
+            <div className="flex flex-wrap gap-2">
+              {subjects.map(subject => (
                 <button
-                  key={topic.id}
-                  onClick={() => handleToggleTopic(topic.id)}
-                  className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left ${
-                    selectedTopics.has(topic.id)
-                      ? 'bg-cyan-500/20 border border-cyan-500/50'
-                      : 'bg-slate-800/30 hover:bg-slate-700/50 border border-transparent'
+                  key={subject.id}
+                  onClick={() => { setSelectedSubject(subject); setSelectedTopics(new Set()); setNewTaskSearch(''); }}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono transition-colors ${
+                    selectedSubject?.id === subject.id
+                      ? 'bg-cyan-500/20 border border-cyan-500/50 text-cyan-300'
+                      : 'bg-slate-800/50 border border-slate-700 text-slate-400 hover:border-slate-600'
                   }`}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
-                  />
-                  <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
-                    #{topic.number} {topic.name}
-                  </span>
-                  {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400 shrink-0" />}
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: subject.color }} />
+                  {subject.name}
                 </button>
-              ))
-            )}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
 
-      {/* Task Description */}
-      {selectedTopics.size > 0 && (
-        <div>
-          <label className="text-xs text-slate-500 font-mono block mb-2">
-            Какво ще правиш с тях? (по избор):
-          </label>
-          <textarea
-            value={taskDescription}
-            onChange={(e) => setTaskDescription(e.target.value)}
-            placeholder="напр. прочети, направи quiz, преговори, резюме..."
-            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none resize-none"
-            rows={2}
-          />
-        </div>
-      )}
+          {/* Topic Selection */}
+          {selectedSubject && (
+            <div>
+              <label className="text-xs text-slate-500 font-mono block mb-2">
+                Избери теми ({selectedTopics.size} избрани):
+              </label>
+              {availableTopics.length > 5 && (
+                <input
+                  type="text"
+                  placeholder="Търси тема..."
+                  value={newTaskSearch}
+                  onChange={e => setNewTaskSearch(e.target.value)}
+                  autoFocus
+                  className="w-full px-3 py-2 mb-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
+                />
+              )}
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {availableTopics.length === 0 ? (
+                  <div className="text-xs text-slate-600 font-mono text-center py-2">
+                    Всички теми от този предмет са вече в плана
+                  </div>
+                ) : filteredTopics.length === 0 ? (
+                  <div className="text-xs text-slate-600 font-mono text-center py-2">
+                    Няма теми за &ldquo;{newTaskSearch}&rdquo;
+                  </div>
+                ) : (
+                  filteredTopics.map(topic => (
+                    <button
+                      key={topic.id}
+                      onClick={() => handleToggleTopic(topic.id)}
+                      className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left ${
+                        selectedTopics.has(topic.id)
+                          ? 'bg-cyan-500/20 border border-cyan-500/50'
+                          : 'bg-slate-800/30 hover:bg-slate-700/50 border border-transparent'
+                      }`}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
+                      />
+                      <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
+                        #{topic.number} {topic.name}
+                      </span>
+                      {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400 shrink-0" />}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
-      {/* Actions */}
-      <div className="flex items-center justify-end gap-3">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-slate-400 hover:text-slate-200 font-mono text-sm transition-colors"
-        >
-          Отказ
-        </button>
-        <button
-          onClick={handleAdd}
-          disabled={!selectedSubject || selectedTopics.size === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-mono text-sm transition-colors"
-        >
-          <Plus size={14} />
-          Добави
-        </button>
-      </div>
+          {/* Task Description */}
+          {selectedTopics.size > 0 && (
+            <div>
+              <label className="text-xs text-slate-500 font-mono block mb-2">
+                Какво ще правиш с тях? (по избор):
+              </label>
+              <textarea
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                placeholder="напр. прочети, направи quiz, преговори, резюме..."
+                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none resize-none"
+                rows={2}
+              />
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-slate-400 hover:text-slate-200 font-mono text-sm transition-colors"
+            >
+              Отказ
+            </button>
+            <button
+              onClick={handleAdd}
+              disabled={!selectedSubject || selectedTopics.size === 0}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-mono text-sm transition-colors"
+            >
+              <Plus size={14} />
+              Добави
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Project Selection */}
+          <div>
+            <label className="text-xs text-slate-500 font-mono block mb-2">Избери проект:</label>
+            <div className="space-y-2">
+              {projects.map(project => {
+                const incompleteModules = project.modules.filter(m => m.status !== 'completed').length;
+                const goalLabel = project.weeklyGoalMinutes
+                  ? `${project.weeklyGoalMinutes >= 60 ? `${Math.round(project.weeklyGoalMinutes / 60)}ч` : `${project.weeklyGoalMinutes}м`}/седмица`
+                  : null;
+                return (
+                  <button
+                    key={project.id}
+                    onClick={() => setSelectedProject(project)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                      selectedProject?.id === project.id
+                        ? 'bg-cyan-500/20 border border-cyan-500/50'
+                        : 'bg-slate-800/30 hover:bg-slate-700/50 border border-transparent'
+                    }`}
+                  >
+                    <div className="w-3 h-3 rounded-full bg-cyan-500 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-mono text-slate-200 truncate">{project.name}</div>
+                      <div className="text-xs font-mono text-slate-500">
+                        {incompleteModules > 0 && `${incompleteModules} модула`}
+                        {goalLabel && (incompleteModules > 0 ? ` • ${goalLabel}` : goalLabel)}
+                        {!incompleteModules && !goalLabel && (project.description || 'Без модули')}
+                      </div>
+                    </div>
+                    {selectedProject?.id === project.id && <Check size={14} className="text-cyan-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Project Task Description */}
+          {selectedProject && (
+            <div>
+              <label className="text-xs text-slate-500 font-mono block mb-2">
+                Какво ще правиш? (по избор):
+              </label>
+              <textarea
+                value={projectDescription}
+                onChange={(e) => setProjectDescription(e.target.value)}
+                placeholder="напр. следващ модул, бележки, преговор..."
+                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-xs font-mono text-slate-200 placeholder-slate-600 focus:border-cyan-500/50 focus:outline-none resize-none"
+                rows={2}
+              />
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              onClick={onCancel}
+              className="px-4 py-2 text-slate-400 hover:text-slate-200 font-mono text-sm transition-colors"
+            >
+              Отказ
+            </button>
+            <button
+              onClick={handleAddProject}
+              disabled={!selectedProject}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg font-mono text-sm transition-colors"
+            >
+              <Plus size={14} />
+              Добави
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

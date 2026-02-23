@@ -514,6 +514,32 @@ function QuizContent() {
         mixPreviousQuestions = mixPreviousQuestions.slice(-30);
       }
 
+      // Build combined masteryContext from all topics
+      const mixMasteryContexts = multiTopics.map(({ topic: t }) =>
+        buildMasteryContext({ ...t, weakConcepts: t.weakConcepts })
+      );
+      // Merge: combine weak concepts, mastered concepts, avg grades, sum quiz counts
+      const mergedMastery = {
+        topicStatus: mixMasteryContexts.some(m => m.topicStatus === 'gray') ? 'gray' :
+                     mixMasteryContexts.some(m => m.topicStatus === 'orange') ? 'orange' : 'green',
+        bloomLevel: avgBloom,
+        avgGrade: mixMasteryContexts.filter(m => m.avgGrade !== null).length > 0
+          ? Math.round(mixMasteryContexts.filter(m => m.avgGrade !== null).reduce((s, m) => s + m.avgGrade!, 0) / mixMasteryContexts.filter(m => m.avgGrade !== null).length)
+          : null,
+        quizCount: mixMasteryContexts.reduce((s, m) => s + m.quizCount, 0),
+        readCount: mixMasteryContexts.reduce((s, m) => s + m.readCount, 0),
+        lastReview: null as string | null,
+        recentQuizzes: mixMasteryContexts.flatMap(m => m.recentQuizzes).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5),
+        masteredConcepts: [...new Set(mixMasteryContexts.flatMap(m => m.masteredConcepts))],
+        weakConcepts: mixMasteryContexts.flatMap(m => m.weakConcepts)
+      };
+
+      // Collect specimens from all topics
+      const mixSpecimens = multiTopics.flatMap(({ topic: t }) => t.specimens || []);
+
+      // Collect custom questions from all topics
+      const mixCustomQuestions = multiTopics.flatMap(({ topic: t }) => t.customQuestions || []);
+
       requestBody = {
         apiKey, material: combinedMaterial,
         topicName: `Mix: ${multiTopics.length} теми`,
@@ -523,7 +549,10 @@ function QuizContent() {
         matchExamFormat, mode, questionCount,
         bloomLevel: mode === 'custom' ? customBloomLevel : null,
         currentBloomLevel: avgBloom, isMultiTopic: true, topicsList: topicNames, model: selectedModel,
-        previousQuestions: mixPreviousQuestions.length > 0 ? mixPreviousQuestions : undefined
+        previousQuestions: mixPreviousQuestions.length > 0 ? mixPreviousQuestions : undefined,
+        masteryContext: mergedMastery,
+        specimens: mixSpecimens.length > 0 ? mixSpecimens : undefined,
+        customQuestions: mixCustomQuestions.length > 0 ? mixCustomQuestions : undefined
       };
     } else {
       // Build overlap context if this topic has overlap analysis
@@ -608,9 +637,11 @@ function QuizContent() {
       setUsedCache(true);
     }
 
-    // Mix in question bank questions linked to this topic
-    if (topicId && subjectId && !isMultiMode && !isModuleQuiz) {
-      const banks = (data.questionBanks || []).filter(b => b.subjectId === subjectId);
+    // Mix in question bank questions linked to this topic (or all topics in mix mode)
+    const bankTopicIds = isMultiMode ? multiTopics.map(({ topic: t }) => t.id) : (topicId ? [topicId] : []);
+    const bankSubjectIds = isMultiMode ? [...new Set(multiTopics.map(({ subject: s }) => s.id))] : (subjectId ? [subjectId] : []);
+    if (bankTopicIds.length > 0 && bankSubjectIds.length > 0 && !isModuleQuiz) {
+      const banks = (data.questionBanks || []).filter(b => bankSubjectIds.includes(b.subjectId));
 
       // Determine Bloom level range for the current quiz mode
       const bloomRange: [number, number] | null =
@@ -621,7 +652,7 @@ function QuizContent() {
 
       const linkedBankQs = banks.flatMap(b =>
         b.questions.filter(q => {
-          if (!q.linkedTopicIds?.includes(topicId)) return false;
+          if (!q.linkedTopicIds?.some(id => bankTopicIds.includes(id))) return false;
           if (q.type !== 'mcq' && q.type !== 'open') return false;
           if (q.type === 'mcq' && !(q.options?.length)) return false;
           // Filter by Bloom level if mode is specific and question has a level
@@ -635,9 +666,10 @@ function QuizContent() {
         // Deduplicate: skip bank questions already covered by AI
         const aiTexts = new Set(allQuestions.map(q => q.question.toLowerCase().trim().substring(0, 100)));
         const uniqueBankQs = linkedBankQs.filter(q => !aiTexts.has(q.text.toLowerCase().trim().substring(0, 100)));
-        // Pick up to 3 random bank questions
+        // Pick up to 3 random bank questions per topic (more for mix mode)
+        const maxBankQs = isMultiMode ? Math.min(2 * bankTopicIds.length, 8) : 3;
         const shuffled = uniqueBankQs.sort(() => Math.random() - 0.5);
-        const picked = shuffled.slice(0, Math.min(3, shuffled.length));
+        const picked = shuffled.slice(0, Math.min(maxBankQs, shuffled.length));
         const converted: Question[] = picked.map(q => ({
           type: q.type === 'mcq' ? 'multiple_choice' as const : 'open' as const,
           question: q.text,

@@ -136,12 +136,21 @@ export function QuizResults({
 
   return (
     <div className="min-h-screen p-6 space-y-6">
-      <Link
-        href={subjectId && topicId ? `/subjects/${subjectId}/topics/${topicId}` : '/quiz'}
-        className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
-      >
-        <ArrowLeft size={16} /> {subjectId && topicId ? 'Към темата' : 'Назад'}
-      </Link>
+      {subjectId && topicId ? (
+        <Link
+          href={`/subjects/${subjectId}/topics/${topicId}`}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> Към темата
+        </Link>
+      ) : (
+        <button
+          onClick={() => { onSaveGrade(); onReset(); }}
+          className="inline-flex items-center gap-2 text-slate-400 hover:text-slate-200 transition-colors font-mono text-sm"
+        >
+          <ArrowLeft size={16} /> Назад
+        </button>
+      )}
 
       <div className="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-8 max-w-2xl mx-auto text-center">
         <div className="text-6xl mb-4">

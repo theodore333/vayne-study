@@ -417,18 +417,20 @@ export default function SchedulePage() {
                           borderColor: typeConfig.color + "40"
                         }}
                       >
-                        <div className="absolute top-1 right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-all">
+                        <div className="absolute top-1 right-1 flex gap-0.5">
                           <button
                             onClick={() => setEditingClass(cls)}
-                            className="p-1 rounded hover:bg-blue-500/20"
+                            className="p-1 rounded bg-blue-500/10 hover:bg-blue-500/30 transition-colors"
+                            title="Редактирай"
                           >
-                            <Edit2 size={11} className="text-blue-400" />
+                            <Edit2 size={12} className="text-blue-400" />
                           </button>
                           <button
                             onClick={() => deleteClass(cls.id)}
-                            className="p-1 rounded hover:bg-red-500/20"
+                            className="p-1 rounded bg-red-500/10 hover:bg-red-500/30 transition-colors"
+                            title="Изтрий"
                           >
-                            <Trash2 size={11} className="text-red-400" />
+                            <Trash2 size={12} className="text-red-400" />
                           </button>
                         </div>
                         {(() => {

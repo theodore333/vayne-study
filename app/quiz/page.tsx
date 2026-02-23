@@ -1176,8 +1176,9 @@ function QuizContent() {
     try {
       const res = await fetch('/api/quiz', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          apiKey,
           mode: 'evaluate_meta',
           question: question.question,
           correctAnswer: question.correctAnswer,

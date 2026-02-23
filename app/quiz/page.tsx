@@ -1164,6 +1164,36 @@ function QuizContent() {
     setIsEvaluatingOpen(false);
   };
 
+  // Meta-learning reflection evaluation
+  const handleMetaReflection = async (index: number, reflection: string): Promise<{ feedback: string; connectionTips: string[]; memoryTechnique?: string } | null> => {
+    const apiKey = localStorage.getItem('claude-api-key');
+    if (!apiKey) return null;
+
+    const question = quizState.questions[index];
+    const evaluation = openEvaluations[index];
+    if (!question || !evaluation) return null;
+
+    try {
+      const res = await fetch('/api/quiz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+        body: JSON.stringify({
+          mode: 'evaluate_meta',
+          question: question.question,
+          correctAnswer: question.correctAnswer,
+          keyPointsMissed: evaluation.keyPointsMissed || [],
+          studentReflection: reflection
+        })
+      });
+      const result = await res.json();
+      if (result.usage) incrementApiCalls(result.usage.cost);
+      return result.metaFeedback || null;
+    } catch (err) {
+      console.error('Meta reflection evaluation failed:', err);
+      return null;
+    }
+  };
+
   // Analyze mistakes using AI
   const analyzeMistakes = async (selfReflection?: string, errorTypes?: string[]) => {
     if (isAnalyzingMistakes) return;
@@ -1986,6 +2016,7 @@ function QuizContent() {
         onEditQuestion={handleEditQuestion}
         onDeleteQuestion={(idx) => setDeleteQuestionIndex(idx)}
         onReEvaluate={handleReEvaluate}
+        onMetaReflection={handleMetaReflection}
         onAddQuestion={handleAddQuestion}
         openEvalFailed={openEvalFailed}
         onRetryEval={retryEvaluation}
@@ -2520,7 +2551,7 @@ function QuizContent() {
           setMatchExamFormat={setMatchExamFormat}
           isGenerating={quizState.isGenerating}
           hasMaterial={isMultiMode ? multiTopics.length > 0 : !!(topic?.material && topic.material.trim().length > 0)}
-          hasSpecimens={!isMultiMode && (topic?.specimens?.length || 0) > 0}
+          hasSpecimens={!isMultiMode && (topic?.specimens?.length || 0) > 0 && /анатомия|патоанатомия|микробиология|хистология|патология/i.test(subject?.name || '')}
           specimenCount={topic?.specimens?.length || 0}
           onOpenPreview={openPreview}
         />

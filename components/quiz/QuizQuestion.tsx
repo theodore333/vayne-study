@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, Pencil, Trash2, Save, X, MessageSquare, Send, Plus, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChevronRight, CheckCircle, XCircle, RefreshCw, ArrowLeft, AlertCircle, Lightbulb, Clock, StopCircle, Pencil, Trash2, Save, X, MessageSquare, Send, Plus, Check, Sparkles } from 'lucide-react';
 import { Question, OpenAnswerEvaluation, isAnswerCorrect } from '@/lib/quiz-types';
 import { BLOOM_LEVELS } from '@/lib/types';
 
@@ -61,6 +61,7 @@ interface QuizQuestionProps {
   onEditQuestion?: (index: number, updated: Question) => void;
   onDeleteQuestion?: (index: number) => void;
   onReEvaluate?: (index: number, feedback: string) => void;
+  onMetaReflection?: (index: number, reflection: string) => Promise<{ feedback: string; connectionTips: string[]; memoryTechnique?: string } | null>;
   onAddQuestion?: (question: { type: 'mcq' | 'open'; text: string; options?: string[]; correctAnswer: string; explanation?: string }) => void;
   openEvalFailed?: Record<number, boolean>;
   onRetryEval?: (index: number) => void;
@@ -82,7 +83,7 @@ export function QuizQuestion({
   elapsedTime, formatTime,
   onAnswer, onNext, onEarlyStop, onBack,
   fillBlankAnswer, setFillBlankAnswer,
-  onEditQuestion, onDeleteQuestion, onReEvaluate, onAddQuestion,
+  onEditQuestion, onDeleteQuestion, onReEvaluate, onMetaReflection, onAddQuestion,
   openEvalFailed, onRetryEval, onSkip, onPrev, canGoBack
 }: QuizQuestionProps) {
   const currentQuestion = questions[currentIndex];
@@ -101,11 +102,30 @@ export function QuizQuestion({
   const [newQExplanation, setNewQExplanation] = useState('');
   const [newQOptions, setNewQOptions] = useState(['', '', '', '']);
   const [newQCorrectIdx, setNewQCorrectIdx] = useState(0);
+  // Deep learning flow state
+  const [showModelAnswer, setShowModelAnswer] = useState(false);
+  const [showRetryInput, setShowRetryInput] = useState(false);
+  const [retryAnswer, setRetryAnswer] = useState('');
+  const [showMetaSection, setShowMetaSection] = useState(false);
+  const [metaReflection, setMetaReflection] = useState('');
+  const [metaAiFeedback, setMetaAiFeedback] = useState<{ feedback: string; connectionTips: string[]; memoryTechnique?: string } | null>(null);
+  const [isEvaluatingMeta, setIsEvaluatingMeta] = useState(false);
+  // Reset deep learning flow state when question changes
+  useEffect(() => {
+    setShowModelAnswer(false);
+    setShowRetryInput(false);
+    setRetryAnswer('');
+    setShowMetaSection(false);
+    setMetaReflection('');
+    setMetaAiFeedback(null);
+    setIsEvaluatingMeta(false);
+  }, [currentIndex]);
+
   const openEval = openEvaluations[currentIndex];
   const currentAnswer = answers[currentIndex];
   const isCorrect = isAnswerCorrect(currentQuestion, currentAnswer, openEval);
   const typeInfo = TYPE_LABELS[currentQuestion.type] || TYPE_LABELS.open;
-
+  const needsDeepFlow = openEval && openEval.score < 0.7 && (currentQuestion.type === 'open' || currentQuestion.type === 'short_answer');
 
   return (
     <div className="min-h-screen p-6 space-y-6">
@@ -600,17 +620,141 @@ export function QuizQuestion({
               </>
             )}
 
-            {/* Model answer for open/short_answer questions */}
-            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && (
-              <div className="p-4 rounded-lg border bg-slate-800/50 border-slate-600">
-                <p className="text-xs text-slate-500 font-mono mb-2 uppercase">Примерен отговор:</p>
-                <p className="text-sm text-slate-300 font-mono">{currentQuestion.correctAnswer}</p>
-                {currentQuestion.explanation && (
-                  <p className="text-sm text-slate-400 font-mono mt-3 pt-3 border-t border-slate-700">
-                    {currentQuestion.explanation}
-                  </p>
+            {/* Deep learning flow for wrong/partial open answers */}
+            {needsDeepFlow && !showModelAnswer && (
+              <div className="space-y-3">
+                {!showRetryInput ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowRetryInput(true)}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-purple-500/15 border border-purple-500/30 rounded-lg text-purple-400 hover:bg-purple-500/25 transition-colors font-mono text-sm"
+                    >
+                      ✍️ Опитай пак
+                    </button>
+                    <button
+                      onClick={() => setShowModelAnswer(true)}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 bg-slate-800/50 border border-slate-600 rounded-lg text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors font-mono text-sm"
+                    >
+                      📖 Покажи отговор
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-3">
+                    <p className="text-xs text-purple-400 font-mono">Напиши подобрен отговор (ползвай feedback-а горе):</p>
+                    <textarea
+                      value={retryAnswer}
+                      onChange={(e) => setRetryAnswer(e.target.value)}
+                      rows={4}
+                      placeholder="Напиши подобрения си отговор тук..."
+                      className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-purple-500 focus:outline-none resize-none placeholder:text-slate-600"
+                      autoFocus
+                    />
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => { setShowRetryInput(false); setRetryAnswer(''); }}
+                        className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors"
+                      >
+                        Откажи
+                      </button>
+                      <button
+                        onClick={() => setShowModelAnswer(true)}
+                        className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-mono bg-purple-600/30 text-purple-400 hover:bg-purple-600/50 rounded-lg transition-colors"
+                      >
+                        <CheckCircle size={12} /> Готово — покажи отговор
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
+            )}
+
+            {/* Model answer — shown directly for correct, or after deep flow for wrong */}
+            {(currentQuestion.type === 'open' || currentQuestion.type === 'short_answer') && (showModelAnswer || !needsDeepFlow) && (
+              <>
+                <div className="p-4 rounded-lg border bg-slate-800/50 border-slate-600">
+                  <p className="text-xs text-slate-500 font-mono mb-2 uppercase">Примерен отговор:</p>
+                  <p className="text-sm text-slate-300 font-mono">{currentQuestion.correctAnswer}</p>
+                  {currentQuestion.explanation && (
+                    <p className="text-sm text-slate-400 font-mono mt-3 pt-3 border-t border-slate-700">
+                      {currentQuestion.explanation}
+                    </p>
+                  )}
+                </div>
+
+                {/* Meta-learning reflection — optional, only for wrong answers */}
+                {needsDeepFlow && onMetaReflection && (
+                  <div className="space-y-3">
+                    {!showMetaSection ? (
+                      <button
+                        onClick={() => setShowMetaSection(true)}
+                        className="flex items-center gap-2 text-xs font-mono text-teal-400/70 hover:text-teal-400 transition-colors"
+                      >
+                        🧠 Мета анализ (незадължително)
+                      </button>
+                    ) : (
+                      <div className="p-4 rounded-lg border border-teal-500/30 bg-teal-500/5 space-y-3">
+                        <p className="text-xs text-teal-400 font-mono">Защо мислиш че забрави? С какво можеш да го свържеш?</p>
+                        <textarea
+                          value={metaReflection}
+                          onChange={(e) => setMetaReflection(e.target.value)}
+                          rows={3}
+                          placeholder="напр. Обърках каскадите, трябва да ги свържа с фактор XIIa..."
+                          className="w-full px-3 py-2 bg-slate-900/50 border border-slate-700 rounded-lg text-sm font-mono text-slate-200 focus:border-teal-500 focus:outline-none resize-none placeholder:text-slate-600"
+                          autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => { setShowMetaSection(false); setMetaReflection(''); setMetaAiFeedback(null); }}
+                            className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200 transition-colors"
+                          >
+                            Пропусни
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!metaReflection.trim()) return;
+                              setIsEvaluatingMeta(true);
+                              const result = await onMetaReflection(currentIndex, metaReflection.trim());
+                              setMetaAiFeedback(result);
+                              setIsEvaluatingMeta(false);
+                            }}
+                            disabled={!metaReflection.trim() || isEvaluatingMeta}
+                            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-mono bg-teal-600/30 text-teal-400 hover:bg-teal-600/50 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            {isEvaluatingMeta ? (
+                              <><RefreshCw size={12} className="animate-spin" /> Анализирам...</>
+                            ) : (
+                              <><Sparkles size={12} /> AI помощ</>
+                            )}
+                          </button>
+                        </div>
+
+                        {/* AI meta feedback */}
+                        {metaAiFeedback && (
+                          <div className="p-3 rounded-lg bg-teal-500/10 border border-teal-500/20 space-y-2">
+                            <p className="text-sm text-teal-300 font-mono">{metaAiFeedback.feedback}</p>
+                            {metaAiFeedback.connectionTips.length > 0 && (
+                              <div>
+                                <p className="text-xs text-teal-400 font-mono font-semibold mb-1">🔗 Връзки:</p>
+                                <ul className="text-xs text-teal-300/80 font-mono list-disc list-inside">
+                                  {metaAiFeedback.connectionTips.map((tip, i) => (
+                                    <li key={i}>{tip}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                            {metaAiFeedback.memoryTechnique && (
+                              <div>
+                                <p className="text-xs text-teal-400 font-mono font-semibold mb-1">💡 Техника за запомняне:</p>
+                                <p className="text-xs text-teal-300/80 font-mono">{metaAiFeedback.memoryTechnique}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

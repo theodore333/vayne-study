@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Square, Clock, Minimize2, Maximize2, Brain, Coffee, X } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 type PomodoroPhase = 'work' | 'shortBreak' | 'longBreak';
@@ -19,6 +19,7 @@ interface PomodoroState {
 export default function FloatingTimer() {
   const { data, stopTimerWithNote } = useApp();
   const pathname = usePathname();
+  const router = useRouter();
   const [elapsed, setElapsed] = useState(0);
   const [showRating, setShowRating] = useState(false);
   // User preferences - these reset when component unmounts (timer stops)
@@ -538,8 +539,11 @@ export default function FloatingTimer() {
 
           {/* Controls */}
           <div className="flex gap-2">
-            <Link
-              href="/timer"
+            <button
+              onClick={() => {
+                if (pathname === '/quiz' && !confirm('Имаш активен quiz. Ако отидеш в таймера, ще загубиш прогреса. Продължи?')) return;
+                router.push('/timer');
+              }}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-colors font-mono text-sm ${
                 isPendingRating || isExpired
                   ? 'bg-amber-600/80 hover:bg-amber-600 text-white'
@@ -557,7 +561,7 @@ export default function FloatingTimer() {
               ) : (
                 <><Clock size={16} />Детайли</>
               )}
-            </Link>
+            </button>
             {!isPendingBreak && !isPendingRating && !isExpired && (
               <button
                 onClick={isPomodoro ? handleStopPomodoro : handleStop}

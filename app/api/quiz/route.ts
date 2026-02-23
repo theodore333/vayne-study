@@ -163,6 +163,10 @@ export async function POST(request: Request) {
       return handleOpenHint(anthropic, question, qBloomLevel || 3, concept);
     }
 
+    if (mode === 'evaluate_meta') {
+      const { question, correctAnswer, keyPointsMissed, studentReflection } = body;
+      return handleEvaluateMeta(anthropic, question, correctAnswer, keyPointsMissed, studentReflection);
+    }
 
     if (mode === 'exam_prep_diagnostic') {
       const { topics, subjectName: subjName } = body;
@@ -1655,6 +1659,87 @@ BLOOM НИВО: ${bloomLevel} - ${bloomGuidance[bloomLevel] || bloomGuidance[3]}
       cost: Math.round(cost * 1000000) / 1000000
     }
   });
+}
+
+// --- Meta-Learning Reflection Handler ---
+
+async function handleEvaluateMeta(
+  anthropic: Anthropic,
+  question: string,
+  correctAnswer: string,
+  keyPointsMissed: string[],
+  studentReflection: string
+) {
+  const response = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6-20250514',
+    max_tokens: 800,
+    messages: [{
+      role: 'user',
+      content: `Ти си когнитивен коуч за студент по медицина. Студентът отговори грешно/непълно на въпрос и сега рефлектира ЗАЩО е забравил и с какво може да свърже материала.
+
+ВЪПРОС: ${question}
+
+ПРАВИЛЕН ОТГОВОР: ${correctAnswer}
+
+ПРОПУСНАТИ КЛЮЧОВИ ТОЧКИ:
+${keyPointsMissed.map(p => `- ${p}`).join('\n')}
+
+РЕФЛЕКСИЯ НА СТУДЕНТА: ${studentReflection}
+
+Анализирай рефлексията и помогни:
+1. Оцени дали студентът правилно идентифицира ЗАЩО е забравил
+2. Предложи 2-3 МНЕМОНИЧНИ ТЕХНИКИ или асоциации за запомняне на пропуснатото
+3. Предложи 1-2 КОНЦЕПТУАЛНИ ВРЪЗКИ с материал, който вероятно вече знае
+4. Даи кратък съвет за encoding (как да го запомни трайно)
+
+ВАЖНО:
+- Бъди КОНКРЕТЕН — посочи точни асоциации, не общи съвети
+- Ако студентът греши в анализа си, коригирай го тактично
+- Отговори на български
+- Бъди кратък и практичен
+
+Върни САМО валиден JSON:
+{
+  "feedback": "<кратка оценка на рефлексията — 1-2 изречения>",
+  "connectionTips": ["<конкретна връзка/асоциация 1>", "<конкретна връзка/асоциация 2>"],
+  "memoryTechnique": "<мнемонична техника или трик за запомняне>"
+}`
+    }]
+  });
+
+  const textContent = response.content.find(c => c.type === 'text');
+  const raw = textContent?.type === 'text' ? textContent.text.trim() : '{}';
+
+  // Sonnet pricing: $3/MTok input, $15/MTok output
+  const cost = (response.usage.input_tokens * 3 + response.usage.output_tokens * 15) / 1000000;
+
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : raw);
+    return NextResponse.json({
+      metaFeedback: parsed,
+      model: 'sonnet',
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cost: Math.round(cost * 1000000) / 1000000
+      }
+    });
+  } catch {
+    return NextResponse.json({
+      metaFeedback: {
+        feedback: raw,
+        connectionTips: [],
+        memoryTechnique: null
+      },
+      model: 'sonnet',
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cost: Math.round(cost * 1000000) / 1000000
+      }
+    });
+  }
 }
 
 // --- Exam Prep Handlers ---

@@ -1270,7 +1270,8 @@ export default function TopicDetailPage() {
             );
           })()}
 
-          {/* Specimens Section */}
+          {/* Specimens Section — only for subjects with specimens (anatomy, pathology, microbiology, histology) */}
+          {/анатомия|патоанатомия|микробиология|хистология|патология/i.test(subject.name) && (
           <div className="bg-gradient-to-br from-violet-900/20 to-purple-900/20 border border-violet-700/30 rounded-xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <Microscope size={16} className="text-violet-400" />
@@ -1329,6 +1330,7 @@ export default function TopicDetailPage() {
               </button>
             </div>
           </div>
+          )}
 
           {/* Unified Weak Concepts — manual + quiz-derived */}
           {(() => {

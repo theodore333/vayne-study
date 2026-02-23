@@ -490,6 +490,30 @@ function QuizContent() {
       const avgBloom = Math.round(
         multiTopics.reduce((sum, { topic: t }) => sum + (t.currentBloomLevel || 1), 0) / multiTopics.length
       );
+
+      // Collect previous questions from all topics in the mix
+      let mixPreviousQuestions: string[] = [];
+      if (mode !== 'drill_weakness') {
+        for (const { subject: s, topic: t } of multiTopics) {
+          const banks = (data.questionBanks || []).filter(b => b.subjectId === s.id);
+          for (const bank of banks) {
+            for (const q of bank.questions || []) {
+              if (q.linkedTopicIds?.includes(t.id)) {
+                mixPreviousQuestions.push(q.text);
+              }
+            }
+          }
+          if (t.wrongAnswers?.length) {
+            for (const wa of t.wrongAnswers) {
+              if (!mixPreviousQuestions.includes(wa.question)) {
+                mixPreviousQuestions.push(wa.question);
+              }
+            }
+          }
+        }
+        mixPreviousQuestions = mixPreviousQuestions.slice(-30);
+      }
+
       requestBody = {
         apiKey, material: combinedMaterial,
         topicName: `Mix: ${multiTopics.length} теми`,
@@ -498,7 +522,8 @@ function QuizContent() {
         examFormat: multiTopics[0]?.subject.examFormat,
         matchExamFormat, mode, questionCount,
         bloomLevel: mode === 'custom' ? customBloomLevel : null,
-        currentBloomLevel: avgBloom, isMultiTopic: true, topicsList: topicNames, model: selectedModel
+        currentBloomLevel: avgBloom, isMultiTopic: true, topicsList: topicNames, model: selectedModel,
+        previousQuestions: mixPreviousQuestions.length > 0 ? mixPreviousQuestions : undefined
       };
     } else {
       // Build overlap context if this topic has overlap analysis

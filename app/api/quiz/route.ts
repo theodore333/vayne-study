@@ -216,7 +216,9 @@ export async function POST(request: Request) {
       customQuestions,
       overlapContext: body.overlapContext,
       specimens: body.specimens,
-      previousQuestions
+      previousQuestions,
+      isMultiTopic: body.isMultiTopic,
+      topicsList: body.topicsList
     });
 
   } catch (error: unknown) {
@@ -970,9 +972,11 @@ async function handleStandardQuiz(
     };
     specimens?: string[];
     previousQuestions?: string[];
+    isMultiTopic?: boolean;
+    topicsList?: string;
   }
 ) {
-  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext, specimens, previousQuestions } = params;
+  const { material, topicName, subjectName, subjectType, examFormat, bloomLevel, mode, questionCount, matchExamFormat, model = 'sonnet', masteryContext, customQuestions, overlapContext, specimens, previousQuestions, isMultiTopic, topicsList } = params;
 
   // Get selected model config
   const modelConfig = MODEL_MAP[model] || MODEL_MAP.sonnet;
@@ -1134,6 +1138,15 @@ ${previousQuestions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
 PRIORITY: Focus on parts of the material NOT covered by the questions above. If all major concepts are covered, ask at HIGHER Bloom levels or test deeper understanding.`
     : '';
 
+  // Multi-topic balance instruction
+  const multiTopicSection = isMultiTopic && topicsList
+    ? `\n\nMULTI-TOPIC MIX QUIZ — EQUAL DISTRIBUTION REQUIRED:
+This quiz covers multiple topics: ${topicsList}.
+You MUST distribute questions EQUALLY across ALL topics. Each topic should get approximately the same number of questions.
+Do NOT favor the first topic or the longest material. Cycle through topics: Topic1-Q, Topic2-Q, Topic3-Q, Topic4-Q, Topic1-Q, etc.
+If generating ${questionCount || 'N'} questions across ${topicsList.split(',').length} topics, each topic should get ~${questionCount ? Math.round(questionCount / topicsList.split(',').length) : 'N/' + topicsList.split(',').length} questions.`
+    : '';
+
   // Build the prompt content
   const buildPrompt = (count: number | null, partLabel?: string) => `You are an expert medical educator creating a quiz for a Bulgarian medical student.
 
@@ -1149,6 +1162,7 @@ ${overlapSection}
 ${customQuestionsSection}
 ${specimensSection}
 ${previousQuestionsSection}
+${multiTopicSection}
 
 Generate ${count ? `EXACTLY ${count} questions. This is a STRICT requirement.` : targetQuestionCount}.
 ${partLabel ? `\nThis is ${partLabel} of a split generation. Cover DIFFERENT concepts from the other part.` : ''}

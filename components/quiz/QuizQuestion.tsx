@@ -553,22 +553,39 @@ export function QuizQuestion({
             </>)}
 
             {/* Standard result for MCQ, fill_blank */}
-            {(['multiple_choice', 'case_study', 'fill_blank'].includes(currentQuestion.type)) && (
-              <>
+            {(['multiple_choice', 'case_study', 'fill_blank'].includes(currentQuestion.type)) && (() => {
+              // After AI re-evaluation, override correctness if AI says score >= 0.7
+              const reEvalCorrect = openEval ? openEval.score >= 0.7 : isCorrect;
+              return <>
               <div className={`p-4 rounded-lg border ${
-                isCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
+                reEvalCorrect ? 'bg-green-500/10 border-green-500/30' : 'bg-orange-500/10 border-orange-500/30'
               }`}>
                 <div className="flex items-center gap-2 mb-2">
-                  {isCorrect ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-orange-400" />}
-                  <span className={`font-mono font-semibold ${isCorrect ? 'text-green-400' : 'text-orange-400'}`}>
-                    {isCorrect ? 'Правилно!' : 'Грешно'}
+                  {reEvalCorrect ? <CheckCircle size={18} className="text-green-400" /> : <XCircle size={18} className="text-orange-400" />}
+                  <span className={`font-mono font-semibold ${reEvalCorrect ? 'text-green-400' : 'text-orange-400'}`}>
+                    {reEvalCorrect ? 'Правилно!' : 'Грешно'}
                   </span>
                 </div>
                 <p className="text-sm text-slate-300 font-mono">{currentQuestion.explanation}</p>
               </div>
 
-              {/* Dispute button for fill_blank / MCQ when marked wrong */}
-              {!isCorrect && onReEvaluate && (
+              {/* AI re-evaluation result for fill_blank / MCQ */}
+              {openEval && (
+                <div className={`mt-2 p-3 rounded-lg border ${
+                  openEval.score >= 0.7 ? 'bg-green-500/10 border-green-500/30' : 'bg-amber-500/10 border-amber-500/30'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Sparkles size={14} className={openEval.score >= 0.7 ? 'text-green-400' : 'text-amber-400'} />
+                    <span className={`text-xs font-mono font-semibold ${openEval.score >= 0.7 ? 'text-green-400' : 'text-amber-400'}`}>
+                      AI преоценка: {Math.round(openEval.score * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-300 font-mono">{openEval.feedback}</p>
+                </div>
+              )}
+
+              {/* Dispute button for fill_blank / MCQ when marked wrong (hide after re-eval) */}
+              {!isCorrect && !openEval && onReEvaluate && (
                 <div className="mt-2">
                   {isEvaluatingOpen ? (
                     <div className="flex items-center gap-2 text-xs font-mono text-amber-400/70">
@@ -618,7 +635,7 @@ export function QuizQuestion({
                 </div>
               )}
               </>
-            )}
+            })()}
 
             {/* Deep learning flow for wrong/partial open answers */}
             {needsDeepFlow && !showModelAnswer && (

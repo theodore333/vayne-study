@@ -257,6 +257,7 @@ export interface ScheduleClass {
   subjectId: string;
   day: number;
   time: string;
+  endTime?: string;          // e.g. "12:00" — used to calculate busy time for daily plan
   type: ClassType;
   room: string;
   description?: string;     // Free-text topic/theme of the exercise

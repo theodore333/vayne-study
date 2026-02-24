@@ -10,6 +10,7 @@ interface EditClassData {
   subjectId: string;
   day: number;
   time: string;
+  endTime?: string;
   room: string;
   description?: string;
   topicIds?: string[];
@@ -36,6 +37,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
   const [subjectId, setSubjectId] = useState(editClass?.subjectId || activeSubjects[0]?.id || '');
   const [day, setDay] = useState(editClass?.day ?? defaultDay);
   const [time, setTime] = useState(editClass?.time || '09:00');
+  const [endTime, setEndTime] = useState(editClass?.endTime || '11:00');
   const [room, setRoom] = useState(editClass?.room || '');
   const [description, setDescription] = useState(editClass?.description || '');
   const [startDate, setStartDate] = useState(editClass?.startDate || '');
@@ -73,6 +75,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
       subjectId,
       day,
       time,
+      endTime: endTime || undefined,
       type: 'exercise' as const,
       room,
       description: description.trim() || undefined,
@@ -162,12 +165,21 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
               <Clock size={14} className="inline mr-2" />
               Час
             </label>
-            <input
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
+              />
+              <span className="text-slate-500 font-mono text-sm">—</span>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="flex-1 px-4 py-3 bg-slate-800/50 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-orange-500 font-mono"
+              />
+            </div>
           </div>
 
           {/* Room */}

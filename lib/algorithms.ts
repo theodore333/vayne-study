@@ -709,6 +709,23 @@ export function getTopicPriority(
   return Math.max(0, priority);
 }
 
+/** Calculate total busy minutes from today's scheduled classes */
+export function getScheduleBusyMinutes(schedule: ScheduleClass[]): number {
+  const todayDow = (new Date().getDay() + 6) % 7; // 0=Mon, 6=Sun
+  const classesToday = schedule.filter(c => c.day === todayDow);
+  let busyMinutes = 0;
+  for (const cls of classesToday) {
+    if (cls.endTime && cls.time) {
+      const [sh, sm] = cls.time.split(':').map(Number);
+      const [eh, em] = cls.endTime.split(':').map(Number);
+      busyMinutes += Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+    } else {
+      busyMinutes += 120; // default 2h if no endTime set
+    }
+  }
+  return busyMinutes;
+}
+
 export function calculateEffectiveHours(status: DailyStatus): number {
   // Legacy function - returns topic multiplier instead of hours
   // 1.0 = normal, 0.5 = reduced
@@ -799,7 +816,8 @@ export function isTrickleDayForSubject(subjectId: string, intervalDays: number):
 export function calculateDailyTopics(
   subjects: Subject[],
   status: DailyStatus,
-  studyGoals?: StudyGoals
+  studyGoals?: StudyGoals,
+  scheduleBusyMinutes?: number
 ): { total: number; bySubject: { subjectId: string; subjectName: string; topics: number; remaining: number; daysLeft: number; urgency: 'critical' | 'high' | 'medium' | 'low'; warning: string | null }[] } {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -901,7 +919,8 @@ export function calculateDailyTopics(
     const minutes = (isWeekend && studyGoals.useWeekendHours)
       ? studyGoals.weekendDailyMinutes
       : studyGoals.dailyMinutes;
-    const maxTopics = Math.floor(minutes / 25);
+    const effectiveMinutes = Math.max(60, minutes - (scheduleBusyMinutes || 0));
+    const maxTopics = Math.floor(effectiveMinutes / 25);
     if (total > maxTopics && maxTopics > 0) {
       const scale = maxTopics / total;
       bySubject.forEach(s => {
@@ -1415,7 +1434,8 @@ export function generateDailyPlan(
   const futureSubjectIds = new Set<string>(sessions.future.map(s => s.subject.id));
 
   // Get per-subject workload from calculateDailyTopics (for active session new material)
-  const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals);
+  const scheduleBusy = getScheduleBusyMinutes(schedule);
+  const workload = calculateDailyTopics(subjects, dailyStatus, studyGoals, scheduleBusy);
 
   const today = new Date();
   const tomorrow = new Date(today);

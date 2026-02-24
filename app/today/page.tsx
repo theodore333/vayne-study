@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Circle, Zap, BookOpen, Flame, Thermometer, Palmtree, Calendar, Layers, RefreshCw, Wand2, Umbrella, TrendingUp, AlertTriangle, Rocket, Brain, ChevronDown, ChevronRight, Repeat, MessageSquare, X, Send } from 'lucide-react';
 import { useApp } from '@/lib/context';
-import { generateDailyPlan, generatePrioritySummary, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, getTodayString, toLocalDateStr, getOverallOnTrackStatus } from '@/lib/algorithms';
+import { generateDailyPlan, generatePrioritySummary, detectCrunchMode, calculateDailyTopics, getTopicsNeedingFSRSReview, getTodayString, toLocalDateStr, getOverallOnTrackStatus, getScheduleBusyMinutes } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
 import DailyCheckinModal from '@/components/modals/DailyCheckinModal';
 import EditDailyPlanModal from '@/components/modals/EditDailyPlanModal';
@@ -277,10 +277,15 @@ export default function TodayPage() {
   const activePlan = customPlan || dailyPlan;
 
   // Soft cap: priority summary when plan is overloaded
+  // Reduce available study time based on today's scheduled classes
   const isWeekend = new Date().getDay() === 0 || new Date().getDay() === 6;
-  const availableMinutes = isWeekend && data.studyGoals.useWeekendHours
+  const baseMinutes = isWeekend && data.studyGoals.useWeekendHours
     ? (data.studyGoals.weekendDailyMinutes ?? data.studyGoals.dailyMinutes)
     : data.studyGoals.dailyMinutes;
+  const availableMinutes = useMemo(() => {
+    const busyMinutes = getScheduleBusyMinutes(data.schedule);
+    return Math.max(60, baseMinutes - busyMinutes); // minimum 1 hour
+  }, [data.schedule, baseMinutes]);
   const prioritySummary = useMemo(
     () => generatePrioritySummary(activePlan, availableMinutes),
     [activePlan, availableMinutes]

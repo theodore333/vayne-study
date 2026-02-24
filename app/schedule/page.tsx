@@ -443,7 +443,7 @@ export default function SchedulePage() {
                               <div className="flex items-center gap-1.5 mb-1">
                                 <span className="text-sm">{typeConfig.icon}</span>
                                 <span className="text-xs font-mono font-semibold" style={{ color: typeConfig.color }}>
-                                  {cls.time}
+                                  {cls.time}{cls.endTime ? `–${cls.endTime}` : ''}
                                 </span>
                               </div>
                               <div className="text-sm font-medium truncate" style={{ color: subject.color }}>

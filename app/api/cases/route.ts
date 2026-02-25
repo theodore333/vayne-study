@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 
 // Model configuration
 const MODEL_MAP = {
-  opus: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
+  opus: { id: 'claude-opus-4-6', inputCost: 5, outputCost: 25 },
   sonnet: { id: 'claude-sonnet-4-6', inputCost: 3, outputCost: 15 },
-  haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 0.8, outputCost: 4 }
+  haiku: { id: 'claude-haiku-4-5-20251001', inputCost: 1, outputCost: 5 }
 };
 
 // Repair truncated JSON by closing open brackets/braces
@@ -340,7 +340,7 @@ async function handleRevealExam(anthropic: Anthropic, body: {
 
   // Use Haiku for formatting (quick and cheap)
   const response = await anthropic.messages.create({
-    model: MODEL_MAP.opus.id,
+    model: MODEL_MAP.haiku.id,
     max_tokens: 800,
     messages: [{
       role: 'user',
@@ -358,8 +358,8 @@ ${findings.map(f => `${f.system}: ${f.finding} (${f.isNormal ? 'норма' : '�
   const textContent = response.content.find(c => c.type === 'text');
   const formattedFindings = textContent?.type === 'text' ? textContent.text.trim() : '';
 
-  const cost = (response.usage.input_tokens * MODEL_MAP.opus.inputCost +
-                response.usage.output_tokens * MODEL_MAP.opus.outputCost) / 1000000;
+  const cost = (response.usage.input_tokens * MODEL_MAP.haiku.inputCost +
+                response.usage.output_tokens * MODEL_MAP.haiku.outputCost) / 1000000;
 
   return NextResponse.json({
     findings,

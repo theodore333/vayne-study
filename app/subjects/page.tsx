@@ -280,38 +280,46 @@ function SubjectsContent() {
     }
   };
 
-  // Apply selected overlap links
+  // Apply selected overlap links — accumulate all links first, then apply once per topic
   const handleApplyOverlaps = () => {
+    // Build accumulated links map: topicId → { subjectId, newLinkIds[] }
+    const linksToAdd = new Map<string, { subjectId: string; existingLinks: string[]; newLinks: Set<string> }>();
+
     for (const idx of selectedOverlaps) {
       const pair = overlapPairs[idx];
       if (!pair) continue;
 
-      // Find the topics
-      let topicA = null as { topic: any; subjectId: string } | null;
-      let topicB = null as { topic: any; subjectId: string } | null;
+      // Find topics and their current links
+      let topicAInfo: { subjectId: string; linkedIds: string[] } | null = null;
+      let topicBInfo: { subjectId: string; linkedIds: string[] } | null = null;
 
       for (const s of data.subjects) {
         for (const t of s.topics) {
-          if (t.id === pair.topicA.id) topicA = { topic: t, subjectId: s.id };
-          if (t.id === pair.topicB.id) topicB = { topic: t, subjectId: s.id };
+          if (t.id === pair.topicA.id) topicAInfo = { subjectId: s.id, linkedIds: t.linkedTopicIds || [] };
+          if (t.id === pair.topicB.id) topicBInfo = { subjectId: s.id, linkedIds: t.linkedTopicIds || [] };
         }
       }
 
-      if (!topicA || !topicB) continue;
+      if (!topicAInfo || !topicBInfo) continue;
 
-      // Add bidirectional links
-      const aLinked = topicA.topic.linkedTopicIds || [];
-      if (!aLinked.includes(pair.topicB.id)) {
-        updateTopic(topicA.subjectId, pair.topicA.id, {
-          linkedTopicIds: [...aLinked, pair.topicB.id]
-        });
+      // Accumulate link A → B
+      if (!linksToAdd.has(pair.topicA.id)) {
+        linksToAdd.set(pair.topicA.id, { subjectId: topicAInfo.subjectId, existingLinks: topicAInfo.linkedIds, newLinks: new Set() });
       }
+      linksToAdd.get(pair.topicA.id)!.newLinks.add(pair.topicB.id);
 
-      const bLinked = topicB.topic.linkedTopicIds || [];
-      if (!bLinked.includes(pair.topicA.id)) {
-        updateTopic(topicB.subjectId, pair.topicB.id, {
-          linkedTopicIds: [...bLinked, pair.topicA.id]
-        });
+      // Accumulate link B → A
+      if (!linksToAdd.has(pair.topicB.id)) {
+        linksToAdd.set(pair.topicB.id, { subjectId: topicBInfo.subjectId, existingLinks: topicBInfo.linkedIds, newLinks: new Set() });
+      }
+      linksToAdd.get(pair.topicB.id)!.newLinks.add(pair.topicA.id);
+    }
+
+    // Apply all accumulated links in a single updateTopic call per topic
+    for (const [topicId, { subjectId, existingLinks, newLinks }] of linksToAdd) {
+      const merged = [...new Set([...existingLinks, ...newLinks])];
+      if (merged.length !== existingLinks.length) {
+        updateTopic(subjectId, topicId, { linkedTopicIds: merged });
       }
     }
 

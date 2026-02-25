@@ -33,6 +33,6 @@ export async function POST(request: Request) {
     if (message.includes('overloaded')) {
       return NextResponse.json({ error: 'API сървърът е претоварен - опитай отново' }, { status: 503 });
     }
-    return NextResponse.json({ error: 'Невалиден API ключ или проблем с връзката' }, { status: 401 });
+    return NextResponse.json({ error: 'Проблем с връзката към API — опитай отново' }, { status: 500 });
   }
 }

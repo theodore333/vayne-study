@@ -933,9 +933,9 @@ ${questions.map((q, i) => `${i + 1}. ${q.question}${q.answer ? `\n   Отгов�
 
 // Model mapping - Opus for all quiz modes (quality is priority)
 const MODEL_MAP: Record<string, { id: string; inputCost: number; outputCost: number }> = {
-  opus: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
-  sonnet: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 },
-  haiku: { id: 'claude-opus-4-6', inputCost: 15, outputCost: 75 }
+  opus: { id: 'claude-opus-4-6', inputCost: 5, outputCost: 25 },
+  sonnet: { id: 'claude-opus-4-6', inputCost: 5, outputCost: 25 },
+  haiku: { id: 'claude-opus-4-6', inputCost: 5, outputCost: 25 }
 };
 
 async function handleStandardQuiz(

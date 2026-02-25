@@ -300,8 +300,15 @@ export default function TodayPage() {
     );
   }
 
+  // Track tasks that triggered FSRS updates (cannot be un-checked)
+  const [fsrsLockedTasks, setFsrsLockedTasks] = useState<Set<string>>(new Set());
+
   const toggleTask = (taskId: string, task?: DailyTask) => {
     const wasCompleted = completedTasks.has(taskId);
+
+    // Prevent un-checking tasks that already triggered FSRS grade (irreversible)
+    if (wasCompleted && fsrsLockedTasks.has(taskId)) return;
+
     setCompletedTasks(prev => {
       const next = new Set(prev);
       next.has(taskId) ? next.delete(taskId) : next.add(taskId);
@@ -337,6 +344,8 @@ export default function TodayPage() {
             weight: 0.3
           });
         }
+        // Lock this task — FSRS grade is irreversible
+        setFsrsLockedTasks(prev => new Set([...prev, taskId]));
       }
     }
   };

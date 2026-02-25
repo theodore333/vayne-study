@@ -1041,16 +1041,16 @@ function QuizContent() {
       newAnswers[quizState.currentIndex] = answer;
     }
 
-    // Trim questions and answers to only answered ones
-    const answeredCount = newAnswers.filter(a => a !== null).length;
-    if (answeredCount === 0) {
-      // No answers given — just show results with empty state
-      setQuizState(prev => ({ ...prev, showResult: true }));
+    // Keep only questions that were actually answered (filter out nulls)
+    const answeredIndices = newAnswers.map((a, i) => a !== null ? i : -1).filter(i => i >= 0);
+    if (answeredIndices.length === 0) {
+      // No answers given — show results without saving grade
+      setQuizState(prev => ({ ...prev, questions: [], answers: [], showResult: true }));
       setShowEarlyStopConfirm(false);
       return;
     }
-    const trimmedQuestions = quizState.questions.slice(0, answeredCount);
-    const trimmedAnswers = newAnswers.slice(0, answeredCount);
+    const trimmedQuestions = answeredIndices.map(i => quizState.questions[i]);
+    const trimmedAnswers = answeredIndices.map(i => newAnswers[i]);
 
     setQuizState(prev => ({
       ...prev,
@@ -1558,12 +1558,15 @@ function QuizContent() {
         weight: quizWeight
       });
     } else if (isValidMultiQuiz) {
-      // Mix mode: save grade to EACH topic in the mix
+      // Mix mode: split score proportionally across topics (not full score to each)
+      const topicCount = multiTopics.length;
+      const perTopicQuestions = Math.round(quizState.questions.length / topicCount);
+      const perTopicCorrect = Math.round(score / topicCount);
       for (const { subject: s, topic: t } of multiTopics) {
         addGrade(s.id, t.id, grade, {
           bloomLevel: t.currentBloomLevel || 1,
-          questionsCount: quizState.questions.length,
-          correctAnswers: score,
+          questionsCount: perTopicQuestions,
+          correctAnswers: perTopicCorrect,
           weight: quizWeight
         });
       }
@@ -1696,11 +1699,37 @@ function QuizContent() {
         wrongAnswers: mergedWrongAnswers
       });
     } else if (isMultiMode && multiTopics.length > 0) {
-      // Mix mode: save wrong answers to each topic in the mix
+      // Mix mode: attribute wrong answers to matching topics by concept/name similarity
+      // Questions without a clear match go to the first topic only
       for (const { subject: s, topic: t } of multiTopics) {
-        const existingWA = t.wrongAnswers || [];
-        const merged = [...newWrongAnswers, ...existingWA].slice(0, 20);
-        updateTopic(s.id, t.id, { wrongAnswers: merged });
+        const topicNameLower = t.name.toLowerCase();
+        const topicWrongAnswers = newWrongAnswers.filter(wa => {
+          const conceptLower = (wa.concept || '').toLowerCase();
+          return conceptLower.includes(topicNameLower) || topicNameLower.includes(conceptLower);
+        });
+        if (topicWrongAnswers.length > 0) {
+          const existingWA = t.wrongAnswers || [];
+          const merged = [...topicWrongAnswers, ...existingWA].slice(0, 20);
+          updateTopic(s.id, t.id, { wrongAnswers: merged });
+        }
+      }
+      // Unmatched wrong answers go to first topic as fallback
+      const matchedConcepts = new Set<string>();
+      for (const { topic: t } of multiTopics) {
+        const topicNameLower = t.name.toLowerCase();
+        newWrongAnswers.forEach(wa => {
+          const conceptLower = (wa.concept || '').toLowerCase();
+          if (conceptLower.includes(topicNameLower) || topicNameLower.includes(conceptLower)) {
+            matchedConcepts.add(wa.concept || 'General');
+          }
+        });
+      }
+      const unmatchedWA = newWrongAnswers.filter(wa => !matchedConcepts.has(wa.concept || 'General'));
+      if (unmatchedWA.length > 0 && multiTopics.length > 0) {
+        const firstTopic = multiTopics[0];
+        const existingWA = firstTopic.topic.wrongAnswers || [];
+        const merged = [...unmatchedWA, ...existingWA].slice(0, 20);
+        updateTopic(firstTopic.subject.id, firstTopic.topic.id, { wrongAnswers: merged });
       }
     } else if (subjectId && topicId) {
       updateTopic(subjectId, topicId, {

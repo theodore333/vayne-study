@@ -34,7 +34,7 @@ function QuizContent() {
   const moduleId = searchParams.get('module');
   const initialMode = searchParams.get('mode') as QuizMode | null;
 
-  const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule, addQuestionBank, addQuestionsToBank } = useApp();
+  const { data, addGrade, addModuleGrade, incrementApiCalls, updateTopic, trackTopicRead, updateProjectModule, addQuestionBank, addQuestionsToBank, setQuizActive } = useApp();
 
   // Get project and module if this is a module quiz
   const project = projectId ? data.developmentProjects.find(p => p.id === projectId) : null;
@@ -308,20 +308,39 @@ function QuizContent() {
   // Prevent accidental navigation away during active quiz
   useEffect(() => {
     // Only warn if quiz is in progress (has questions and not showing results)
-    const isQuizActive = quizState.questions.length > 0 && !quizState.showResult;
+    const isActive = quizState.questions.length > 0 && !quizState.showResult;
 
-    if (!isQuizActive) return;
+    // Set global quiz guard so Sidebar can block navigation
+    setQuizActive(isActive);
+
+    if (!isActive) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      // Modern browsers require returnValue to be set
       e.returnValue = 'Имаш незавършен тест. Сигурен ли си, че искаш да напуснеш?';
       return e.returnValue;
     };
 
+    // Push a dummy history entry so back button triggers popstate instead of leaving
+    window.history.pushState({ quizGuard: true }, '');
+    const handlePopState = () => {
+      if (confirm('Имаш незавършен тест. Ако се върнеш назад, прогресът ти ще бъде загубен. Продължи?')) {
+        // User confirmed — allow back navigation
+        window.history.back();
+      } else {
+        // User cancelled — re-push the guard entry
+        window.history.pushState({ quizGuard: true }, '');
+      }
+    };
+
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [quizState.questions.length, quizState.showResult]);
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+      setQuizActive(false);
+    };
+  }, [quizState.questions.length, quizState.showResult, setQuizActive]);
 
   // Refs for keyboard handler to avoid stale closures (functions defined later)
   const handleAnswerRef = useRef<() => void>(() => {});

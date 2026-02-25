@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, BookOpen, Calendar, Target, TrendingUp, AlertTriangle,
   Clock, GraduationCap, Settings, FileQuestion, PanelLeftClose, PanelLeft,
@@ -12,6 +12,7 @@ import {
 import { useApp } from '@/lib/context';
 import { getDaysUntil, getSubjectProgress, getAlerts } from '@/lib/algorithms';
 import { STATUS_CONFIG } from '@/lib/constants';
+import ConfirmDialog from '@/components/modals/ConfirmDialog';
 
 const icons = {
   LayoutDashboard,
@@ -96,7 +97,25 @@ const NAV_GROUPS = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { data, isLoading, sidebarCollapsed, setSidebarCollapsed } = useApp();
+  const router = useRouter();
+  const { data, isLoading, sidebarCollapsed, setSidebarCollapsed, quizActive } = useApp();
+
+  // Quiz navigation guard
+  const [pendingNavHref, setPendingNavHref] = useState<string | null>(null);
+
+  const handleNavClick = useCallback((e: React.MouseEvent, href: string) => {
+    if (quizActive && pathname === '/quiz') {
+      e.preventDefault();
+      setPendingNavHref(href);
+    }
+  }, [quizActive, pathname]);
+
+  const confirmNavigation = useCallback(() => {
+    if (pendingNavHref) {
+      router.push(pendingNavHref);
+      setPendingNavHref(null);
+    }
+  }, [pendingNavHref, router]);
 
   // Track which groups are expanded
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
@@ -199,7 +218,7 @@ export default function Sidebar() {
       <aside className="fixed left-0 top-0 h-screen w-[60px] bg-[rgba(20,20,35,0.95)] border-r border-[#1e293b] flex flex-col z-40 transition-all duration-200">
         {/* Logo */}
         <div className="p-3 border-b border-[#1e293b] flex flex-col items-center">
-          <Link href="/" className="group">
+          <Link href="/" className="group" onClick={e => handleNavClick(e, '/')}>
             <span className="text-2xl group-hover:animate-pulse">⚡</span>
           </Link>
           <button
@@ -234,6 +253,7 @@ export default function Sidebar() {
                 <li key={group.id}>
                   <Link
                     href={group.href || group.children?.[0]?.href || '/'}
+                    onClick={e => handleNavClick(e, group.href || group.children?.[0]?.href || '/')}
                     className={`flex items-center justify-center p-2.5 rounded-lg transition-all ${
                       isActive
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
@@ -255,6 +275,7 @@ export default function Sidebar() {
             <Link
               key={subject.id}
               href={`/subjects?id=${subject.id}`}
+              onClick={e => handleNavClick(e, `/subjects?id=${subject.id}`)}
               className="block p-2 mb-1 rounded-lg hover:bg-slate-800/50 transition-all"
               title={subject.name}
             >
@@ -279,6 +300,16 @@ export default function Sidebar() {
             </div>
           </div>
         )}
+        <ConfirmDialog
+          isOpen={!!pendingNavHref}
+          onClose={() => setPendingNavHref(null)}
+          onConfirm={confirmNavigation}
+          title="Незавършен тест!"
+          message="Имаш активен тест. Ако напуснеш сега, прогресът ти ще бъде загубен. Сигурен ли си?"
+          confirmText="Напусни"
+          cancelText="Остани"
+          variant="warning"
+        />
       </aside>
     );
   }
@@ -288,7 +319,7 @@ export default function Sidebar() {
       {/* Logo */}
       <div className="p-5 border-b border-[#1e293b]">
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3 group">
+          <Link href="/" onClick={e => handleNavClick(e, '/')} className="flex items-center gap-3 group">
             <span className="text-2xl group-hover:animate-pulse">⚡</span>
             <span className="text-xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
               VAYNE
@@ -333,6 +364,7 @@ export default function Sidebar() {
                 <li key={group.id}>
                   <Link
                     href={group.href}
+                    onClick={e => handleNavClick(e, group.href!)}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all font-mono text-sm ${
                       isGroupActive
                         ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
@@ -374,6 +406,7 @@ export default function Sidebar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
+                            onClick={e => handleNavClick(e, item.href)}
                             className={`flex items-center gap-2 px-2 py-1.5 rounded-md transition-all font-mono text-xs ${
                               isActive
                                 ? 'bg-blue-500/20 text-blue-400'
@@ -410,6 +443,7 @@ export default function Sidebar() {
                 <li key={subject.id}>
                   <Link
                     href={`/subjects?id=${subject.id}`}
+                    onClick={e => handleNavClick(e, `/subjects?id=${subject.id}`)}
                     className="block p-2 rounded-lg bg-slate-800/20 hover:bg-slate-800/40 transition-all border border-transparent hover:border-slate-700/50"
                   >
                     <div className="flex items-center gap-2 mb-1.5">
@@ -468,6 +502,16 @@ export default function Sidebar() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        isOpen={!!pendingNavHref}
+        onClose={() => setPendingNavHref(null)}
+        onConfirm={confirmNavigation}
+        title="Незавършен тест!"
+        message="Имаш активен тест. Ако напуснеш сега, прогресът ти ще бъде загубен. Сигурен ли си?"
+        confirmText="Напусни"
+        cancelText="Остани"
+        variant="warning"
+      />
     </aside>
   );
 }

@@ -277,6 +277,8 @@ interface AppContextType {
   // UI State
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  quizActive: boolean;
+  setQuizActive: (active: boolean) => void;
 
   // Storage
   storageError: { error: StorageError; message?: string } | null;
@@ -449,6 +451,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [sidebarCollapsed, setSidebarCollapsedState] = useState(false);
+  const [quizActive, setQuizActive] = useState(false);
   const [storageError, setStorageError] = useState<{ error: StorageError; message?: string } | null>(null);
 
   // Refs for avoiding side effects inside setState updaters
@@ -1976,6 +1979,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     stopTimerWithNote,
     sidebarCollapsed,
     setSidebarCollapsed,
+    quizActive,
+    setQuizActive,
     storageError,
     clearStorageError,
     getStorageUsage,

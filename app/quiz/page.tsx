@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useMemo } from 'react';
+import { useState, useEffect, Suspense, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Brain, CheckCircle, RefreshCw, ArrowLeft, Settings, AlertCircle, Sparkles, Lightbulb, FileText, Copy, Plus } from 'lucide-react';
 import Link from 'next/link';
@@ -323,6 +323,10 @@ function QuizContent() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [quizState.questions.length, quizState.showResult]);
 
+  // Refs for keyboard handler to avoid stale closures (functions defined later)
+  const handleAnswerRef = useRef<() => void>(() => {});
+  const handleNextRef = useRef<() => void>(() => {});
+
   // Keyboard shortcuts for MCQ (1-4 or A-D to select, Enter to submit)
   useEffect(() => {
     if (quizState.questions.length === 0 || quizState.showResult) return;
@@ -353,13 +357,13 @@ function QuizContent() {
         // Enter to submit - call handleAnswer to record time + save answer
         if (e.key === 'Enter' && selectedAnswer) {
           e.preventDefault();
-          handleAnswer();
+          handleAnswerRef.current();
         }
       } else {
         // After showing explanation, Enter to go next - call handleNext to persist answer
         if (e.key === 'Enter') {
           e.preventDefault();
-          handleNext();
+          handleNextRef.current();
         }
       }
     };
@@ -1021,6 +1025,10 @@ function QuizContent() {
   const handleSkip = () => {
     handleNext();
   };
+
+  // Keep refs current for keyboard handler (avoids stale closures)
+  handleAnswerRef.current = handleAnswer;
+  handleNextRef.current = handleNext;
 
   // Early quiz termination - finish with answered questions only
   const handleEarlyStop = () => {
@@ -1783,8 +1791,11 @@ function QuizContent() {
     setIsSavingGrade(false);
   };
 
+  const [freeRecallGradeSaved, setFreeRecallGradeSaved] = useState(false);
+  const [mindMapGradeSaved, setMindMapGradeSaved] = useState(false);
+
   const handleSaveFreeRecallGrade = () => {
-    if (!freeRecallEvaluation) return;
+    if (!freeRecallEvaluation || freeRecallGradeSaved) return;
 
     // Support both topic and module quizzes
     if (isModuleQuiz && projectId && moduleId && module) {
@@ -1802,11 +1813,11 @@ function QuizContent() {
         weight: 1.0
       });
     }
-    // Note: Don't track as "read" here - free recall tests knowledge, not reading
+    setFreeRecallGradeSaved(true);
   };
 
   const handleSaveMindMapGrade = () => {
-    if (!mindMapEvaluation) return;
+    if (!mindMapEvaluation || mindMapGradeSaved) return;
     if (subjectId && topicId && topic) {
       addGrade(subjectId, topicId, mindMapEvaluation.grade, {
         bloomLevel: mindMapEvaluation.bloomLevel,
@@ -1815,6 +1826,7 @@ function QuizContent() {
         weight: 1.0
       });
     }
+    setMindMapGradeSaved(true);
   };
 
   const resetQuiz = () => {
@@ -1844,6 +1856,8 @@ function QuizContent() {
     setOpenEvaluations({}); // Reset AI evaluations
     setGradeSaved(false);
     setIsSavingGrade(false);
+    setFreeRecallGradeSaved(false);
+    setMindMapGradeSaved(false);
     setMistakeAnalysis(null);
     setIsAnalyzingMistakes(false);
     setClozeCards(null);

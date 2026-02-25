@@ -133,10 +133,12 @@ export default function ImportTopicsModal({ subjectId, subjectName, onClose }: P
     }
   };
 
-  // Cleanup previews on unmount
+  // Cleanup previews on unmount — use ref to avoid stale closure
+  const uploadedFilesRef = useRef(uploadedFiles);
+  uploadedFilesRef.current = uploadedFiles;
   useEffect(() => {
     return () => {
-      uploadedFiles.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
+      uploadedFilesRef.current.forEach(f => f.preview && URL.revokeObjectURL(f.preview));
     };
   }, []);
 

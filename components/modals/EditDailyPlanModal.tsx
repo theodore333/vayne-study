@@ -21,11 +21,11 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !isLoadingAiReview) onClose();
     };
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
+  }, [onClose, isLoadingAiReview]);
   const { data } = useApp();
   const activeSubjects = useMemo(
     () => data.subjects.filter(s => !s.archived && !s.deletedAt),
@@ -214,7 +214,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => !isLoadingAiReview && onClose()} />
       <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-2xl max-h-[85vh] shadow-2xl flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b] shrink-0">

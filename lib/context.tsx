@@ -804,13 +804,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [updateData]);
 
   const permanentlyDeleteSubject = useCallback((id: string) => {
-    updateData(prev => ({
-      ...prev,
-      subjects: prev.subjects.filter(s => s.id !== id),
-      schedule: prev.schedule.filter(c => c.subjectId !== id),
-      academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
-      questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
-    }));
+    updateData(prev => {
+      const deletedTopicIds = new Set(
+        prev.subjects.find(s => s.id === id)?.topics.map(t => t.id) || []
+      );
+      return {
+        ...prev,
+        subjects: prev.subjects.filter(s => s.id !== id).map(s => {
+          const hasLink = s.topics.some(t => t.linkedTopicIds?.some(lid => deletedTopicIds.has(lid)));
+          if (!hasLink) return s;
+          return { ...s, topics: s.topics.map(t => ({
+            ...t,
+            linkedTopicIds: t.linkedTopicIds?.filter(lid => !deletedTopicIds.has(lid)),
+          })) };
+        }),
+        schedule: prev.schedule.filter(c => c.subjectId !== id),
+        academicEvents: prev.academicEvents.filter(e => e.subjectId !== id),
+        questionBanks: prev.questionBanks.filter(b => b.subjectId !== id),
+      };
+    });
   }, [updateData]);
 
   const emptyTrash = useCallback(() => {
@@ -961,9 +973,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         date: new Date().toISOString(),
         bloomLevel: (quizMeta?.bloomLevel || currentBloom) as 1 | 2 | 3 | 4 | 5 | 6,
         score: score,
-        questionsCount: quizMeta?.questionsCount || 5,
-        correctAnswers: quizMeta?.correctAnswers || Math.round(score / 20),
-        weight: quizMeta?.weight || 1.0
+        questionsCount: quizMeta?.questionsCount ?? 5,
+        correctAnswers: quizMeta?.correctAnswers ?? Math.round(score / 20),
+        weight: quizMeta?.weight ?? 1.0
       };
 
       // Find linked topic IDs for cross-subject sync
@@ -1582,9 +1594,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         date: new Date().toISOString(),
         bloomLevel: (quizMeta?.bloomLevel || module.currentBloomLevel || 1) as BloomLevel,
         score,
-        questionsCount: quizMeta?.questionsCount || 5,
-        correctAnswers: quizMeta?.correctAnswers || Math.round(score / 20),
-        weight: quizMeta?.weight || 1.0
+        questionsCount: quizMeta?.questionsCount ?? 5,
+        correctAnswers: quizMeta?.correctAnswers ?? Math.round(score / 20),
+        weight: quizMeta?.weight ?? 1.0
       };
 
       // Update FSRS state

@@ -517,6 +517,7 @@ export function toLocalDateStr(isoOrDate: string | Date): string {
 export function getDaysSince(dateString: string | null): number {
   if (!dateString) return Infinity;
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return Infinity;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   date.setHours(0, 0, 0, 0);
@@ -526,6 +527,7 @@ export function getDaysSince(dateString: string | null): number {
 export function getDaysUntil(dateString: string | null): number {
   if (!dateString) return Infinity;
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return Infinity;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   date.setHours(0, 0, 0, 0);
@@ -1114,7 +1116,7 @@ export function calculatePredictedGrade(
       Math.min(1, coverageScore * 1.3) * 3 +
       (avgQuizGrade / 6) * 3 * gradedFraction;
     const vayneConsistency = Math.min(1, consistencyScore + 0.5);
-    const vayneDecay = decayRisk * 0.5;
+    const vayneDecay = decayRisk * 0.25; // Match actual vayne mode: halve decayRisk then × 0.5
     const vayneQBBonus = hasQuestionBankData ? Math.min(1, questionBankScore + 0.2) * 0.5 : 0;
     vaynePrediction = (vayneBoost * timeFactor) + (vayneConsistency * 0.5) - vayneDecay + vayneQBBonus + 2;
     vaynePrediction = Math.min(6, Math.max(2, vaynePrediction));

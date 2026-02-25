@@ -312,8 +312,11 @@ export function QuizQuestion({
                   {i < arr.length - 1 && (
                     showExplanation ? (
                       <span className={`inline-block px-3 py-1 mx-1 rounded border-b-2 font-semibold ${
-                        fillBlankAnswer.toLowerCase().trim() === currentQuestion.correctAnswer.toLowerCase().trim() ||
-                        (currentQuestion.acceptableAnswers || []).some(a => a.toLowerCase().trim() === fillBlankAnswer.toLowerCase().trim())
+                        (() => {
+                          const normalize = (s: string) => s.toLowerCase().trim().replace(/[-–—]/g, ' ').replace(/\s+/g, ' ');
+                          return normalize(fillBlankAnswer) === normalize(currentQuestion.correctAnswer) ||
+                            (currentQuestion.acceptableAnswers || []).some(a => normalize(a) === normalize(fillBlankAnswer));
+                        })()
                           ? 'text-green-400 border-green-500 bg-green-500/10'
                           : 'text-red-400 border-red-500 bg-red-500/10'
                       }`}>

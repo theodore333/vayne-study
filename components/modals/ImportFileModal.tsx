@@ -137,10 +137,12 @@ export default function ImportFileModal({ subjectId, subjectName, onClose }: Imp
     setExtractedTopics(null);
   };
 
-  // Cleanup previews on unmount
+  // Cleanup previews on unmount — use ref to avoid stale closure
+  const filePreviewsRef = useRef(filePreviews);
+  filePreviewsRef.current = filePreviews;
   useEffect(() => {
     return () => {
-      filePreviews.forEach(url => url && URL.revokeObjectURL(url));
+      filePreviewsRef.current.forEach(url => url && URL.revokeObjectURL(url));
     };
   }, []);
 

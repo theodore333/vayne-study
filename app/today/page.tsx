@@ -283,9 +283,9 @@ export default function TodayPage() {
     ? (data.studyGoals.weekendDailyMinutes ?? data.studyGoals.dailyMinutes)
     : data.studyGoals.dailyMinutes;
   const availableMinutes = useMemo(() => {
-    const busyMinutes = getScheduleBusyMinutes(data.schedule);
+    const busyMinutes = getScheduleBusyMinutes(activeSchedule);
     return Math.max(60, baseMinutes - busyMinutes); // minimum 1 hour
-  }, [data.schedule, baseMinutes]);
+  }, [activeSchedule, baseMinutes]);
   const prioritySummary = useMemo(
     () => generatePrioritySummary(activePlan, availableMinutes),
     [activePlan, availableMinutes]

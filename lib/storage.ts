@@ -470,7 +470,12 @@ export function migrateData(rawData: any): AppData {
     const lastReset = new Date(data.usageData.lastReset);
     const now = new Date();
     if (lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
-      data.usageData = { ...defaultUsageData, lastReset: today };
+      data.usageData = {
+        ...data.usageData,
+        dailyCalls: 0,
+        monthlyCost: 0,
+        lastReset: today
+      };
     }
   }
 

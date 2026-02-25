@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check, Brain, Loader2 } from 'lucide-react';
+import { X, Trash2, Plus, RotateCcw, ChevronDown, ChevronUp, Check, Brain, Loader2, RefreshCw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DailyTask, Topic, Subject, DevelopmentProject } from '@/lib/types';
 import { STATUS_CONFIG } from '@/lib/constants';
-import { generateId } from '@/lib/algorithms';
+import { generateId, getTopicsNeedingFSRSReview } from '@/lib/algorithms';
 
 interface Props {
   onClose: () => void;
@@ -44,6 +44,71 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
   const topicsInPlan = useMemo(() => {
     return new Set(editedPlan.flatMap(t => t.topics.map(topic => topic.id)));
   }, [editedPlan]);
+
+  // Compute FSRS due reviews (not already in plan)
+  const fsrsDueReviews = useMemo(() => {
+    return getTopicsNeedingFSRSReview(activeSubjects, Infinity, data.studyGoals)
+      .filter(item => !topicsInPlan.has(item.topic.id));
+  }, [activeSubjects, data.studyGoals, topicsInPlan]);
+
+  const fsrsDueTopicIds = useMemo(
+    () => new Set(fsrsDueReviews.map(r => r.topic.id)),
+    [fsrsDueReviews]
+  );
+
+  // Group due reviews by subject for quick-add
+  const dueBySubject = useMemo(() => {
+    const map = new Map<string, { subject: Subject; items: typeof fsrsDueReviews }>();
+    for (const item of fsrsDueReviews) {
+      const existing = map.get(item.subject.id);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        map.set(item.subject.id, { subject: item.subject, items: [item] });
+      }
+    }
+    return map;
+  }, [fsrsDueReviews]);
+
+  // Quick-add all due reviews for a subject
+  const handleAddReviewsForSubject = (subjectId: string) => {
+    const entry = dueBySubject.get(subjectId);
+    if (!entry) return;
+    const newTask: DailyTask = {
+      id: generateId(),
+      subjectId: entry.subject.id,
+      subjectName: entry.subject.name,
+      subjectColor: entry.subject.color,
+      type: 'normal',
+      typeLabel: '🔄 FSRS Преговор',
+      description: `${entry.items.length} теми за преговор`,
+      topics: entry.items.map(i => i.topic),
+      estimatedMinutes: entry.items.length * 20,
+      completed: false
+    };
+    setEditedPlan(prev => [...prev, newTask]);
+  };
+
+  // Quick-add ALL due reviews (all subjects)
+  const handleAddAllReviews = () => {
+    for (const [subjectId, entry] of dueBySubject) {
+      const alreadyHasReview = editedPlan.some(t => t.subjectId === subjectId && t.typeLabel === '🔄 FSRS Преговор');
+      if (alreadyHasReview) continue;
+      const newTask: DailyTask = {
+        id: generateId(),
+        subjectId: entry.subject.id,
+        subjectName: entry.subject.name,
+        subjectColor: entry.subject.color,
+        type: 'normal',
+        typeLabel: '🔄 FSRS Преговор',
+        description: `${entry.items.length} теми за преговор`,
+        topics: entry.items.map(i => i.topic),
+        estimatedMinutes: entry.items.length * 20,
+        completed: false
+      };
+      setEditedPlan(prev => [...prev, newTask]);
+    }
+  };
 
   // Handle removing a topic from a task
   const handleRemoveTopic = (taskId: string, topicId: string) => {
@@ -166,6 +231,45 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Due Reviews Banner */}
+          {fsrsDueReviews.length > 0 && (
+            <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/5">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <RefreshCw size={14} className="text-amber-400" />
+                  <span className="text-sm font-mono text-amber-300">
+                    {fsrsDueReviews.length} {fsrsDueReviews.length === 1 ? 'тема чака' : 'теми чакат'} преговор
+                  </span>
+                </div>
+                <button
+                  onClick={handleAddAllReviews}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 rounded-lg text-xs font-mono text-amber-300 transition-colors"
+                >
+                  <Plus size={12} />
+                  Добави всички
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(dueBySubject.entries()).map(([subjectId, entry]) => (
+                  <button
+                    key={subjectId}
+                    onClick={() => handleAddReviewsForSubject(subjectId)}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700 transition-colors group"
+                    title={`Добави ${entry.items.length} теми от ${entry.subject.name}`}
+                  >
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.subject.color }} />
+                    <span className="text-[11px] font-mono text-slate-300 group-hover:text-slate-100">
+                      {entry.subject.name}
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-400/80">
+                      {entry.items.length}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {editedPlan.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-slate-500 font-mono mb-2">{startEmpty ? 'Добави теми за днешния ден' : 'Няма задачи в плана'}</p>
@@ -314,6 +418,7 @@ export default function EditDailyPlanModal({ onClose, originalPlan, customPlan, 
               subjects={activeSubjects}
               projects={data.developmentProjects.filter(p => p.status === 'active')}
               topicsInPlan={topicsInPlan}
+              fsrsDueTopicIds={fsrsDueTopicIds}
               onAdd={handleAddTask}
               onAddProject={handleAddProjectTask}
               onCancel={() => setShowAddTask(false)}
@@ -371,6 +476,7 @@ function AddTaskPanel({
   subjects,
   projects,
   topicsInPlan,
+  fsrsDueTopicIds,
   onAdd,
   onAddProject,
   onCancel
@@ -378,6 +484,7 @@ function AddTaskPanel({
   subjects: Subject[];
   projects: DevelopmentProject[];
   topicsInPlan: Set<string>;
+  fsrsDueTopicIds: Set<string>;
   onAdd: (subject: Subject, topics: Topic[], description?: string) => void;
   onAddProject: (project: DevelopmentProject, description?: string) => void;
   onCancel: () => void;
@@ -397,11 +504,19 @@ function AddTaskPanel({
 
   const filteredTopics = useMemo(() => {
     const query = newTaskSearch.toLowerCase().trim();
-    if (!query) return availableTopics;
-    return availableTopics.filter(t =>
-      t.name.toLowerCase().includes(query) || String(t.number).includes(query)
-    );
-  }, [availableTopics, newTaskSearch]);
+    const filtered = query
+      ? availableTopics.filter(t =>
+          t.name.toLowerCase().includes(query) || String(t.number).includes(query)
+        )
+      : availableTopics;
+    // Sort: due for review first, then by topic number
+    return [...filtered].sort((a, b) => {
+      const aDue = fsrsDueTopicIds.has(a.id) ? 0 : 1;
+      const bDue = fsrsDueTopicIds.has(b.id) ? 0 : 1;
+      if (aDue !== bDue) return aDue - bDue;
+      return a.number - b.number;
+    });
+  }, [availableTopics, newTaskSearch, fsrsDueTopicIds]);
 
   const handleToggleTopic = (topicId: string) => {
     setSelectedTopics(prev => {
@@ -482,9 +597,32 @@ function AddTaskPanel({
           {/* Topic Selection */}
           {selectedSubject && (
             <div>
-              <label className="text-xs text-slate-500 font-mono block mb-2">
-                Избери теми ({selectedTopics.size} избрани):
-              </label>
+              {(() => {
+                const dueCount = availableTopics.filter(t => fsrsDueTopicIds.has(t.id)).length;
+                return (
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs text-slate-500 font-mono">
+                      Избери теми ({selectedTopics.size} избрани):
+                    </label>
+                    {dueCount > 0 && (
+                      <button
+                        onClick={() => {
+                          const dueIds = availableTopics.filter(t => fsrsDueTopicIds.has(t.id)).map(t => t.id);
+                          setSelectedTopics(prev => {
+                            const next = new Set(prev);
+                            for (const id of dueIds) next.add(id);
+                            return next;
+                          });
+                        }}
+                        className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded transition-colors"
+                      >
+                        <RefreshCw size={10} />
+                        Избери {dueCount} за преговор
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
               {availableTopics.length > 5 && (
                 <input
                   type="text"
@@ -505,26 +643,36 @@ function AddTaskPanel({
                     Няма теми за &ldquo;{newTaskSearch}&rdquo;
                   </div>
                 ) : (
-                  filteredTopics.map(topic => (
-                    <button
-                      key={topic.id}
-                      onClick={() => handleToggleTopic(topic.id)}
-                      className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left ${
-                        selectedTopics.has(topic.id)
-                          ? 'bg-cyan-500/20 border border-cyan-500/50'
-                          : 'bg-slate-800/30 hover:bg-slate-700/50 border border-transparent'
-                      }`}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
-                      />
-                      <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
-                        #{topic.number} {topic.name}
-                      </span>
-                      {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400 shrink-0" />}
-                    </button>
-                  ))
+                  filteredTopics.map(topic => {
+                    const isDue = fsrsDueTopicIds.has(topic.id);
+                    return (
+                      <button
+                        key={topic.id}
+                        onClick={() => handleToggleTopic(topic.id)}
+                        className={`w-full flex items-center gap-2 p-2 rounded-lg transition-colors text-left ${
+                          selectedTopics.has(topic.id)
+                            ? 'bg-cyan-500/20 border border-cyan-500/50'
+                            : isDue
+                            ? 'bg-amber-500/10 hover:bg-amber-500/15 border border-amber-500/20'
+                            : 'bg-slate-800/30 hover:bg-slate-700/50 border border-transparent'
+                        }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: STATUS_CONFIG[topic.status].text }}
+                        />
+                        <span className="flex-1 text-xs font-mono text-slate-300 leading-relaxed" title={`#${topic.number} ${topic.name}`}>
+                          #{topic.number} {topic.name}
+                        </span>
+                        {isDue && !selectedTopics.has(topic.id) && (
+                          <span className="text-[9px] font-mono text-amber-400 bg-amber-500/15 px-1.5 py-0.5 rounded shrink-0">
+                            🔄 due
+                          </span>
+                        )}
+                        {selectedTopics.has(topic.id) && <Check size={12} className="text-cyan-400 shrink-0" />}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>

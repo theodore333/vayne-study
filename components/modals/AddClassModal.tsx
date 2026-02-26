@@ -15,15 +15,19 @@ interface EditClassData {
   description?: string;
   topicIds?: string[];
   startDate?: string;
+  overrides?: Record<string, { time?: string; endTime?: string; room?: string; description?: string }>;
 }
 
 interface Props {
   onClose: () => void;
   defaultDay?: number;
   editClass?: EditClassData;
+  overrideDate?: string; // ISO date — if set, edit only this specific date
 }
 
-export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Props) {
+export default function AddClassModal({ onClose, defaultDay = 0, editClass, overrideDate }: Props) {
+  const isOverrideMode = !!overrideDate && !!editClass;
+
   // Close on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -32,14 +36,16 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [onClose]);
-  const { data, addClass, updateClass } = useApp();
+  const { data, addClass, updateClass, overrideClassForDate } = useApp();
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
+  // In override mode, init from existing override or base class values
+  const existingOverride = isOverrideMode ? (editClass as any)?.overrides?.[overrideDate!] : null;
   const [subjectId, setSubjectId] = useState(editClass?.subjectId || activeSubjects[0]?.id || '');
   const [day, setDay] = useState(editClass?.day ?? defaultDay);
-  const [time, setTime] = useState(editClass?.time || '09:00');
-  const [endTime, setEndTime] = useState(editClass?.endTime || '11:00');
-  const [room, setRoom] = useState(editClass?.room || '');
-  const [description, setDescription] = useState(editClass?.description || '');
+  const [time, setTime] = useState(existingOverride?.time || editClass?.time || '09:00');
+  const [endTime, setEndTime] = useState(existingOverride?.endTime || editClass?.endTime || '11:00');
+  const [room, setRoom] = useState(existingOverride?.room ?? editClass?.room ?? '');
+  const [description, setDescription] = useState(existingOverride?.description ?? editClass?.description ?? '');
   const [startDate, setStartDate] = useState(editClass?.startDate || '');
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set(editClass?.topicIds || []));
   const [showTopics, setShowTopics] = useState(!!(editClass?.topicIds && editClass.topicIds.length > 0));
@@ -79,6 +85,18 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (isOverrideMode) {
+      overrideClassForDate(editClass!.id, overrideDate!, {
+        time,
+        endTime: endTime || undefined,
+        room,
+        description: description.trim() || undefined,
+      });
+      onClose();
+      return;
+    }
+
     if (!subjectId) return;
 
     const classData = {
@@ -112,7 +130,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b]">
           <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2">
             <Calendar size={20} className="text-orange-400" />
-            {editClass ? 'Редактирай упражнение' : 'Добави упражнение'}
+            {isOverrideMode ? `Промяна за ${new Date(overrideDate! + 'T12:00').toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' })}` : editClass ? 'Редактирай упражнение' : 'Добави упражнение'}
           </h2>
           <button
             onClick={onClose}
@@ -124,7 +142,17 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Subject */}
+          {/* Override mode: show which class this is for */}
+          {isOverrideMode && selectedSubject && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: selectedSubject.color }} />
+              <span className="text-sm font-medium" style={{ color: selectedSubject.color }}>{selectedSubject.name}</span>
+              <span className="text-xs text-slate-500 font-mono">• само за тази дата</span>
+            </div>
+          )}
+
+          {/* Subject — hide in override mode */}
+          {!isOverrideMode && (
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
               Предмет
@@ -145,8 +173,10 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
               </select>
             )}
           </div>
+          )}
 
-          {/* Day */}
+          {/* Day — hide in override mode */}
+          {!isOverrideMode && (
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2 font-mono">
               Ден
@@ -168,6 +198,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
               ))}
             </div>
           </div>
+          )}
 
           {/* Time */}
           <div>
@@ -223,8 +254,8 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
             />
           </div>
 
-          {/* Topic Selection */}
-          {selectedSubject && subjectTopics.length > 0 && (
+          {/* Topic Selection — hide in override mode */}
+          {!isOverrideMode && selectedSubject && subjectTopics.length > 0 && (
             <div>
               <button
                 type="button"
@@ -275,8 +306,8 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
             </div>
           )}
 
-          {/* Preview */}
-          {selectedSubject && (
+          {/* Preview — hide in override mode */}
+          {!isOverrideMode && selectedSubject && (
             <div
               className="p-4 rounded-lg border"
               style={{
@@ -309,7 +340,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
             disabled={!subjectId}
             className="w-full py-3 bg-gradient-to-r from-orange-600 to-amber-600 text-white font-semibold rounded-lg hover:from-orange-500 hover:to-amber-500 transition-all font-mono disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {editClass ? 'Запази промените' : 'Добави упражнение'}
+            {isOverrideMode ? 'Запази за тази дата' : editClass ? 'Запази промените' : 'Добави упражнение'}
           </button>
         </form>
       </div>

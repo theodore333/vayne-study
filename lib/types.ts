@@ -252,6 +252,13 @@ export interface CrunchModeStatus {
   tips: string[];
 }
 
+export interface ScheduleClassOverride {
+  time?: string;
+  endTime?: string;
+  room?: string;
+  description?: string;
+}
+
 export interface ScheduleClass {
   id: string;
   subjectId: string;
@@ -264,6 +271,8 @@ export interface ScheduleClass {
   topicIds?: string[];       // Specific topics covered in this exercise
   startDate?: string;        // ISO date - when this class starts (ignore before this date)
   weeklyTopics?: Record<string, { description: string; topicIds?: string[] }>; // date → weekly topic info
+  cancelledDates?: string[];  // ISO dates where this class is cancelled (e.g. holidays)
+  overrides?: Record<string, ScheduleClassOverride>; // date → one-time changes for that date
 }
 
 export type ClassType = 'exercise';

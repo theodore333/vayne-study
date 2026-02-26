@@ -826,8 +826,13 @@ export default function TodayPage() {
       {/* Today's Schedule */}
       {(() => {
         const todayDayIndex = (new Date().getDay() + 6) % 7;
+        const todayDateStr = getTodayString();
         const todayClasses = activeSchedule
-          .filter(c => c.day === todayDayIndex)
+          .filter(c => c.day === todayDayIndex && !c.cancelledDates?.includes(todayDateStr))
+          .map(c => {
+            const override = c.overrides?.[todayDateStr];
+            return override ? { ...c, ...override } : c;
+          })
           .sort((a, b) => a.time.localeCompare(b.time));
         if (todayClasses.length === 0) return null;
         return (

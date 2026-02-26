@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target, MapPin, ChevronLeft, ChevronRight, FileText } from 'lucide-react';
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { Plus, Trash2, Calendar, Edit2, AlertTriangle, TrendingUp, Target, MapPin, ChevronLeft, ChevronRight, FileText, MoreVertical, XCircle, RotateCcw } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { DAYS, DAYS_SHORT, CLASS_TYPES, ACADEMIC_EVENT_CONFIG } from '@/lib/constants';
 import AddClassModal from '@/components/modals/AddClassModal';
@@ -9,13 +9,28 @@ import AddAcademicEventModal from '@/components/modals/AddAcademicEventModal';
 import ImportProgramModal from '@/components/modals/ImportProgramModal';
 
 export default function SchedulePage() {
-  const { data, isLoading, deleteClass, deleteAcademicEvent, updateAcademicPeriod } = useApp();
+  const { data, isLoading, deleteClass, cancelClassForDate, restoreClassForDate, overrideClassForDate, deleteAcademicEvent, updateAcademicPeriod } = useApp();
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showImportProgram, setShowImportProgram] = useState(false);
   const [selectedDay, setSelectedDay] = useState(0);
   const [editingClass, setEditingClass] = useState<typeof data.schedule[0] | null>(null);
+  const [overrideDate, setOverrideDate] = useState<string | null>(null); // date for single-week edit
   const [weekOffset, setWeekOffset] = useState(0); // 0 = current week
+  const [activeMenu, setActiveMenu] = useState<string | null>(null); // classId for open dropdown
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!activeMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setActiveMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [activeMenu]);
 
   // Determine which days to show (Mon-Fri, or include weekends if they have classes)
   const visibleDays = useMemo(() => {
@@ -408,31 +423,101 @@ export default function SchedulePage() {
                     const typeConfig = CLASS_TYPES[cls.type];
                     if (!subject) return null;
 
+                    const isCancelled = cls.cancelledDates?.includes(dayDate);
+                    const override = cls.overrides?.[dayDate];
+                    const effectiveTime = override?.time || cls.time;
+                    const effectiveEndTime = override?.endTime || cls.endTime;
+                    const effectiveRoom = override?.room ?? cls.room;
+                    const effectiveDescription = override?.description ?? cls.description;
+                    const menuId = `${cls.id}-${dayDate}`;
+
+                    // Cancelled class — show dimmed with restore button
+                    if (isCancelled) {
+                      return (
+                        <div
+                          key={cls.id}
+                          className="p-2.5 rounded-lg border opacity-30 relative"
+                          style={{
+                            backgroundColor: typeConfig.color + "15",
+                            borderColor: typeConfig.color + "40"
+                          }}
+                        >
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-sm">{typeConfig.icon}</span>
+                            <span className="text-xs font-mono font-semibold line-through" style={{ color: typeConfig.color }}>
+                              {cls.time}{cls.endTime ? `–${cls.endTime}` : ''}
+                            </span>
+                          </div>
+                          <div className="text-sm font-medium truncate line-through" style={{ color: subject.color }}>
+                            {subject.name}
+                          </div>
+                          <div className="text-[10px] text-amber-400 font-mono mt-1">Отменен</div>
+                          <button
+                            onClick={() => restoreClassForDate(cls.id, dayDate)}
+                            className="absolute top-1 right-1 p-1 rounded bg-green-500/10 hover:bg-green-500/30 transition-colors"
+                            title="Възстанови за тази дата"
+                          >
+                            <RotateCcw size={12} className="text-green-400" />
+                          </button>
+                        </div>
+                      );
+                    }
+
                     return (
                       <div
                         key={cls.id}
                         className="p-2.5 rounded-lg border group relative"
                         style={{
                           backgroundColor: typeConfig.color + "15",
-                          borderColor: typeConfig.color + "40"
+                          borderColor: override ? '#eab30840' : typeConfig.color + "40"
                         }}
                       >
-                        <div className="absolute top-1 right-1 flex gap-0.5">
+                        {/* Action menu button */}
+                        <div className="absolute top-1 right-1" ref={activeMenu === menuId ? menuRef : undefined}>
                           <button
-                            onClick={() => setEditingClass(cls)}
-                            className="p-1 rounded bg-blue-500/10 hover:bg-blue-500/30 transition-colors"
-                            title="Редактирай"
+                            onClick={() => setActiveMenu(activeMenu === menuId ? null : menuId)}
+                            className="p-1 rounded bg-slate-500/10 hover:bg-slate-500/30 transition-colors"
+                            title="Опции"
                           >
-                            <Edit2 size={12} className="text-blue-400" />
+                            <MoreVertical size={12} className="text-slate-400" />
                           </button>
-                          <button
-                            onClick={() => deleteClass(cls.id)}
-                            className="p-1 rounded bg-red-500/10 hover:bg-red-500/30 transition-colors"
-                            title="Изтрий"
-                          >
-                            <Trash2 size={12} className="text-red-400" />
-                          </button>
+                          {activeMenu === menuId && (
+                            <div className="absolute right-0 top-7 z-20 w-44 bg-[rgba(20,20,35,0.98)] border border-slate-700 rounded-lg shadow-xl py-1 text-xs font-mono">
+                              <button
+                                onClick={() => { setOverrideDate(dayDate); setEditingClass(cls); setActiveMenu(null); }}
+                                className="w-full text-left px-3 py-2 hover:bg-blue-500/10 text-blue-400 transition-colors"
+                              >
+                                <Edit2 size={11} className="inline mr-2" />Редактирай тази седмица
+                              </button>
+                              <button
+                                onClick={() => { setOverrideDate(null); setEditingClass(cls); setActiveMenu(null); }}
+                                className="w-full text-left px-3 py-2 hover:bg-slate-500/10 text-slate-300 transition-colors"
+                              >
+                                <Edit2 size={11} className="inline mr-2" />Редактирай всички
+                              </button>
+                              <div className="border-t border-slate-700 my-1" />
+                              <button
+                                onClick={() => { cancelClassForDate(cls.id, dayDate); setActiveMenu(null); }}
+                                className="w-full text-left px-3 py-2 hover:bg-amber-500/10 text-amber-400 transition-colors"
+                              >
+                                <XCircle size={11} className="inline mr-2" />Отмени тази седмица
+                              </button>
+                              <button
+                                onClick={() => { deleteClass(cls.id); setActiveMenu(null); }}
+                                className="w-full text-left px-3 py-2 hover:bg-red-500/10 text-red-400 transition-colors"
+                              >
+                                <Trash2 size={11} className="inline mr-2" />Изтрий завинаги
+                              </button>
+                            </div>
+                          )}
                         </div>
+                        {/* Override badge */}
+                        {override && (
+                          <div className="text-[9px] text-amber-400 font-mono mb-1 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                            Променен
+                          </div>
+                        )}
                         {(() => {
                           const weeklyInfo = cls.weeklyTopics?.[dayDate];
                           const linkedTopics = weeklyInfo?.topicIds
@@ -443,16 +528,16 @@ export default function SchedulePage() {
                               <div className="flex items-center gap-1.5 mb-1">
                                 <span className="text-sm">{typeConfig.icon}</span>
                                 <span className="text-xs font-mono font-semibold" style={{ color: typeConfig.color }}>
-                                  {cls.time}{cls.endTime ? `–${cls.endTime}` : ''}
+                                  {effectiveTime}{effectiveEndTime ? `–${effectiveEndTime}` : ''}
                                 </span>
                               </div>
                               <div className="text-sm font-medium truncate" style={{ color: subject.color }}>
                                 {subject.name}
                               </div>
-                              {cls.room && (
+                              {effectiveRoom && (
                                 <div className="flex items-center gap-1 mt-1 text-slate-500">
                                   <MapPin size={10} />
-                                  <span className="text-[10px] font-mono">{cls.room}</span>
+                                  <span className="text-[10px] font-mono">{effectiveRoom}</span>
                                 </div>
                               )}
                               {weeklyInfo ? (
@@ -473,9 +558,9 @@ export default function SchedulePage() {
                                     </div>
                                   )}
                                 </>
-                              ) : cls.description ? (
-                                <div className="text-[10px] text-slate-400 font-mono mt-1 truncate" title={cls.description}>
-                                  {cls.description}
+                              ) : effectiveDescription ? (
+                                <div className="text-[10px] text-slate-400 font-mono mt-1 truncate" title={effectiveDescription}>
+                                  {effectiveDescription}
                                 </div>
                               ) : null}
                               {cls.topicIds && cls.topicIds.length > 0 && !weeklyInfo && (
@@ -821,7 +906,7 @@ export default function SchedulePage() {
       )}
 
       {showAddClass && <AddClassModal onClose={() => setShowAddClass(false)} defaultDay={selectedDay} />}
-      {editingClass && <AddClassModal onClose={() => setEditingClass(null)} editClass={editingClass} />}
+      {editingClass && <AddClassModal onClose={() => { setEditingClass(null); setOverrideDate(null); }} editClass={editingClass} overrideDate={overrideDate || undefined} />}
       {showAddEvent && <AddAcademicEventModal onClose={() => setShowAddEvent(false)} />}
       {showImportProgram && <ImportProgramModal onClose={() => setShowImportProgram(false)} />}
     </div>

@@ -714,12 +714,16 @@ export function getTopicPriority(
 /** Calculate total busy minutes from today's scheduled classes */
 export function getScheduleBusyMinutes(schedule: ScheduleClass[]): number {
   const todayDow = (new Date().getDay() + 6) % 7; // 0=Mon, 6=Sun
-  const classesToday = schedule.filter(c => c.day === todayDow);
+  const todayStr = getTodayString();
+  const classesToday = schedule.filter(c => c.day === todayDow && !c.cancelledDates?.includes(todayStr));
   let busyMinutes = 0;
   for (const cls of classesToday) {
-    if (cls.endTime && cls.time) {
-      const [sh, sm] = cls.time.split(':').map(Number);
-      const [eh, em] = cls.endTime.split(':').map(Number);
+    const override = cls.overrides?.[todayStr];
+    const time = override?.time || cls.time;
+    const endTime = override?.endTime || cls.endTime;
+    if (endTime && time) {
+      const [sh, sm] = time.split(':').map(Number);
+      const [eh, em] = endTime.split(':').map(Number);
       busyMinutes += Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
     } else {
       busyMinutes += 120; // default 2h if no endTime set
@@ -1443,6 +1447,7 @@ export function generateDailyPlan(
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDay = (tomorrow.getDay() + 6) % 7; // Convert to Mon=0
+  const tomorrowStr = toLocalDateStr(tomorrow);
 
   // Create a map of subject workload for reference
   const subjectWorkload = new Map(workload.bySubject.map(s => [s.subjectId, s]));
@@ -1483,6 +1488,7 @@ export function generateDailyPlan(
   // 1. CRITICAL: Exercises tomorrow - take topics from that subject's workload
   const tomorrowExercises = schedule.filter(c => {
     if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (c.cancelledDates?.includes(tomorrowStr)) return false; // cancelled for this date
     if (!semesterStarted && !c.startDate) return false; // semester not started, no individual override
     if (c.startDate && new Date(c.startDate) > tomorrow) return false;
     return true;
@@ -2655,6 +2661,7 @@ export function getAlerts(
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDay = (tomorrow.getDay() + 6) % 7;
+  const tomorrowStr2 = toLocalDateStr(tomorrow);
 
   // Check if semester has started
   const semStart = academicPeriod?.semesterStart ? new Date(academicPeriod.semesterStart) : null;
@@ -2663,6 +2670,7 @@ export function getAlerts(
   // Check for exercises tomorrow
   const tomorrowExercises = schedule.filter(c => {
     if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
+    if (c.cancelledDates?.includes(tomorrowStr2)) return false; // cancelled for this date
     if (!semesterStarted && !c.startDate) return false; // semester not started
     if (c.startDate && new Date(c.startDate) > tomorrow) return false;
     return true;

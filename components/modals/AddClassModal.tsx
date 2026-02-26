@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { X, Calendar, Clock, MapPin, CheckSquare, Square } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, CheckSquare, Square, Search } from 'lucide-react';
 import { useApp } from '@/lib/context';
 import { CLASS_TYPES, DAYS } from '@/lib/constants';
 
@@ -43,6 +43,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
   const [startDate, setStartDate] = useState(editClass?.startDate || '');
   const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(new Set(editClass?.topicIds || []));
   const [showTopics, setShowTopics] = useState(!!(editClass?.topicIds && editClass.topicIds.length > 0));
+  const [topicSearch, setTopicSearch] = useState('');
 
   const selectedSubject = data.subjects.find(s => s.id === subjectId);
   const exerciseConfig = CLASS_TYPES.exercise;
@@ -52,10 +53,19 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
     return selectedSubject.topics;
   }, [selectedSubject]);
 
+  const filteredTopics = useMemo(() => {
+    if (!topicSearch.trim()) return subjectTopics;
+    const q = topicSearch.toLowerCase();
+    return subjectTopics.filter(t =>
+      t.name.toLowerCase().includes(q) || String(t.number).includes(q)
+    );
+  }, [subjectTopics, topicSearch]);
+
   const handleSubjectChange = (newId: string) => {
     setSubjectId(newId);
     setSelectedTopicIds(new Set());
     setShowTopics(false);
+    setTopicSearch('');
   };
 
   const toggleTopic = (topicId: string) => {
@@ -97,7 +107,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl">
+      <div className="relative bg-[rgba(20,20,35,0.98)] border border-[#1e293b] rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#1e293b]">
           <h2 className="text-lg font-semibold text-slate-100 font-mono flex items-center gap-2">
@@ -224,28 +234,42 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass }: Pr
                 <span>{showTopics ? '▾' : '▸'} Конкретни теми ({selectedTopicIds.size > 0 ? `${selectedTopicIds.size} избрани` : 'незадължително'})</span>
               </button>
               {showTopics && (
-                <div className="border border-slate-700 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-                  {subjectTopics.map(topic => {
+                <div className="border border-slate-700 rounded-lg overflow-hidden">
+                  {subjectTopics.length > 8 && (
+                    <div className="flex items-center gap-2 px-3 py-2 border-b border-slate-700 bg-slate-800/30">
+                      <Search size={13} className="text-slate-500 shrink-0" />
+                      <input
+                        type="text"
+                        value={topicSearch}
+                        onChange={e => setTopicSearch(e.target.value)}
+                        placeholder="Търси тема..."
+                        className="w-full bg-transparent text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none font-mono"
+                      />
+                    </div>
+                  )}
+                  <div className="max-h-60 overflow-y-auto">
+                  {filteredTopics.map(topic => {
                     const isSelected = selectedTopicIds.has(topic.id);
                     return (
                       <button
                         key={topic.id}
                         type="button"
                         onClick={() => toggleTopic(topic.id)}
-                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs font-mono transition-colors ${
+                        className={`w-full flex items-start gap-2 px-3 py-2 text-left text-xs font-mono transition-colors ${
                           isSelected
                             ? 'bg-orange-500/10 text-orange-300'
                             : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300'
                         }`}
                       >
                         {isSelected
-                          ? <CheckSquare size={13} className="shrink-0 text-orange-400" />
-                          : <Square size={13} className="shrink-0 text-slate-600" />
+                          ? <CheckSquare size={13} className="shrink-0 mt-0.5 text-orange-400" />
+                          : <Square size={13} className="shrink-0 mt-0.5 text-slate-600" />
                         }
-                        <span className="truncate">{topic.number}. {topic.name}</span>
+                        <span>{topic.number}. {topic.name}</span>
                       </button>
                     );
                   })}
+                  </div>
                 </div>
               )}
             </div>

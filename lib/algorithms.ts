@@ -2661,7 +2661,7 @@ export function getAlerts(
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowDay = (tomorrow.getDay() + 6) % 7;
-  const tomorrowStr2 = toLocalDateStr(tomorrow);
+  const tomorrowStr = toLocalDateStr(tomorrow);
 
   // Check if semester has started
   const semStart = academicPeriod?.semesterStart ? new Date(academicPeriod.semesterStart) : null;
@@ -2670,7 +2670,7 @@ export function getAlerts(
   // Check for exercises tomorrow
   const tomorrowExercises = schedule.filter(c => {
     if (c.day !== tomorrowDay || !CLASS_TYPES[c.type].prepRequired) return false;
-    if (c.cancelledDates?.includes(tomorrowStr2)) return false; // cancelled for this date
+    if (c.cancelledDates?.includes(tomorrowStr)) return false; // cancelled for this date
     if (!semesterStarted && !c.startDate) return false; // semester not started
     if (c.startDate && new Date(c.startDate) > tomorrow) return false;
     return true;

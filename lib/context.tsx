@@ -239,6 +239,7 @@ interface AppContextType {
   cancelClassForDate: (id: string, date: string) => void;
   restoreClassForDate: (id: string, date: string) => void;
   overrideClassForDate: (id: string, date: string, overrides: ScheduleClassOverride) => void;
+  removeOverrideForDate: (id: string, date: string) => void;
 
   // Daily status
   updateDailyStatus: (status: Partial<DailyStatus>) => void;
@@ -1134,7 +1135,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateData(prev => ({
       ...prev,
       schedule: prev.schedule.map(c => c.id === id
-        ? { ...c, cancelledDates: [...(c.cancelledDates || []), date] }
+        ? { ...c, cancelledDates: (c.cancelledDates || []).includes(date) ? c.cancelledDates : [...(c.cancelledDates || []), date] }
         : c)
     }));
   }, [updateData]);
@@ -1154,6 +1155,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       schedule: prev.schedule.map(c => c.id === id
         ? { ...c, overrides: { ...(c.overrides || {}), [date]: overrideData } }
         : c)
+    }));
+  }, [updateData]);
+
+  const removeOverrideForDate = useCallback((id: string, date: string) => {
+    updateData(prev => ({
+      ...prev,
+      schedule: prev.schedule.map(c => {
+        if (c.id !== id || !c.overrides?.[date]) return c;
+        const { [date]: _, ...rest } = c.overrides;
+        return { ...c, overrides: Object.keys(rest).length > 0 ? rest : undefined };
+      })
     }));
   }, [updateData]);
 
@@ -1987,6 +1999,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     cancelClassForDate,
     restoreClassForDate,
     overrideClassForDate,
+    removeOverrideForDate,
     updateDailyStatus,
     startTimer,
     stopTimer,

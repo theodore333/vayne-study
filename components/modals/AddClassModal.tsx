@@ -39,7 +39,7 @@ export default function AddClassModal({ onClose, defaultDay = 0, editClass, over
   const { data, addClass, updateClass, overrideClassForDate } = useApp();
   const activeSubjects = data.subjects.filter(s => !s.archived && !s.deletedAt);
   // In override mode, init from existing override or base class values
-  const existingOverride = isOverrideMode ? (editClass as any)?.overrides?.[overrideDate!] : null;
+  const existingOverride = isOverrideMode ? editClass?.overrides?.[overrideDate!] : null;
   const [subjectId, setSubjectId] = useState(editClass?.subjectId || activeSubjects[0]?.id || '');
   const [day, setDay] = useState(editClass?.day ?? defaultDay);
   const [time, setTime] = useState(existingOverride?.time || editClass?.time || '09:00');

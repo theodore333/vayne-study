@@ -9,7 +9,7 @@ import AddAcademicEventModal from '@/components/modals/AddAcademicEventModal';
 import ImportProgramModal from '@/components/modals/ImportProgramModal';
 
 export default function SchedulePage() {
-  const { data, isLoading, deleteClass, cancelClassForDate, restoreClassForDate, overrideClassForDate, deleteAcademicEvent, updateAcademicPeriod } = useApp();
+  const { data, isLoading, deleteClass, cancelClassForDate, restoreClassForDate, overrideClassForDate, removeOverrideForDate, deleteAcademicEvent, updateAcademicPeriod } = useApp();
   const [showAddClass, setShowAddClass] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [showImportProgram, setShowImportProgram] = useState(false);
@@ -115,14 +115,7 @@ export default function SchedulePage() {
     return { exams, clusters };
   }, [data.subjects]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-pulse text-slate-500 font-mono">Зареждане...</div>
-      </div>
-    );
-  }
-
+  // All hooks MUST be before any conditional return (Rules of Hooks)
   const today = (new Date().getDay() + 6) % 7;
 
   // Calculate the Monday of the selected week
@@ -135,30 +128,30 @@ export default function SchedulePage() {
     return monday;
   }, [weekOffset]);
 
-  // Get the date for a specific day index (0=Mon..6=Sun) in the selected week
+  // Helper: get date string for a day index in the selected week
   const getDateForDay = (dayIndex: number): string => {
     const d = new Date(selectedWeekMonday);
     d.setDate(d.getDate() + dayIndex);
-    // Use local date (NOT toISOString which converts to UTC and loses a day in UTC+2)
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
-  // Get academic events for a specific date
+  // Get academic events for the selected week
   const eventsForWeek = useMemo(() => {
     const weekDates = new Set<string>();
+    const mon = selectedWeekMonday;
     for (let i = 0; i < 7; i++) {
-      weekDates.add(getDateForDay(i));
+      const d = new Date(mon);
+      d.setDate(d.getDate() + i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      weekDates.add(`${y}-${m}-${dd}`);
     }
     return data.academicEvents.filter(e => weekDates.has(e.date) && e.type !== 'seminar');
   }, [data.academicEvents, selectedWeekMonday]);
-
-  const getEventsForDay = (dayIndex: number) => {
-    const dateStr = getDateForDay(dayIndex);
-    return eventsForWeek.filter(e => e.date === dateStr);
-  };
 
   // Week label
   const weekLabel = useMemo(() => {
@@ -168,6 +161,19 @@ export default function SchedulePage() {
     const fmt = (d: Date) => d.toLocaleDateString('bg-BG', { day: 'numeric', month: 'short' });
     return `${fmt(start)} — ${fmt(end)}`;
   }, [selectedWeekMonday]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-pulse text-slate-500 font-mono">Зареждане...</div>
+      </div>
+    );
+  }
+
+  const getEventsForDay = (dayIndex: number) => {
+    const dateStr = getDateForDay(dayIndex);
+    return eventsForWeek.filter(e => e.date === dateStr);
+  };
 
   // Check if a date falls in academic period
   const isInAcademicPeriod = (dateStr: string): boolean => {
@@ -221,16 +227,18 @@ export default function SchedulePage() {
         const ap = data.academicPeriod;
         const todayDate = new Date();
         todayDate.setHours(0, 0, 0, 0);
+        // Parse ISO date strings as local dates (not UTC) to avoid off-by-one errors
+        const parseLocal = (iso: string) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 
         let currentPeriod = '';
-        if (ap.sessionStart && ap.sessionEnd && todayDate >= new Date(ap.sessionStart) && todayDate <= new Date(ap.sessionEnd)) {
+        if (ap.sessionStart && ap.sessionEnd && todayDate >= parseLocal(ap.sessionStart) && todayDate <= parseLocal(ap.sessionEnd)) {
           currentPeriod = 'Сесия';
-        } else if (ap.cycleStart && ap.cycleEnd && todayDate >= new Date(ap.cycleStart) && todayDate <= new Date(ap.cycleEnd)) {
+        } else if (ap.cycleStart && ap.cycleEnd && todayDate >= parseLocal(ap.cycleStart) && todayDate <= parseLocal(ap.cycleEnd)) {
           currentPeriod = 'Цикъл';
-        } else if (ap.semesterStart && ap.semesterEnd && todayDate >= new Date(ap.semesterStart) && todayDate <= new Date(ap.semesterEnd)) {
+        } else if (ap.semesterStart && ap.semesterEnd && todayDate >= parseLocal(ap.semesterStart) && todayDate <= parseLocal(ap.semesterEnd)) {
           currentPeriod = 'Семестър';
-        } else if (ap.semesterStart && todayDate < new Date(ap.semesterStart)) {
-          const daysUntil = Math.ceil((new Date(ap.semesterStart).getTime() - todayDate.getTime()) / 86400000);
+        } else if (ap.semesterStart && todayDate < parseLocal(ap.semesterStart)) {
+          const daysUntil = Math.ceil((parseLocal(ap.semesterStart).getTime() - todayDate.getTime()) / 86400000);
           currentPeriod = `Семестърът почва след ${daysUntil}д`;
         }
 
@@ -317,7 +325,7 @@ export default function SchedulePage() {
           {visibleDays.map(i => {
             const dayDate = getDateForDay(i);
             const isActive = isInAcademicPeriod(dayDate);
-            const classCount = isActive ? getClassesForDay(i).length : 0;
+            const classCount = isActive ? getClassesForDay(i).filter(c => !c.cancelledDates?.includes(dayDate)).length : 0;
             const dayEvents = getEventsForDay(i);
             const isCurrentDay = weekOffset === 0 && i === today;
             return (
@@ -360,7 +368,14 @@ export default function SchedulePage() {
             const isCurrentDay = weekOffset === 0 && dayIndex === today;
             const isActive = isInAcademicPeriod(dayDate);
             // Only show recurring classes during the academic period
-            const classes = isActive ? getClassesForDay(dayIndex) : [];
+            // Sort by effective time (considering overrides for this date)
+            const classes = isActive
+              ? getClassesForDay(dayIndex).sort((a, b) => {
+                  const timeA = a.overrides?.[dayDate]?.time || a.time;
+                  const timeB = b.overrides?.[dayDate]?.time || b.time;
+                  return timeA.localeCompare(timeB);
+                })
+              : [];
             const dayEvents = getEventsForDay(dayIndex);
 
             return (
@@ -495,6 +510,14 @@ export default function SchedulePage() {
                               >
                                 <Edit2 size={11} className="inline mr-2" />Редактирай всички
                               </button>
+                              {override && (
+                              <button
+                                onClick={() => { removeOverrideForDate(cls.id, dayDate); setActiveMenu(null); }}
+                                className="w-full text-left px-3 py-2 hover:bg-green-500/10 text-green-400 transition-colors"
+                              >
+                                <RotateCcw size={11} className="inline mr-2" />Върни оригинала
+                              </button>
+                              )}
                               <div className="border-t border-slate-700 my-1" />
                               <button
                                 onClick={() => { cancelClassForDate(cls.id, dayDate); setActiveMenu(null); }}
